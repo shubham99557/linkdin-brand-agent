@@ -6,7 +6,11 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
-import { CAPABILITIES, CLAIM_CATEGORIES, findUnsupportedStatements, type Role, type VerifiedClaim } from "@lbe/domain";
+import {
+  buildBrandContext, ingestSourceMaterial, mockSpecialists, runBrandWorkflow, runLearningReview, voiceFor,
+  type AgentDeps, type BrandBrain, type Specialists,
+} from "@lbe/agents";
+import { BRAIN_SECTIONS, CAPABILITIES, CLAIM_CATEGORIES, findUnsupportedStatements, SECTION_META, type Role, type VerifiedClaim } from "@lbe/domain";
 import { validateDraftOutput, PROMPT_VERSION, type Drafter } from "@lbe/drafting";
 import {
   buildAuthorizeUrl, exchangeCode, fetchUserInfo, escapeLittleText,
@@ -33,6 +37,8 @@ export interface AppDeps {
   drafter: Drafter;
   provider: PublishingProvider;
   linkedin?: LinkedInDeps;
+  /** Agent specialists (default: offline mocks). */
+  specialists?: Specialists;
   appOrigins: string[];
   cookieSecure: boolean;
   voiceDir: string;
@@ -46,6 +52,8 @@ interface SessionUser {
   email: string;
   display_name: string;
   role: Role;
+  organization_id: string;
+  organization_name: string;
   approver_for: string[];
 }
 
@@ -61,6 +69,11 @@ export function createApp(deps: AppDeps) {
   const li = deps.linkedin;
   const liveOn = !!(li?.liveEnabled && li.liveProvider);
   const registry: ProviderRegistry = { mock: deps.provider, ...(liveOn ? { linkedin: li!.liveProvider! } : {}) };
+  const specialists = deps.specialists ?? mockSpecialists();
+  const agentDeps = (session: string): AgentDeps => ({
+    db, session, specialists, writer: deps.drafter,
+    readVoiceFile: async (profile) => readFile(path.join(deps.voiceDir, `${profile}.md`), "utf8").catch(() => null),
+  });
 
   /** Run SQL as lbe_api. */
   const q = <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
@@ -200,7 +213,7 @@ export function createApp(deps: AppDeps) {
   api.get("/capabilities", (c) => c.json(CAPABILITIES));
 
   // Accounts & voices
-  api.get("/accounts", async (c) => c.json(await q(
+  api.get("/accounts", async (c) => c.json((await q<{ organization_id: string }>(
     `select a.id, a.kind, a.display_name, a.linkedin_urn, a.voice_profile, a.pillars, a.enabled, a.publishing_mode,
             a.release_mode, a.live_enabled_at, cf.stopped, cf.reason as stop_reason,
             (select jsonb_build_object('app', lc.app, 'status', lc.status, 'expires_at', lc.expires_at,
@@ -209,9 +222,10 @@ export function createApp(deps: AppDeps) {
                from lbe.linkedin_credentials lc where lc.account_id = a.id) as credential,
             coalesce((select jsonb_agg(jsonb_build_object('id', u.id, 'display_name', u.display_name))
                         from lbe.account_approvers aa join lbe.app_users u on u.id = aa.user_id
-                       where aa.account_id = a.id), '[]') as approvers
+                       where aa.account_id = a.id), '[]') as approvers, a.organization_id
        from lbe.social_accounts a left join lbe.control_flags cf on cf.key = 'account:' || a.id::text
-      order by a.kind`)));
+      where a.organization_id = $1
+      order by a.kind`, [c.get("user").organization_id]))));
 
   const readVoice = async (profile: string) => {
     if (!/^[a-z0-9_-]{1,40}$/.test(profile)) throw new HTTPException(404, { message: "voice not found" });
@@ -233,7 +247,8 @@ export function createApp(deps: AppDeps) {
     `select c.*, (c.status = 'verified' and (c.expires_at is null or c.expires_at > now())) as usable,
             cu.display_name as created_by_name, vu.display_name as verified_by_name
        from lbe.claims c join lbe.app_users cu on cu.id = c.created_by left join lbe.app_users vu on vu.id = c.verified_by
-      order by c.created_at desc`)));
+      where c.organization_id = $1
+      order by c.created_at desc`, [c.get("user").organization_id])));
 
   api.post("/claims", async (c) => {
     const b = await json(c, z.object({
@@ -259,16 +274,18 @@ export function createApp(deps: AppDeps) {
   api.get("/content", async (c) => c.json(await q(
     `select ci.id, ci.account_id, a.display_name as account_name, a.kind as account_kind, ci.pillar, ci.status,
             ci.scheduled_for, ci.updated_at, ci.version, left(coalesce(nullif(ci.body, ''), ci.brief), 160) as excerpt,
-            jsonb_array_length(ci.unsupported_statements) as unsupported_count
+            jsonb_array_length(ci.unsupported_statements) as unsupported_count, ci.created_via, ci.topic, ci.workflow_id
        from lbe.content_items ci join lbe.social_accounts a on a.id = ci.account_id
+      where a.organization_id = $1
       order by coalesce(ci.scheduled_for, ci.created_at) desc
-      limit 500`)));
+      limit 500`, [c.get("user").organization_id])));
 
   api.get("/content/:id", async (c) => {
     const id = param(c, "id");
     const items = await q<Record<string, unknown>>(
       `select ci.*, a.display_name as account_name, a.kind as account_kind, a.pillars as account_pillars
-         from lbe.content_items ci join lbe.social_accounts a on a.id = ci.account_id where ci.id = $1`, [id]);
+         from lbe.content_items ci join lbe.social_accounts a on a.id = ci.account_id
+        where ci.id = $1 and a.organization_id = $2`, [id, c.get("user").organization_id]);
     if (!items[0]) throw new HTTPException(404, { message: "not found" });
     const [citations, approvals, outbox, audit, runs] = await Promise.all([
       q(`select cc.claim_id, cc.quoted_span, cl.statement, cl.category, cl.evidence_url, cl.evidence_note, cl.status,
@@ -350,12 +367,16 @@ export function createApp(deps: AppDeps) {
     }
     const claims = await q<VerifiedClaim>(
       `select id, statement, category, evidence_url, evidence_note from lbe.claims
-        where status = 'verified' and (expires_at is null or expires_at > now()) order by created_at`);
+        where status = 'verified' and organization_id = $1 and (expires_at is null or expires_at > now()) order by created_at`,
+      [c.get("user").organization_id]);
+    // Brand Brain voice + approved context when available; Phase 1 voice file as fallback.
+    const brain = await one<BrandBrain>("select lbe.brain_load($1)", [session]);
     const startedAt = new Date().toISOString();
     const result = await deps.drafter.draft({
       accountKind: item.kind,
       accountName: item.display_name,
-      voiceProfile: await readVoice(item.voice_profile),
+      voiceProfile: voiceFor(brain, item.kind) ?? await readVoice(item.voice_profile),
+      brandContext: buildBrandContext(brain),
       pillar: item.pillar,
       allowedPillars: item.pillars,
       brief: item.brief,
@@ -418,7 +439,8 @@ export function createApp(deps: AppDeps) {
             o.provider_ref, o.requires_release, o.released_at, o.created_at, o.completed_at, a.kind as account_kind,
             a.display_name as account_name, left(o.package->>'body', 120) as excerpt
        from lbe.publication_outbox o join lbe.social_accounts a on a.id = o.account_id
-      order by o.created_at desc limit 200`)));
+      where a.organization_id = $1
+      order by o.created_at desc limit 200`, [c.get("user").organization_id])));
 
   api.post("/outbox/:id/cancel", async (c) => {
     await q("select lbe.cancel_publication($1, $2)", [c.get("session"), param(c, "id")]);
@@ -458,6 +480,98 @@ export function createApp(deps: AppDeps) {
     }
     await q("select lbe.release_publication($1, $2)", [c.get("session"), id]);
     return c.json({ ok: true });
+  });
+
+  // ---------------------------------------------------------------- Brand Brain
+  const section = z.enum(BRAIN_SECTIONS);
+  const slug = z.string().regex(/^[a-z0-9_-]{1,60}$/);
+
+  api.get("/brain", async (c) => {
+    const brain = await one<BrandBrain>("select lbe.brain_load($1)", [c.get("session")]);
+    return c.json({ ...brain, sections: SECTION_META });
+  });
+
+  api.post("/brain/entries", async (c) => {
+    const b = await json(c, z.object({
+      section, key: slug, title: z.string().min(1).max(200), body: z.string().min(1).max(20000),
+      structured: z.record(z.string(), z.unknown()).optional(),
+    }));
+    const id = await one<string>("select lbe.brain_upsert_entry($1, $2, $3, $4, $5, $6::jsonb, 'owner', null)",
+      [c.get("session"), b.section, b.key, b.title, b.body, JSON.stringify(b.structured ?? {})]);
+    return c.json({ id }, 201);
+  });
+
+  api.post("/brain/entries/:id/retire", async (c) => {
+    await q("select lbe.brain_retire_entry($1, $2)", [c.get("session"), param(c, "id")]);
+    return c.json({ ok: true });
+  });
+
+  // Owner action: import the Phase 1 voice files into the Brand Brain (one source of truth afterwards).
+  api.post("/brain/import-voice-files", async (c) => {
+    const imported: string[] = [];
+    for (const [profile, sec] of [["company", "voice_company"], ["founder", "voice_founder"]] as const) {
+      const text = await readFile(path.join(deps.voiceDir, `${profile}.md`), "utf8").catch(() => null);
+      if (!text) continue;
+      await one("select lbe.brain_upsert_entry($1, $2, 'main', $3, $4, '{}'::jsonb, 'import', $5)",
+        [c.get("session"), sec, `${profile === "company" ? "Company page" : "Founder"} voice (imported)`, text, `brand/voice/${profile}.md`]);
+      imported.push(sec);
+    }
+    return c.json({ imported });
+  });
+
+  // Onboarding: owner pastes source material → grounded proposals (agent), owner then accepts/edits/rejects.
+  api.post("/brain/ingest", async (c) => {
+    const b = await json(c, z.object({ name: z.string().min(1).max(200), text: z.string().min(20).max(50000) }));
+    return c.json(await ingestSourceMaterial(agentDeps(c.get("session")), { name: b.name, text: b.text }));
+  });
+
+  api.get("/brain/proposals", async (c) => {
+    const status = c.req.query("status");
+    if (status && !["pending", "accepted", "rejected"].includes(status)) throw new HTTPException(422, { message: "invalid status" });
+    return c.json(await one("select lbe.brain_list_proposals($1, $2)", [c.get("session"), status ?? null]));
+  });
+
+  api.post("/brain/proposals/:id/decision", async (c) => {
+    const b = await json(c, z.object({
+      decision: z.enum(["accepted", "rejected"]), note: z.string().max(2000).optional(),
+      title: z.string().max(200).optional(), body: z.string().max(20000).optional(),
+    }));
+    const entry = await one<string | null>("select lbe.brain_decide_proposal($1, $2, $3, $4, $5, $6)",
+      [c.get("session"), param(c, "id"), b.decision, b.note ?? null, b.title ?? null, b.body ?? null]);
+    return c.json({ entry_id: entry });
+  });
+
+  // ---------------------------------------------------------------- Agent workspace
+  api.get("/agent/workflows", async (c) => c.json(await one("select lbe.workflow_list($1)", [c.get("session")])));
+
+  api.post("/agent/workflows", async (c) => {
+    const b = await json(c, z.object({
+      goal: z.string().min(3).max(1000),
+      start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      days: z.number().int().min(1).max(31).optional(),
+      post_count: z.number().int().min(3).max(5).optional(),
+    }));
+    const r = await runBrandWorkflow(agentDeps(c.get("session")), { goal: b.goal, startDate: b.start_date, days: b.days, postCount: b.post_count });
+    return c.json({ workflow_id: r.workflowId, result: r.result }, 201);
+  });
+
+  api.get("/agent/workflows/:id", async (c) =>
+    c.json(await one("select lbe.workflow_get($1, $2)", [c.get("session"), param(c, "id")])));
+
+  api.post("/agent/learning-review", async (c) => c.json(await runLearningReview(agentDeps(c.get("session")))));
+
+  api.get("/research", async (c) => c.json(await one("select lbe.research_list($1)", [c.get("session")])));
+
+  api.post("/research/:id/review", async (c) => {
+    const b = await json(c, z.object({ status: z.enum(["accepted", "rejected"]) }));
+    await q("select lbe.research_review($1, $2, $3)", [c.get("session"), param(c, "id"), b.status]);
+    return c.json({ ok: true });
+  });
+
+  api.post("/research/:id/to-claim", async (c) => {
+    const b = await json(c, z.object({ category: z.enum(CLAIM_CATEGORIES) }));
+    const id = await one<string>("select lbe.research_to_claim($1, $2, $3)", [c.get("session"), param(c, "id"), b.category]);
+    return c.json({ claim_id: id }, 201);
   });
 
   // ---------------------------------------------------------------- LinkedIn connection (admin)

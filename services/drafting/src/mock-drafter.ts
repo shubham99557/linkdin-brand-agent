@@ -18,7 +18,7 @@ export class MockDrafter implements Drafter {
     const lines = [
       `${voice === "We" ? "We've" : "I've"} been thinking about ${input.pillar.replace(/-/g, " ")}.`,
       "",
-      input.brief.trim(),
+      input.brief.trim().split(/\n\s*\n/)[0]!.trim(),   // first paragraph of the brief
     ];
     if (claim) lines.push("", claim.statement);
     lines.push("", "What would you add? #cybersecurity");

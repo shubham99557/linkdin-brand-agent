@@ -6,7 +6,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import pg from "pg";
 
 /** Database roles the application assumes per transaction. `null` = connection owner (migrations/CLI only). */
-export type DbRole = "lbe_api" | "lbe_worker" | null;
+export type DbRole = "lbe_api" | "lbe_worker" | "lbe_agent" | null;
 
 export interface Queryable {
   query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
@@ -24,6 +24,7 @@ export interface Db extends Queryable {
 const ROLE_SQL: Record<Exclude<DbRole, null>, string> = {
   lbe_api: "set local role lbe_api",
   lbe_worker: "set local role lbe_worker",
+  lbe_agent: "set local role lbe_agent",
 };
 
 class PgliteDb implements Db {

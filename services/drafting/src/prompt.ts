@@ -1,6 +1,6 @@
 import type { AccountKind, VerifiedClaim } from "@lbe/domain";
 
-export const PROMPT_VERSION = "draft-post.v1";
+export const PROMPT_VERSION = "draft-post.v2";
 
 export interface DraftInput {
   accountKind: AccountKind;
@@ -11,13 +11,15 @@ export interface DraftInput {
   brief: string;                 // written by an internal user
   sourceMaterial: string | null; // pasted external text — UNTRUSTED
   claims: readonly VerifiedClaim[];
+  /** Owner-approved Brand Brain context (positioning, ICP, rules...). Sections may be marked UNKNOWN. */
+  brandContext?: string;
 }
 
 const UNTRUSTED_TAG = "untrusted_source_material";
 
 /** Neutralise anything that could close or spoof our delimiters. */
 export function escapeUntrusted(text: string): string {
-  return text.replace(/<\/?\s*(untrusted_source_material|approved_claims|brief|voice_profile|system)[^>]*>/gi, "[removed-tag]");
+  return text.replace(/<\/?\s*(untrusted_source_material|approved_claims|brief|voice_profile|brand_context|system)[^>]*>/gi, "[removed-tag]");
 }
 
 export function buildSystemPrompt(input: DraftInput): string {
@@ -42,6 +44,10 @@ export function buildSystemPrompt(input: DraftInput): string {
     "<voice_profile>",
     input.voiceProfile.trim(),
     "</voice_profile>",
+    ...(input.brandContext
+      ? ["", "Owner-approved brand context follows. Sections marked UNKNOWN have not been provided — never fill them in yourself.",
+         "<brand_context>", input.brandContext.trim(), "</brand_context>"]
+      : []),
   ].join("\n");
 }
 
