@@ -31,7 +31,7 @@ export const PublicationPackageSchema = z.object({
     account_id: z.string(),
     kind: z.enum(ACCOUNT_KINDS),
     linkedin_urn: z.string().nullable(),
-    publishing_mode: z.literal("mock"),
+    publishing_mode: z.enum(["mock", "live"]),
   }),
   body: z.string(),
   media_ids: z.array(z.string()),

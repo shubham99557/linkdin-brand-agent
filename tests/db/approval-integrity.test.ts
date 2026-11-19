@@ -198,8 +198,8 @@ describe("service-role / direct SQL bypass protection (connection owner)", () =>
     await expectCode(t.db.query("update lbe.claims set statement = 'changed' where id = $1", [t.ids.claims[0]]), "LBE01");
   });
 
-  it("live publishing mode is impossible in Phase 1", async () => {
+  it("live publishing mode cannot be switched on directly (no credential → gate refuses)", async () => {
     await expectCode(t.db.query("update lbe.social_accounts set publishing_mode = 'live' where id = $1",
-      [t.ids.accounts.company]), "23514");
+      [t.ids.accounts.company]), "LBE01");
   });
 });

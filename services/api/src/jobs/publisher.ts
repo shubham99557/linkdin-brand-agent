@@ -1,22 +1,26 @@
 import { PublicationPackageSchema } from "@lbe/domain";
-import type { PublishingProvider, PublishOutcome, MockStore } from "@lbe/publishing";
+import type { MockStore, ProviderName, ProviderRegistry, PublishingProvider, PublishOutcome } from "@lbe/publishing";
+import { decryptToken } from "@lbe/security";
 import type { Db } from "../db.ts";
 
 interface OutboxRow {
   id: string;
   account_id: string;
+  provider: ProviderName;
   package: unknown;
   idempotency_key: string;
 }
 
 export interface TickSummary {
   expired: number;
+  credentialsExpired: number;
   claimed: number;
   succeeded: number;
   retried: number;
   failed: number;
   ambiguous: number;
   released: number;
+  autoStops: number;
   errors: string[];
 }
 
@@ -40,34 +44,48 @@ const withTimeout = async (p: Promise<PublishOutcome>, ms: number): Promise<Publ
   }
 };
 
+const toRegistry = (p: PublishingProvider | ProviderRegistry): ProviderRegistry =>
+  "publish" in p ? { [(p as PublishingProvider).name]: p as PublishingProvider } : (p as ProviderRegistry);
+
 /**
  * One publisher pass. Orchestrator-agnostic: run it from the in-process timer, the worker
- * CLI, or an external scheduler (n8n, cron) via the authenticated internal endpoint.
- * All state transitions go through database functions running as `lbe_worker`.
+ * CLI, or an external scheduler via the authenticated internal endpoint.
+ * Only outbox rows whose provider is present in the registry are claimed, so a worker without
+ * the live LinkedIn provider can never pick up (or fail) live publications.
  */
-export async function runPublisherTick(db: Db, provider: PublishingProvider, opts: PublisherOptions): Promise<TickSummary> {
-  const s: TickSummary = { expired: 0, claimed: 0, succeeded: 0, retried: 0, failed: 0, ambiguous: 0, released: 0, errors: [] };
+export async function runPublisherTick(
+  db: Db, providers: PublishingProvider | ProviderRegistry, opts: PublisherOptions,
+): Promise<TickSummary> {
+  const registry = toRegistry(providers);
+  const names = Object.keys(registry) as ProviderName[];
+  const s: TickSummary = { expired: 0, credentialsExpired: 0, claimed: 0, succeeded: 0, retried: 0, failed: 0,
+    ambiguous: 0, released: 0, autoStops: 0, errors: [] };
   const worker = opts.workerId;
   const leaseSeconds = opts.leaseSeconds ?? 120;
   const timeoutMs = opts.providerTimeoutMs ?? Math.floor((leaseSeconds * 1000) / 2);
+  const w = <T>(sql: string, params: unknown[]) => db.tx("lbe_worker", (q) => q.query<T>(sql, params));
 
-  const expired = await db.tx("lbe_worker", (q) =>
-    q.query<{ n: number }>("select lbe.expire_stale_dispatches($1) as n", [worker]));
-  s.expired = expired[0]?.n ?? 0;
+  s.expired = (await w<{ n: number }>("select lbe.expire_stale_dispatches($1) as n", [worker]))[0]?.n ?? 0;
+  s.credentialsExpired = (await w<{ n: number }>("select lbe.expire_credentials($1) as n", [worker]))[0]?.n ?? 0;
+  if (names.length === 0) return s;
 
-  const claimed = await db.tx("lbe_worker", (q) =>
-    q.query<OutboxRow>("select id, account_id, package, idempotency_key from lbe.claim_outbox($1, $2, $3)",
-      [worker, opts.batchSize ?? 5, leaseSeconds]));
+  const claimed = await w<OutboxRow>(
+    "select id, account_id, provider, package, idempotency_key from lbe.claim_outbox($1, $2, $3, $4)",
+    [worker, opts.batchSize ?? 5, leaseSeconds, names]);
   s.claimed = claimed.length;
 
   for (const row of claimed) {
     const complete = (outcome: string, ref: string | null, error: string | null, retryAfter: number | null = null) =>
-      db.tx("lbe_worker", (q) =>
-        q.query("select lbe.complete_outbox($1, $2, $3, $4, $5, $6)", [row.id, worker, outcome, ref, error, retryAfter]));
+      w("select lbe.complete_outbox($1, $2, $3, $4, $5, $6)", [row.id, worker, outcome, ref, error, retryAfter]);
     try {
+      const provider = registry[row.provider];
+      if (!provider) {
+        await complete("released", null, `provider ${row.provider} unavailable in this worker`);
+        s.released++;
+        continue;
+      }
       // Re-check STOP immediately before the external call (STOP may have been pressed after claiming).
-      const stopped = await db.tx("lbe_worker", (q) =>
-        q.query<{ stopped: boolean }>("select lbe.is_stopped($1) as stopped", [row.account_id]));
+      const stopped = await w<{ stopped: boolean }>("select lbe.is_stopped($1) as stopped", [row.account_id]);
       if (stopped[0]?.stopped !== false) {
         await complete("released", null, "publishing stopped before send");
         s.released++;
@@ -98,6 +116,16 @@ export async function runPublisherTick(db: Db, provider: PublishingProvider, opt
         case "rejected":
           await complete("rejected", null, outcome.error);
           s.failed++;
+          if (outcome.alert) {
+            s.autoStops++;
+            if (outcome.alert.kind === "credential_invalid") {
+              await w("select lbe.worker_mark_credential($1, $2, 'invalid', $3)", [worker, row.account_id, outcome.alert.detail]);
+            } else if (outcome.alert.kind === "permission_denied") {
+              await w("select lbe.worker_auto_stop($1, $2, $3)", [worker, `account:${row.account_id}`, outcome.alert.detail]);
+            } else {
+              await w("select lbe.worker_auto_stop($1, 'global', $2)", [worker, outcome.alert.detail]);
+            }
+          }
           break;
         case "ambiguous":
           await complete("ambiguous", null, outcome.error);
@@ -124,5 +152,20 @@ export function dbMockStore(db: Db): MockStore {
           [post.mockPostUrn, post.idempotencyKey, post.author, post.commentary, post.visibility, JSON.stringify(post.payload)],
         ));
     },
+  };
+}
+
+/** Token source for the live provider: ciphertext from the DB (worker role), decrypted in-process. */
+export function dbTokenSource(db: Db, workerId: string, key: Buffer): (accountId: string) => Promise<string | null> {
+  return async (accountId) => {
+    const rows = await db.tx("lbe_worker", (q) =>
+      q.query<{ c: { ciphertext: string } | null }>("select lbe.worker_get_credential($1, $2) as c", [workerId, accountId]));
+    const c = rows[0]?.c;
+    if (!c) return null;
+    try {
+      return decryptToken(key, accountId, c.ciphertext);
+    } catch {
+      return null;   // wrong key or tampered ciphertext → treated as no credential (fails closed)
+    }
   };
 }

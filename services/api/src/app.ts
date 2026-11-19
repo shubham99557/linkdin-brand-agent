@@ -8,15 +8,31 @@ import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
 import { CAPABILITIES, CLAIM_CATEGORIES, findUnsupportedStatements, type Role, type VerifiedClaim } from "@lbe/domain";
 import { validateDraftOutput, PROMPT_VERSION, type Drafter } from "@lbe/drafting";
-import type { PublishingProvider } from "@lbe/publishing";
-import { isTrustedOrigin, looksLikeSessionToken, ROLE_HINTS, safeTokenEqual, SESSION_COOKIE } from "@lbe/security";
+import {
+  buildAuthorizeUrl, exchangeCode, fetchUserInfo, escapeLittleText,
+  type LinkedInApp, type LinkedInProvider, type OAuthEndpoints, type ProviderRegistry, type PublishingProvider,
+} from "@lbe/publishing";
+import { encryptToken, isTrustedOrigin, looksLikeSessionToken, ROLE_HINTS, safeTokenEqual, SESSION_COOKIE } from "@lbe/security";
 import { dbErrorStatus, type Db } from "./db.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
+
+export interface LinkedInDeps {
+  /** Master switch (LBE_LIVE_PUBLISHING). When false, nothing can be enabled or sent live. */
+  liveEnabled: boolean;
+  apps: Partial<Record<LinkedInApp, { clientId: string; clientSecret: string }>>;
+  redirectUri: string;
+  tokenKey: Buffer;
+  tokenKeyId: string;
+  oauth?: OAuthEndpoints;
+  /** Registered only when liveEnabled. */
+  liveProvider?: LinkedInProvider;
+}
 
 export interface AppDeps {
   db: Db;
   drafter: Drafter;
   provider: PublishingProvider;
+  linkedin?: LinkedInDeps;
   appOrigins: string[];
   cookieSecure: boolean;
   voiceDir: string;
@@ -42,6 +58,9 @@ export function createApp(deps: AppDeps) {
   const { db } = deps;
   const log = deps.log ?? ((msg, extra) => console.log(JSON.stringify({ at: new Date().toISOString(), msg, ...extra })));
   const app = new Hono<Env>();
+  const li = deps.linkedin;
+  const liveOn = !!(li?.liveEnabled && li.liveProvider);
+  const registry: ProviderRegistry = { mock: deps.provider, ...(liveOn ? { linkedin: li!.liveProvider! } : {}) };
 
   /** Run SQL as lbe_api. */
   const q = <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
@@ -120,7 +139,19 @@ export function createApp(deps: AppDeps) {
   // ---------------------------------------------------------------- public
   app.get("/api/health", async (c) => {
     await q("select 1");
-    return c.json({ ok: true, publishing_provider: deps.provider.name, drafter: deps.drafter.provider });
+    return c.json({ ok: true, publishing_provider: deps.provider.name, drafter: deps.drafter.provider, live_publishing: liveOn });
+  });
+
+  // LinkedIn redirects the browser here (cross-site, so the SameSite=Strict session cookie is NOT sent).
+  // Hand code/state to the dashboard in the URL fragment; the dashboard completes the flow with the admin's
+  // session via a same-origin POST, which binds the callback to the admin who started it.
+  app.get("/api/oauth/linkedin/callback", (c) => {
+    const p = new URLSearchParams();
+    for (const k of ["code", "state", "error", "error_description"] as const) {
+      const v = c.req.query(k);
+      if (v) p.set(k, v.slice(0, 2000));
+    }
+    return c.redirect(`/#/oauth/complete?${p.toString()}`, 302);
   });
 
   const loginLimiter = new Map<string, { count: number; resetAt: number }>();
@@ -148,7 +179,7 @@ export function createApp(deps: AppDeps) {
     const auth = c.req.header("authorization") ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     if (!safeTokenEqual(token, deps.internalJobToken)) return c.json({ error: "unauthorized" }, 401);
-    return c.json(await runPublisherTick(db, deps.provider, { workerId: `${deps.workerId}-ext` }));
+    return c.json(await runPublisherTick(db, registry, { workerId: `${deps.workerId}-ext` }));
   });
 
   // ---------------------------------------------------------------- authenticated
@@ -171,7 +202,11 @@ export function createApp(deps: AppDeps) {
   // Accounts & voices
   api.get("/accounts", async (c) => c.json(await q(
     `select a.id, a.kind, a.display_name, a.linkedin_urn, a.voice_profile, a.pillars, a.enabled, a.publishing_mode,
-            cf.stopped, cf.reason as stop_reason,
+            a.release_mode, a.live_enabled_at, cf.stopped, cf.reason as stop_reason,
+            (select jsonb_build_object('app', lc.app, 'status', lc.status, 'expires_at', lc.expires_at,
+                                       'subject_urn', lc.subject_urn, 'subject_name', lc.subject_name,
+                                       'scopes', lc.scopes, 'invalid_reason', lc.invalid_reason, 'connected_at', lc.connected_at)
+               from lbe.linkedin_credentials lc where lc.account_id = a.id) as credential,
             coalesce((select jsonb_agg(jsonb_build_object('id', u.id, 'display_name', u.display_name))
                         from lbe.account_approvers aa join lbe.app_users u on u.id = aa.user_id
                        where aa.account_id = a.id), '[]') as approvers
@@ -243,7 +278,8 @@ export function createApp(deps: AppDeps) {
       q(`select ap.id, ap.decision, ap.package_hash, ap.note, ap.created_at, u.display_name as approver_name
            from lbe.content_approvals ap join lbe.app_users u on u.id = ap.approver_id
           where ap.content_id = $1 order by ap.created_at desc`, [id]),
-      q(`select id, status, attempts, max_attempts, available_at, last_error, provider_ref, package_hash, created_at, completed_at
+      q(`select id, status, attempts, max_attempts, available_at, last_error, provider, provider_ref, package_hash,
+                requires_release, released_at, created_at, completed_at
            from lbe.publication_outbox where content_id = $1 order by created_at desc`, [id]),
       q(`select id, at, actor, action, details from lbe.audit_events
           where (subject_type = 'content_item' and subject_id = $1)
@@ -378,8 +414,9 @@ export function createApp(deps: AppDeps) {
 
   // Outbox
   api.get("/outbox", async (c) => c.json(await q(
-    `select o.id, o.content_id, o.status, o.attempts, o.max_attempts, o.available_at, o.last_error, o.provider,
-            o.provider_ref, o.created_at, o.completed_at, a.display_name as account_name, left(o.package->>'body', 120) as excerpt
+    `select o.id, o.content_id, o.account_id, o.status, o.attempts, o.max_attempts, o.available_at, o.last_error, o.provider,
+            o.provider_ref, o.requires_release, o.released_at, o.created_at, o.completed_at, a.kind as account_kind,
+            a.display_name as account_name, left(o.package->>'body', 120) as excerpt
        from lbe.publication_outbox o join lbe.social_accounts a on a.id = o.account_id
       order by o.created_at desc limit 200`)));
 
@@ -404,7 +441,103 @@ export function createApp(deps: AppDeps) {
   api.post("/jobs/publisher-tick", async (c) => {
     if (c.get("user").role !== "admin") throw new HTTPException(403, { message: "admin only" });
     await one("select lbe.write_app_audit($1, 'app.publisher_tick_requested', 'job', 'publisher', '{}'::jsonb)", [c.get("session")]);
-    return c.json(await runPublisherTick(db, deps.provider, { workerId: `${deps.workerId}-manual` }));
+    return c.json(await runPublisherTick(db, registry, { workerId: `${deps.workerId}-manual` }));
+  });
+
+  // "Publish now": manual release (required for live accounts — API Terms §3.1(26), owner decision P2-D1).
+  api.post("/outbox/:id/release", async (c) => {
+    const id = param(c, "id");
+    const b = await json(c, z.object({ confirm_public_post: z.boolean().optional() }));
+    const rows = await q<{ provider: string }>("select provider from lbe.publication_outbox where id = $1", [id]);
+    if (!rows[0]) throw new HTTPException(404, { message: "not found" });
+    if (rows[0].provider === "linkedin") {
+      if (!liveOn) throw new HTTPException(409, { message: "live publishing is switched off (LBE_LIVE_PUBLISHING)" });
+      if (b.confirm_public_post !== true) {
+        throw new HTTPException(422, { message: "confirm that this will be posted publicly on LinkedIn" });
+      }
+    }
+    await q("select lbe.release_publication($1, $2)", [c.get("session"), id]);
+    return c.json({ ok: true });
+  });
+
+  // ---------------------------------------------------------------- LinkedIn connection (admin)
+  const requireLinkedIn = () => {
+    if (!li) throw new HTTPException(409, { message: "LinkedIn is not configured (see docs/setup.md, Phase 2)" });
+    return li;
+  };
+
+  api.post("/accounts/:id/linkedin/connect", async (c) => {
+    const id = param(c, "id");
+    const cfg = requireLinkedIn();
+    const r = await one<{ state: string; app: LinkedInApp }>("select lbe.begin_oauth($1, $2)", [c.get("session"), id]);
+    const app = cfg.apps[r.app];
+    if (!app) throw new HTTPException(409, { message: `the ${r.app.replace("_", " ")} is not configured` });
+    return c.json({ url: buildAuthorizeUrl({ clientId: app.clientId, redirectUri: cfg.redirectUri, app: r.app, state: r.state, ...cfg.oauth }) });
+  });
+
+  api.post("/oauth/linkedin/complete", async (c) => {
+    const cfg = requireLinkedIn();
+    const b = await json(c, z.object({ code: z.string().min(1).max(2000), state: z.string().regex(/^[0-9a-f]{64}$/) }));
+    const session = c.get("session");
+    const st = await one<{ account_id: string; app: LinkedInApp } | null>("select lbe.consume_oauth_state($1, $2)", [session, b.state]);
+    if (!st) throw new HTTPException(400, { message: "this LinkedIn sign-in link is invalid or has expired — start again" });
+    const app = cfg.apps[st.app];
+    if (!app) throw new HTTPException(409, { message: `the ${st.app} is not configured` });
+    let token;
+    let subject: { sub: string; name: string | null } | null = null;
+    try {
+      token = await exchangeCode({ code: b.code, clientId: app.clientId, clientSecret: app.clientSecret, redirectUri: cfg.redirectUri, ...cfg.oauth });
+      if (st.app === "founder_app") subject = await fetchUserInfo({ accessToken: token.accessToken, ...cfg.oauth });
+    } catch (err) {
+      log("oauth_failed", { account_id: st.account_id, error: (err as Error).message });
+      await one("select lbe.write_app_audit($1, 'app.oauth_failed', 'social_account', $2, '{}'::jsonb)", [session, st.account_id]);
+      throw new HTTPException(502, { message: "LinkedIn did not complete the connection — try again" });
+    }
+    const ciphertext = encryptToken(cfg.tokenKey, st.account_id, token.accessToken);
+    const expiresAt = new Date(Date.now() + token.expiresIn * 1000).toISOString();
+    // UNCONFIRMED (Stage 2.2): that the person URN is urn:li:person:{sub}.
+    const subjectUrn = subject ? `urn:li:person:${subject.sub}` : null;
+    await q("select lbe.store_linkedin_credential($1, $2, $3, $4, $5, $6, $7, $8)",
+      [session, b.state, subjectUrn, subject?.name ?? null, token.scopes, ciphertext, cfg.tokenKeyId, expiresAt]);
+    return c.json({ account_id: st.account_id, subject_urn: subjectUrn, subject_name: subject?.name ?? null, expires_at: expiresAt, scopes: token.scopes });
+  });
+
+  api.post("/accounts/:id/linkedin/disconnect", async (c) => {
+    const id = param(c, "id");
+    const b = await json(c, z.object({ reason: z.string().max(300).optional() }));
+    await q("select lbe.revoke_linkedin_credential($1, $2, $3)", [c.get("session"), id, b.reason ?? "disconnected by admin"]);
+    return c.json({ ok: true, note: "Also remove the app's access in LinkedIn settings to revoke the token at LinkedIn." });
+  });
+
+  api.post("/accounts/:id/live", async (c) => {
+    const id = param(c, "id");
+    const b = await json(c, z.object({ live: z.boolean(), org_urn: z.string().max(80).nullable().optional() }));
+    if (b.live && !liveOn) {
+      throw new HTTPException(409, { message: "live publishing is switched off on this server (LBE_LIVE_PUBLISHING=off)" });
+    }
+    await q("select lbe.set_live_publishing($1, $2, $3, $4)", [c.get("session"), id, b.live, b.org_urn ?? null]);
+    return c.json({ ok: true });
+  });
+
+  // Reconciliation assist: company pages only (founder posts cannot be read back via the API).
+  api.get("/outbox/:id/linkedin-candidates", async (c) => {
+    const id = param(c, "id");
+    if (c.get("user").role !== "admin") throw new HTTPException(403, { message: "admin only" });
+    if (!liveOn) throw new HTTPException(409, { message: "live publishing is switched off" });
+    const rows = await q<{ provider: string; status: string; account_id: string; kind: string; body: string; author: string | null }>(
+      `select o.provider, o.status, o.account_id, a.kind, o.package->>'body' as body, o.package#>>'{destination,linkedin_urn}' as author
+         from lbe.publication_outbox o join lbe.social_accounts a on a.id = o.account_id where o.id = $1`, [id]);
+    const r = rows[0];
+    if (!r) throw new HTTPException(404, { message: "not found" });
+    if (r.provider !== "linkedin" || r.status !== "needs_reconciliation") {
+      throw new HTTPException(409, { message: "only live publications awaiting reconciliation can be checked" });
+    }
+    if (r.kind !== "company_page" || !r.author) {
+      return c.json({ supported: false, message: "Founder posts cannot be read back through the API. Check the founder's LinkedIn activity manually." });
+    }
+    const posts = await li!.liveProvider!.findRecentPostsByAuthor(r.account_id, r.author);
+    const expected = escapeLittleText(r.body);
+    return c.json({ supported: true, candidates: posts.map((p) => ({ ...p, matches: p.commentary === expected || p.commentary === r.body })) });
   });
 
   // STOP controls

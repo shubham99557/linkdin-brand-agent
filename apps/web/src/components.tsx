@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type ControlFlag, type Me } from "./api.ts";
+import { api, daysUntil, type Account, type ControlFlag, type Health, type Me } from "./api.ts";
 
 const TONE: Record<string, string> = {
   published: "ok", approved: "ok", succeeded: "ok", verified: "ok",
@@ -29,10 +29,17 @@ export function useLoad<T>(path: string): [T | null, string | null, () => void] 
 /** Global STOP banner + controls, shown on every page. */
 export function StopBar({ me, refreshKey }: { me: Me; refreshKey: number }) {
   const [flags, error, reload] = useLoad<ControlFlag[]>("/controls");
+  const [health] = useLoad<Health>("/health");
+  const [accounts, , reloadAccounts] = useLoad<Account[]>("/accounts");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  useEffect(reload, [refreshKey, reload]);
+  useEffect(() => { reload(); reloadAccounts(); }, [refreshKey, reload, reloadAccounts]);
+  const credentialWarnings = (accounts ?? []).filter((a) => a.credential && (a.credential.status !== "valid" || daysUntil(a.credential.expires_at) <= 14))
+    .map((a) => a.credential!.status !== "valid"
+      ? `${a.display_name}: LinkedIn connection ${a.credential!.status} — reconnect`
+      : `${a.display_name}: LinkedIn connection expires in ${daysUntil(a.credential!.expires_at)} day(s) — reconnect soon`);
+  const liveAccounts = (accounts ?? []).filter((a) => a.publishing_mode === "live");
   const global = flags?.find((f) => f.key === "global");
   const stoppedAccounts = flags?.filter((f) => f.key !== "global" && f.stopped) ?? [];
 
@@ -52,10 +59,16 @@ export function StopBar({ me, refreshKey }: { me: Me; refreshKey: number }) {
 
   if (error) return <ErrorText error={error} />;
   if (!global) return null;
+  const runningText = health?.live_publishing && liveAccounts.length > 0
+    ? `Publishing: running — LIVE LinkedIn for ${liveAccounts.map((a) => a.display_name).join(", ")} (manual release)`
+    : "Publishing: running (mock provider only)";
   return (
+    <>
+    {health?.live_publishing && <div className="stopbar" data-testid="live-banner"><strong>LIVE LinkedIn publishing is enabled on this server.</strong> Released posts become public on LinkedIn.</div>}
+    {credentialWarnings.map((w) => <div className="notice" key={w}>⚠ {w}</div>)}
     <div className={global.stopped ? "stopbar" : "panel"} data-testid="stop-bar">
       <div className="row">
-        <strong>{global.stopped ? "⛔ ALL PUBLISHING STOPPED" : "Publishing: running (mock provider only)"}</strong>
+        <strong>{global.stopped ? "⛔ ALL PUBLISHING STOPPED" : runningText}</strong>
         {global.stopped && <span className="muted small">Reason: {global.reason} · by {global.changed_by_name ?? "system"}</span>}
         {stoppedAccounts.length > 0 && (
           <span className="badge bad">{stoppedAccounts.length} account(s) stopped</span>
@@ -70,6 +83,33 @@ export function StopBar({ me, refreshKey }: { me: Me; refreshKey: number }) {
         )}
       </div>
       <ErrorText error={actionError} />
+    </div>
+    </>
+  );
+}
+
+/** "Publish now" for a pending outbox entry that needs manual release. Live jobs need an explicit confirmation. */
+export function ReleaseButton({ outboxId, provider, onDone }: { outboxId: string; provider: string; onDone: (msg: string) => void }) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const live = provider === "linkedin";
+  return (
+    <div>
+      {live && (
+        <label style={{ display: "flex", gap: 6, alignItems: "center", color: "inherit" }}>
+          <input type="checkbox" style={{ width: "auto" }} checked={confirm} onChange={(e) => setConfirm(e.target.checked)} data-testid="confirm-public" />
+          I confirm this will be posted publicly on LinkedIn now
+        </label>
+      )}
+      <button className="primary" disabled={busy || (live && !confirm)} data-testid="publish-now" onClick={async () => {
+        setBusy(true); setError(null);
+        try {
+          await api(`/outbox/${outboxId}/release`, { method: "POST", body: live ? { confirm_public_post: true } : {} });
+          onDone(live ? "Released — it will be sent to LinkedIn on the next publisher run." : "Released — it will be sent to the mock on the next publisher run.");
+        } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+      }}>Publish now</button>
+      <ErrorText error={error} />
     </div>
   );
 }

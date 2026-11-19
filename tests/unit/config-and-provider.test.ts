@@ -24,7 +24,7 @@ describe("provider factory", () => {
   it("only creates the mock provider", () => {
     const mock = () => new MockLinkedInProvider({ record: async () => undefined });
     expect(createProvider("mock", { mock }).name).toBe("mock");
-    expect(() => createProvider("linkedin", { mock })).toThrow(/requires owner approval/);
+    expect(() => createProvider("linkedin", { mock })).toThrow(/only when LBE_LIVE_PUBLISHING=on/);
   });
 });
 

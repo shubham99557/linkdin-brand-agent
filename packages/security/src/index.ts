@@ -1,6 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { Role } from "@lbe/domain";
 
+export * from "./token-crypto.ts";
+
 export const SESSION_COOKIE = "lbe_session";
 
 /** Session token format produced by lbe.login(): 64 lowercase hex chars. */

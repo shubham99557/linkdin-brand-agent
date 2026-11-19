@@ -105,6 +105,8 @@ write-only for `w_member_social`).
 
 ## 4. Stages and gates
 
+> **Status 2026-11-19:** Stage 2.1 **complete** — see `phase-2.1-report.md`. Stages 2.2–2.5 not started.
+
 | Stage | Scope | Needs credentials? | Exit criteria | Gate |
 |---|---|---|---|---|
 | **2.1 Build & contract-test** | Migrations (release mode, live gate, credentials), encryption, OAuth flow, live provider, escaping, outcome mapping, expiry monitoring, auto-stop, reconciliation assist, **fake LinkedIn server** implementing the documented contract | **No.** All tests run against the local fake | All tests pass; security review of token handling; no code path can reach `api.linkedin.com` with the master switch off (tested) | Owner approves start of 2.1 |
@@ -145,8 +147,8 @@ LinkedIn settings. All three are independent.
 
 | # | Decision | Recommendation |
 |---|---|---|
-| P2-D1 | Release mode until legal clears §3.1(26) | **Manual release only** |
-| P2-D2 | Approve starting Stage 2.1 (build + contract tests, no credentials) | Yes |
+| P2-D1 | Release mode until legal clears §3.1(26) | **Manual release only** — accepted with the plan by owner, 2026-11-19 |
+| P2-D2 | Approve starting Stage 2.1 (build + contract tests, no credentials) | **APPROVED by owner, 2026-11-19** ("continue with phase 2 plan") |
 | P2-D3 | Where the HTTPS OAuth callback lives: try `https://localhost` (free, may be rejected) vs a small hosted staging server (costs money) | Try localhost first |
 | P2-D4 | Create the founder LinkedIn app (Share on LinkedIn + OIDC) — owner action in LinkedIn Developer Portal | When 2.1 is done |
 | P2-D5 | Create a separate company app and apply for Community Management (needs privacy policy URL, page super-admin) | Start early — review takes time |

@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
-import { api, fmt, type Account, type Claim, type ContentSummary, type Me } from "./api.ts";
-import { Badge, ErrorText, useLoad } from "./components.tsx";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, daysUntil, fmt, type Account, type Claim, type ContentSummary, type Health, type Me } from "./api.ts";
+import { Badge, ErrorText, ReleaseButton, useLoad } from "./components.tsx";
 
 const go = (path: string) => { window.location.hash = path; };
 
@@ -165,8 +165,80 @@ export function ClaimsPage({ me }: { me: Me }) {
 }
 
 // ------------------------------------------------------------------ accounts & voices
+function LinkedInConnection({ a, me, live, onChange, onError }: { a: Account; me: Me; live: boolean; onChange: () => void; onError: (m: string | null) => void }) {
+  const [orgUrn, setOrgUrn] = useState(a.linkedin_urn ?? "");
+  const c = a.credential;
+  const run = async (fn: () => Promise<unknown>) => {
+    onError(null);
+    try { await fn(); onChange(); } catch (e) { onError((e as Error).message); }
+  };
+  return (
+    <div className="notice" data-testid={`linkedin-${a.kind}`}>
+      <div className="row">
+        <strong>LinkedIn connection</strong>
+        {c ? <Badge value={c.status === "valid" ? "verified" : c.status} /> : <span className="badge">not connected</span>}
+        <span className="badge">{a.publishing_mode === "live" ? "LIVE" : "mock"} · release: {a.release_mode}</span>
+      </div>
+      {c && (
+        <p className="small">
+          {c.subject_name ?? "Company app"} {c.subject_urn && <span className="mono">({c.subject_urn})</span>} · scopes {c.scopes.join(", ") || "—"} ·
+          expires {fmt(c.expires_at)} ({daysUntil(c.expires_at)} days){c.invalid_reason && <> · <span className="error">{c.invalid_reason}</span></>}
+        </p>
+      )}
+      {me.role === "admin" && (
+        <div className="row">
+          <button onClick={() => run(async () => {
+            const r = await api<{ url: string }>(`/accounts/${a.id}/linkedin/connect`, { method: "POST", body: {} });
+            window.location.assign(r.url);
+          })}>{c ? "Reconnect LinkedIn" : "Connect LinkedIn"}</button>
+          {c && c.status !== "revoked" && <button onClick={() => run(() => api(`/accounts/${a.id}/linkedin/disconnect`, { method: "POST", body: {} }))}>Disconnect</button>}
+          {a.publishing_mode === "live"
+            ? <button className="danger" onClick={() => run(() => api(`/accounts/${a.id}/live`, { method: "POST", body: { live: false } }))}>Switch back to mock</button>
+            : c?.status === "valid" && (
+              <>
+                {a.kind === "company_page" && <input style={{ maxWidth: 260 }} placeholder="urn:li:organization:12345" value={orgUrn} onChange={(e) => setOrgUrn(e.target.value)} />}
+                <button disabled={!live} title={live ? "" : "Server has LBE_LIVE_PUBLISHING=off"}
+                  onClick={() => run(() => api(`/accounts/${a.id}/live`, { method: "POST", body: { live: true, org_urn: a.kind === "company_page" ? orgUrn : null } }))}>
+                  Enable LIVE publishing
+                </button>
+              </>
+            )}
+        </div>
+      )}
+      <p className="small muted">Live publishing needs: this server's master switch ({live ? "ON" : "off"}), an admin enabling the account, and a valid connection. Live accounts always use manual release ("Publish now").</p>
+    </div>
+  );
+}
+
+export function OAuthCompletePage({ query }: { query: string }) {
+  const params = new URLSearchParams(query);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(params.get("error") ? `LinkedIn: ${params.get("error_description") ?? params.get("error")}` : null);
+  // The OAuth state is single-use: make sure the completion request is sent exactly once (StrictMode re-runs effects).
+  const sent = useRef(false);
+  useEffect(() => {
+    if (sent.current || params.get("error")) return;
+    sent.current = true;
+    api<{ subject_name: string | null; subject_urn: string | null; expires_at: string }>("/oauth/linkedin/complete", {
+      method: "POST", body: { code: params.get("code"), state: params.get("state") } })
+      .then((r) => setResult(`Connected${r.subject_name ? ` as ${r.subject_name}` : ""}${r.subject_urn ? ` (${r.subject_urn})` : ""}. Valid until ${fmt(r.expires_at)}.`))
+      .catch((e: Error) => setError(e.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div className="panel">
+      <h2>LinkedIn connection</h2>
+      {result && <div className="notice" role="status">{result} Check the identity is correct before enabling live publishing.</div>}
+      <ErrorText error={error} />
+      {!result && !error && <p className="muted">Completing connection…</p>}
+      <p><a href="#/accounts">Back to accounts</a></p>
+    </div>
+  );
+}
+
 export function AccountsPage({ me }: { me: Me }) {
   const [accounts, error, reload] = useLoad<Account[]>("/accounts");
+  const [health] = useLoad<Health>("/health");
   const [voice, setVoice] = useState<{ id: string; markdown: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const toggle = async (a: Account) => {
@@ -184,13 +256,15 @@ export function AccountsPage({ me }: { me: Me }) {
         <div className="panel" key={a.id}>
           <div className="row">
             <strong>{a.display_name}</strong><span className="badge">{a.kind.replace("_", " ")}</span>
-            <span className="badge">mode: {a.publishing_mode}</span>
+            <span className={`badge ${a.publishing_mode === "live" ? "bad" : ""}`}>mode: {a.publishing_mode}</span>
             {a.stopped ? <span className="badge bad">stopped</span> : <span className="badge ok">running</span>}
             <span style={{ flex: 1 }} />
             {((!a.stopped && me.hints.canStop) || (a.stopped && me.hints.canResume)) &&
               <button className={a.stopped ? "" : "danger"} onClick={() => toggle(a)} data-testid={`stop-account-${a.kind}`}>{a.stopped ? "Resume this account" : "Stop this account"}</button>}
           </div>
-          <p className="small muted">LinkedIn URN: {a.linkedin_urn ?? "not configured (unverified — Phase 2)"} · approvers: {a.approvers.map((x) => x.display_name).join(", ") || "none"}</p>
+          {a.stopped && a.stop_reason && <p className="small error">Stop reason: {a.stop_reason}</p>}
+          <p className="small muted">LinkedIn URN: {a.linkedin_urn ?? "not set"} · approvers: {a.approvers.map((x) => x.display_name).join(", ") || "none"}</p>
+          <LinkedInConnection a={a} me={me} live={!!health?.live_publishing} onChange={reload} onError={setActionError} />
           <p className="small">Approved pillars: {a.pillars.join(", ")}</p>
           <button onClick={async () => {
             const r = await api<{ markdown: string }>(`/accounts/${a.id}/voice`);
@@ -205,14 +279,16 @@ export function AccountsPage({ me }: { me: Me }) {
 }
 
 // ------------------------------------------------------------------ outbox
-interface OutboxRow { id: string; content_id: string; status: string; attempts: number; max_attempts: number; available_at: string;
-  last_error: string | null; provider_ref: string | null; account_name: string; excerpt: string }
+interface OutboxRow { id: string; content_id: string; account_id: string; account_kind: string; status: string; attempts: number;
+  max_attempts: number; available_at: string; last_error: string | null; provider: string; provider_ref: string | null;
+  requires_release: boolean; released_at: string | null; account_name: string; excerpt: string }
 
 export function OutboxPage({ me }: { me: Me }) {
   const [rows, error, reload] = useLoad<OutboxRow[]>("/outbox");
   const [msg, setMsg] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [recon, setRecon] = useState<{ id: string; ref: string; note: string } | null>(null);
+  const [assist, setAssist] = useState<{ supported: boolean; message?: string; candidates?: Array<{ id: string; commentary: string; matches: boolean }> } | null>(null);
   const act = async (fn: () => Promise<unknown>, ok?: string) => {
     setActionError(null); setMsg(null);
     try { await fn(); if (ok) setMsg(ok); reload(); } catch (e) { setActionError((e as Error).message); }
@@ -236,14 +312,19 @@ export function OutboxPage({ me }: { me: Me }) {
         <thead><tr><th>Status</th><th>Account</th><th>Post</th><th>Attempts</th><th>Next / result</th><th /></tr></thead>
         <tbody>{rows?.map((r) => (
           <tr key={r.id}>
-            <td><Badge value={r.status} /></td>
+            <td><Badge value={r.status} />{r.provider === "linkedin" && <span className="badge bad" style={{ marginLeft: 4 }}>LIVE</span>}
+              {r.status === "pending" && r.requires_release && !r.released_at && <div className="small muted">awaiting release</div>}</td>
             <td className="small">{r.account_name}</td>
             <td className="small"><a href={`#/content/${r.content_id}`}>{r.excerpt}</a></td>
             <td className="small">{r.attempts}/{r.max_attempts}</td>
             <td className="small">{r.provider_ref ? <span className="mono">{r.provider_ref}</span> : fmt(r.available_at)}{r.last_error && <div className="error">{r.last_error}</div>}</td>
             <td className="small">
+              {r.status === "pending" && r.requires_release && !r.released_at && me.approver_for.includes(r.account_id) &&
+                <ReleaseButton outboxId={r.id} provider={r.provider} onDone={(m) => { setMsg(m); reload(); }} />}
               {r.status === "pending" && me.hints.canApprove && <button onClick={() => act(() => api(`/outbox/${r.id}/cancel`, { method: "POST" }), "Cancelled.")}>Cancel</button>}
-              {r.status === "needs_reconciliation" && me.hints.canReconcile && <button onClick={() => setRecon({ id: r.id, ref: "", note: "" })}>Reconcile…</button>}
+              {r.status === "needs_reconciliation" && me.hints.canReconcile && <button onClick={() => { setAssist(null); setRecon({ id: r.id, ref: "", note: "" }); }}>Reconcile…</button>}
+              {r.status === "needs_reconciliation" && me.hints.canReconcile && r.provider === "linkedin" &&
+                <button onClick={() => act(async () => setAssist(await api(`/outbox/${r.id}/linkedin-candidates`)))}>Check LinkedIn</button>}
             </td>
           </tr>
         ))}</tbody>
@@ -251,7 +332,12 @@ export function OutboxPage({ me }: { me: Me }) {
       {recon && (
         <div className="panel">
           <h3 style={{ marginTop: 0 }}>Reconcile ambiguous publication</h3>
-          <p className="small muted">Check the destination (here: the Mock LinkedIn page) and record what actually happened.</p>
+          <p className="small muted">Check the destination (the Mock LinkedIn page, or the real LinkedIn profile/page for live posts) and record what actually happened.</p>
+          {assist && (assist.supported
+            ? <ul className="small">{assist.candidates?.map((c) => (
+                <li key={c.id}>{c.matches ? "✅ matches: " : ""}<span className="mono">{c.id}</span> — {c.commentary.slice(0, 120)}
+                  {" "}<button onClick={() => setRecon({ ...recon, ref: c.id })}>Use</button></li>))}</ul>
+            : <p className="small notice">{assist.message}</p>)}
           <label>Provider post reference (if it was published)</label>
           <input value={recon.ref} onChange={(e) => setRecon({ ...recon, ref: e.target.value })} />
           <label>Note (required)</label>

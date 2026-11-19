@@ -24,7 +24,7 @@ async function approvedAndQueued(account: "company" | "founder" = "company") {
   return { id, outboxId };
 }
 const claim = (worker = "w1", limit = 10) =>
-  t.worker<Outbox>("select * from lbe.claim_outbox($1, $2, 60)", [worker, limit]);
+  t.worker<Outbox>("select * from lbe.claim_outbox($1, $2, 60, array['mock'])", [worker, limit]);
 const complete = (id: string, outcome: string, ref: string | null = null, worker = "w1", retryAfter: number | null = null) =>
   t.worker<Outbox>("select * from lbe.complete_outbox($1, $2, $3, $4, 'test', $5)", [id, worker, outcome, ref, retryAfter]);
 const contentStatus = async (id: string) =>

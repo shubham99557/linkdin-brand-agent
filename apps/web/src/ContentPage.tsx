@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmt, type Me } from "./api.ts";
-import { Badge, ErrorText, useLoad } from "./components.tsx";
+import { Badge, ErrorText, ReleaseButton, useLoad } from "./components.tsx";
 
 interface Detail {
   item: {
@@ -12,7 +12,8 @@ interface Detail {
   citations: Array<{ claim_id: string; quoted_span: string; statement: string; category: string; evidence_url: string | null;
     evidence_note: string | null; status: string; verified_by_name: string | null; verified_at: string | null }>;
   approvals: Array<{ id: string; decision: string; package_hash: string; note: string | null; created_at: string; approver_name: string }>;
-  outbox: Array<{ id: string; status: string; attempts: number; max_attempts: number; available_at: string; last_error: string | null; provider_ref: string | null }>;
+  outbox: Array<{ id: string; status: string; attempts: number; max_attempts: number; available_at: string; last_error: string | null;
+    provider: string; provider_ref: string | null; requires_release: boolean; released_at: string | null }>;
   audit: Array<{ id: number; at: string; actor: string; action: string; details: Record<string, unknown> }>;
   agent_runs: Array<{ id: string; provider: string; model: string; status: string; error: string | null;
     validation_notes: string[] | null; notes_for_reviewer: string | null; hook_variants: string[] | null; finished_at: string }>;
@@ -205,14 +206,29 @@ export function ContentPage({ id, me, onChange }: { id: string; me: Me; onChange
           {item.status === "approved" && d.viewer.is_account_approver && (
             <div className="panel">
               <h3 style={{ marginTop: 0 }}>Release</h3>
-              <p className="small muted">Queues the approved package in the outbox. It is sent to the <strong>mock</strong> LinkedIn provider at the scheduled time (or on the next worker run). STOP controls are checked at send time.</p>
+              <p className="small muted">
+                Queues the approved package in the outbox.{" "}
+                {(item.package as { destination?: { publishing_mode?: string } }).destination?.publishing_mode === "live"
+                  ? <>This account is <strong>LIVE</strong>: after queuing, an approver must click <strong>Publish now</strong> to send it to LinkedIn (manual release).</>
+                  : <>It is sent to the <strong>mock</strong> LinkedIn provider (scheduled, or after <strong>Publish now</strong> for manual-release accounts).</>}
+                {" "}STOP controls are checked at send time.
+              </p>
               <button className="primary" disabled={busy} data-testid="enqueue"
                 onClick={() => act(() => api(`/content/${id}/enqueue`, { method: "POST" }), "Queued for publishing.")}>Queue for publishing</button>
             </div>
           )}
 
+          {d.outbox.filter((o) => o.status === "pending" && o.requires_release && !o.released_at).map((o) => (
+            <div className="panel" key={o.id} data-testid="release-panel">
+              <h3 style={{ marginTop: 0 }}>Waiting for release {o.provider === "linkedin" && <span className="badge bad">LIVE</span>}</h3>
+              {d.viewer.is_account_approver
+                ? <ReleaseButton outboxId={o.id} provider={o.provider} onDone={(m) => { setInfo(m); reload(); onChange(); }} />
+                : <p className="small muted">An approver for this account must release it.</p>}
+            </div>
+          ))}
+
           {item.provider_post_ref && (
-            <div className="panel"><h3 style={{ marginTop: 0 }}>Published (mock)</h3>
+            <div className="panel"><h3 style={{ marginTop: 0 }}>Published {(item.package as { destination?: { publishing_mode?: string } }).destination?.publishing_mode === "live" ? "on LinkedIn" : "(mock)"}</h3>
               <p className="mono" data-testid="provider-ref">{item.provider_post_ref}</p><p className="small muted">{fmt(item.published_at)}</p></div>
           )}
 

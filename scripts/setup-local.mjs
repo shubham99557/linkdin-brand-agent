@@ -15,6 +15,7 @@ let text = readFileSync(path.join(root, ".env.example"), "utf8");
 for (const key of ["LBE_PG_PASSWORD", "LBE_DEV_ADMIN_PASSWORD", "LBE_DEV_APPROVER_PASSWORD", "LBE_DEV_FOUNDER_PASSWORD", "LBE_DEV_EDITOR_PASSWORD"]) {
   text = text.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${pw()}`);
 }
+text = text.replace(/^LBE_TOKEN_ENC_KEY=.*$/m, `LBE_TOKEN_ENC_KEY=${randomBytes(32).toString("base64")}`);
 writeFileSync(target, text, { encoding: "utf8", flag: "wx" });
 console.log("Created .env with random development passwords.");
 console.log("Next: npm run db:seed   (then sign in with the emails it prints and the passwords in .env)");

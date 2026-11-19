@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError, type Me } from "./api.ts";
 import { ErrorText, StopBar } from "./components.tsx";
 import { ContentPage } from "./ContentPage.tsx";
-import { AccountsPage, AuditPage, CalendarPage, CapabilitiesPage, ClaimsPage, MockPostsPage, NewContentPage, OutboxPage } from "./pages.tsx";
+import { AccountsPage, AuditPage, CalendarPage, CapabilitiesPage, ClaimsPage, MockPostsPage, NewContentPage, OAuthCompletePage, OutboxPage } from "./pages.tsx";
 
 function useHashRoute(): string {
   const [route, setRoute] = useState(() => window.location.hash.slice(1) || "/");
@@ -69,6 +69,7 @@ export function App() {
   const contentMatch = route.match(/^\/content\/([0-9a-f-]{36})$/);
   let page;
   if (contentMatch) page = <ContentPage id={contentMatch[1]!} me={me} onChange={() => setRefreshKey((k) => k + 1)} />;
+  else if (route.startsWith("/oauth/complete")) page = <OAuthCompletePage query={route.split("?")[1] ?? ""} />;
   else if (route === "/new") page = <NewContentPage />;
   else if (route === "/claims") page = <ClaimsPage me={me} />;
   else if (route === "/accounts") page = <AccountsPage me={me} />;

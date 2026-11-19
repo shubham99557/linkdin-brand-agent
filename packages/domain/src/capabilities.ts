@@ -8,6 +8,7 @@
  */
 export type CapabilityStatus =
   | "implemented_mock"            // works end-to-end in Phase 1 against the mock provider only
+  | "contract_tested"             // built against LinkedIn's documented contract and tested with a local fake; NOT yet verified on LinkedIn
   | "documented_needs_access"     // LinkedIn documents it; requires an app/product grant we do not yet have
   | "unverified"                  // documentation unclear or conflicting; must be confirmed before design relies on it
   | "not_supported"               // LinkedIn does not offer it for this use case
@@ -34,6 +35,33 @@ export const CAPABILITIES: readonly Capability[] = [
     founderProfile: "implemented_mock",
     linkedinProduct: "Company: Community Management API (w_organization_social). Founder: Share on LinkedIn (w_member_social).",
     notes: "Phase 1 publishes to the mock provider only. Live access requires owner approval and LinkedIn app grants.",
+    source: POSTS_API,
+  },
+  {
+    id: "live_text_post",
+    label: "Live text post via Posts API (manual release)",
+    companyPage: "contract_tested",
+    founderProfile: "contract_tested",
+    linkedinProduct: "POST /rest/posts, Linkedin-Version 202611",
+    notes: "Stage 2.1: built and tested against a local fake only. Founder use of /rest/posts with only w_member_social is UNCONFIRMED (Stage 2.2 pilot).",
+    source: POSTS_API,
+  },
+  {
+    id: "oauth_connection",
+    label: "Connect account via OAuth (encrypted token storage)",
+    companyPage: "contract_tested",
+    founderProfile: "contract_tested",
+    linkedinProduct: "OAuth 2.0 authorization code flow; OIDC userinfo for the founder",
+    notes: "HTTPS redirect required. 60-day tokens; reconnect needed (no refresh tokens assumed).",
+    source: "https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow",
+  },
+  {
+    id: "reconciliation_lookup",
+    label: "Look up own recent posts to resolve ambiguous publishes",
+    companyPage: "contract_tested",
+    founderProfile: "not_supported",
+    linkedinProduct: "GET /rest/posts?q=author (r_organization_social)",
+    notes: "Founder posts cannot be read back (r_member_social closed) — a human checks the profile.",
     source: POSTS_API,
   },
   {

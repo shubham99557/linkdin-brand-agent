@@ -71,7 +71,7 @@ suite("PostgreSQL concurrency", () => {
   it("concurrent workers never claim the same outbox entry", async () => {
     const created = await Promise.all(Array.from({ length: 12 }, () => queued()));
     const claims = await Promise.all(Array.from({ length: 6 }, (_, i) =>
-      db.tx("lbe_worker", (q) => q.query<{ id: string }>("select id from lbe.claim_outbox($1, 3, 60)", [`w${i}`]))));
+      db.tx("lbe_worker", (q) => q.query<{ id: string }>("select id from lbe.claim_outbox($1, 3, 60, array['mock'])", [`w${i}`]))));
     const claimedIds = claims.flat().map((r) => r.id);
     expect(new Set(claimedIds).size).toBe(claimedIds.length);       // no duplicates
     expect(claimedIds.length).toBe(created.length);                    // everything claimed exactly once
@@ -125,11 +125,11 @@ suite("PostgreSQL concurrency", () => {
 
   it("after a STOP commits, no worker can claim", async () => {
     // Drain anything left over, then queue fresh work.
-    await db.tx("lbe_worker", (q) => q.query("select lbe.claim_outbox('drain', 50, 60)"));
+    await db.tx("lbe_worker", (q) => q.query("select lbe.claim_outbox('drain', 50, 60, array['mock'])"));
     await Promise.all(Array.from({ length: 4 }, () => queued()));
     await api("select lbe.set_stop($1, 'global', true, 'concurrency test')", [sessions.editor]);
     const claims = await Promise.all(Array.from({ length: 4 }, (_, i) =>
-      db.tx("lbe_worker", (q) => q.query("select id from lbe.claim_outbox($1, 5, 60)", [`s${i}`]))));
+      db.tx("lbe_worker", (q) => q.query("select id from lbe.claim_outbox($1, 5, 60, array['mock'])", [`s${i}`]))));
     expect(claims.flat()).toHaveLength(0);
     await api("select lbe.set_stop($1, 'global', false, 'done')", [sessions.admin]);
   });

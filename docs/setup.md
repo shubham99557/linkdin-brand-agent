@@ -116,6 +116,47 @@ ANTHROPIC_API_KEY=<your key>
 
 Restart `npm start`. Drafts are still validated against the claims register and still need human approval.
 
+## 8. Phase 2 — connecting LinkedIn (only for an owner-approved pilot stage)
+
+> Live publishing is **off** by default and refused unless `LBE_ENV=staging`. Do these steps only when the
+> owner has approved Stage 2.2 (founder pilot) or 2.3 (company page). See `docs/phase-2-plan.md`.
+
+**a. Create a local HTTPS certificate** (LinkedIn only redirects to HTTPS). In PowerShell, from the project folder:
+
+```powershell
+New-Item -ItemType Directory -Force secrets | Out-Null     # git-ignored
+$cert = New-SelfSignedCertificate -DnsName localhost -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(1)
+$pw = Read-Host -AsSecureString "Choose a certificate passphrase"
+Export-PfxCertificate -Cert $cert -FilePath secrets\localhost.pfx -Password $pw
+```
+
+Your browser will warn that the certificate is self-signed. That is expected for local use.
+
+**b. Create the LinkedIn app(s)** at https://www.linkedin.com/developers/apps:
+- **Founder app:** add the products *Share on LinkedIn* and *Sign In with LinkedIn using OpenID Connect*.
+- **Company app:** a *separate, new* app with *Community Management API* only (LinkedIn review required).
+- Under *Auth → Authorized redirect URLs*, add `https://localhost:8443/api/oauth/linkedin/callback`.
+
+**c. Edit `.env`:**
+
+```
+LBE_ENV=staging
+LBE_PORT=8443
+LBE_TLS_PFX=secrets/localhost.pfx
+LBE_TLS_PFX_PASSPHRASE=<your certificate passphrase>
+LBE_APP_ORIGINS=https://localhost:8443
+LBE_LINKEDIN_REDIRECT_URI=https://localhost:8443/api/oauth/linkedin/callback
+LBE_LINKEDIN_FOUNDER_CLIENT_ID=<from the LinkedIn app>
+LBE_LINKEDIN_FOUNDER_CLIENT_SECRET=<from the LinkedIn app>
+LBE_LIVE_PUBLISHING=on        # only during an approved pilot; set back to off afterwards
+```
+
+**d.** Run `npm start` and open **https://localhost:8443**. Then, as admin, go to *Accounts & voices* →
+*Connect LinkedIn* and check the connected name. Click *Enable LIVE publishing* only for the approved pilot.
+
+**To stop everything at once:** press STOP, or set `LBE_LIVE_PUBLISHING=off` and restart, or remove the app's
+access in LinkedIn settings. Any one of these is enough.
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -126,3 +167,6 @@ Restart `npm start`. Drafts are still validated against the claims register and 
 | "cross-origin request refused" | Open the app at exactly `http://127.0.0.1:8787` (or add your URL to `LBE_APP_ORIGINS`) |
 | Login locked | 5 wrong passwords lock the account for 15 minutes |
 | PGlite "one process" | Don't run `npm run worker` with PGlite — the API runs the worker itself |
+| "LBE_LIVE_PUBLISHING=on is only allowed with LBE_ENV=staging" | Intended safety rule — set `LBE_ENV=staging` only for an approved pilot |
+| A live post is stuck as "awaiting release" | Intended — an approver must click *Publish now* and confirm |
+| Account shows "AUTO: LinkedIn credential invalid" | LinkedIn rejected the token: reconnect, then an admin resumes the account |

@@ -32,7 +32,7 @@ describe("lbe_api role has no direct write access", () => {
   });
 
   it("cannot call worker or owner-only functions", async () => {
-    await expectCode(asApi("select * from lbe.claim_outbox('x', 1, 60)"), "42501");
+    await expectCode(asApi("select * from lbe.claim_outbox('x', 1, 60, array['mock'])"), "42501");
     await expectCode(asApi("select lbe.complete_outbox(gen_random_uuid(), 'x', 'success', 'r', null, null)"), "42501");
     await expectCode(asApi("select lbe.admin_create_user('x@y.test', 'x', 'admin', 'aaaaaaaaaaaaaaaa')"), "42501");
     await expectCode(asApi("select lbe.require_user('x', array['admin'])"), "42501");

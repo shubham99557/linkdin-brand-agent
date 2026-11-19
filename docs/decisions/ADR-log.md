@@ -19,6 +19,9 @@ This log records corrections and Phase 1 decisions. Where an ADR conflicts with 
 | 011 | Embedded PostgreSQL for development; schema `lbe` | Accepted | integration-contracts §1 |
 | 012 | Single-tenant data model | Accepted | — |
 | 013 | Ambiguous publication results require reconciliation | Accepted | integration-contracts §4 (retry policy) |
+| 014 | Live publishing gate and manual release (Stage 2.1) | Accepted | ADR-006 (extends) |
+| 015 | LinkedIn credentials: encryption and identity binding | Accepted | security-review §E |
+| 016 | OAuth callback hand-off through the dashboard | Accepted | — |
 
 ---
 
@@ -147,6 +150,50 @@ Tables live in schema `lbe` (not `public`) so Supabase's auto-generated REST API
 **Decision.** No `tenant_id` columns. If Mode B is approved, add a `tenants` table and a `tenant_id` foreign key
 to `social_accounts`, `claims`, `content_items`, `app_users` and propagate through functions; RLS policies by
 tenant. Estimated as a dedicated migration plus function changes, not a rewrite.
+
+## ADR-014 — Live publishing gate and manual release (Stage 2.1)
+**Context.** LinkedIn API Terms §3.1(26) forbid using the APIs "to automate posting"; legal has not yet ruled on
+human-approved scheduled release (P2-D1). ADR-006 blocked live publishing completely.
+
+**Decision.** Live publishing becomes possible only when **all** of these hold. Any one switched off means nothing is sent:
+1. `LBE_LIVE_PUBLISHING=on`, which config refuses unless `LBE_ENV=staging`. When it is off, the live provider is not
+   constructed, the API refuses to enable live accounts or release live jobs, and workers do not claim `linkedin` rows.
+2. An admin ran `set_live_publishing` (records `live_enabled_by/at`; database constraint).
+3. A valid, unexpired credential exists (database trigger; `is_stopped` treats a live account without one as stopped).
+4. Global and account STOP are off.
+
+Live accounts are forced to `release_mode = 'manual'` by a check constraint. A live outbox row has
+`requires_release = true` and cannot be claimed or dispatched until an approver of that account calls
+`release_publication` ("Publish now"). The API additionally requires `confirm_public_post: true`.
+
+The outbox `provider` is derived from the **approved package's** destination, so mock approvals never go live.
+Switching an account between mock and live changes every unpublished package hash, which invalidates prior
+approvals. Workers claim only providers they have (`claim_outbox(..., p_providers)`).
+
+There is a daily cap of 25 dispatches per account (UTC day), far below LinkedIn's limits.
+
+## ADR-015 — LinkedIn credentials: encryption and identity binding
+**Decision.**
+- Access tokens are encrypted with **AES-256-GCM in the application**, using a key from `LBE_TOKEN_ENC_KEY`
+  (never stored in the database). The additional authenticated data binds each ciphertext to its account.
+- `lbe_api` can read credential metadata but not the ciphertext column. Only `lbe_worker` receives ciphertext,
+  through a definer function, and only for live accounts with a valid credential.
+- Provider responses map to alerts that only ever **stop** things: 401 → credential invalid + account stopped;
+  403 → account stopped; 426 → global stop. Workers cannot resume.
+- Expired credentials are detected every tick.
+- Error text is sanitised. Tests assert that no token or client secret appears in API responses, audit events
+  or logs.
+- Minimum scopes: founder `openid profile w_member_social`; company `w_organization_social r_organization_social`.
+
+## ADR-016 — OAuth callback hand-off through the dashboard
+**Context.** LinkedIn redirects the browser cross-site, so the `SameSite=Strict` session cookie is not sent to
+the callback.
+
+**Decision.** `GET /api/oauth/linkedin/callback` performs no work. It redirects to
+`/#/oauth/complete?code&state`. Fragments are not sent to servers, and `Referrer-Policy: no-referrer` applies.
+The dashboard then POSTs the code and state with the admin's session. The database accepts the state only for
+the **same admin** who started the flow, only once, and within 10 minutes. Storing the credential requires the
+consumed state. HTTPS redirect URIs are enforced by config. Local HTTPS is supported through `LBE_TLS_PFX`.
 
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried
