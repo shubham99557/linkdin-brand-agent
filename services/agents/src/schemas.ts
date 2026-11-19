@@ -129,7 +129,8 @@ export interface Specialist<I> {
   readonly provider: "mock" | "anthropic";
   readonly model: string;
   readonly promptVersion: string;
-  run(input: I): Promise<SpecialistResult>;
+  /** `signal` aborts the underlying model request (per-step timeout / cancellation) so no further cost accrues. */
+  run(input: I, opts?: { signal?: AbortSignal }): Promise<SpecialistResult>;
 }
 
 export interface Specialists {

@@ -611,6 +611,8 @@ export function createApp(deps: AppDeps) {
     await q("select lbe.job_resume($1, $2)", [c.get("session"), param(c, "id")]);
     return c.json({ ok: true, status: "queued" });
   });
+  api.post("/agent/jobs/:id/retry", async (c) =>
+    c.json({ job_id: await one<string>("select lbe.job_retry($1, $2)", [c.get("session"), param(c, "id")]), status: "queued" }, 202));
   api.post("/agent/jobs/:id/cancel", async (c) =>
     c.json({ result: await one<string>("select lbe.job_cancel($1, $2)", [c.get("session"), param(c, "id")]) }));
 

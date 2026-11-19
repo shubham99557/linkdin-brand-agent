@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  AnthropicResearchSpecialist, buildBrandContext, checkBrandRules, topicSimilarity, validateCreative, validateExtraction,
+  AnthropicResearchSpecialist, anthropicSpecialists, buildBrandContext, checkBrandRules, topicSimilarity, validateCreative, validateExtraction,
   validatePerformance, validateResearch, validateStrategy, type BrandBrain,
 } from "@lbe/agents";
 
@@ -123,5 +123,26 @@ describe("Anthropic research specialist (fake client — no network)", () => {
     expect(r.allowedUrls).toEqual(["https://www.ncsc.gov.uk/example"]);
     const v = validateResearch(r.raw, { allowedUrls: r.allowedUrls, now: NOW });
     expect(v.ok && v.accepted).toHaveLength(1);
+  });
+
+  it("P4-03: passes the step's abort signal to every SDK request, and an aborted request becomes an error result", async () => {
+    const seen: Array<AbortSignal | undefined> = [];
+    const fakeClient = {
+      messages: { create: (_body: unknown, opts?: { signal?: AbortSignal }) => {
+        seen.push(opts?.signal);
+        return new Promise((_, reject) => opts?.signal?.addEventListener("abort", () => reject(new Error("Request was aborted."))));
+      } },
+      beta: { messages: { parse: async (_body: unknown, opts?: { signal?: AbortSignal }) => { seen.push(opts?.signal); throw new Error("Request was aborted."); } } },
+    };
+    const ac = new AbortController();
+    const research = new AnthropicResearchSpecialist({ client: fakeClient as never });
+    const pending = research.run({ goal: "phishing", region: "UK", audience: "SMEs", brandSummary: "x", maxFindings: 3 }, { signal: ac.signal });
+    ac.abort();
+    expect((await pending).kind).toBe("error");
+    const strategy = anthropicSpecialists({ client: fakeClient as never }).strategy;
+    const r = await strategy.run({ goal: "g", startDate: "2027-01-04", days: 7, postCount: 3, brandContext: "", accounts: [], findings: [], claims: [],
+      recentTopics: [], prohibitedTopics: [] }, { signal: ac.signal });
+    expect(r.kind).toBe("error");
+    expect(seen).toEqual([ac.signal, ac.signal]);
   });
 });

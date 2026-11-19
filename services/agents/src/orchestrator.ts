@@ -39,6 +39,31 @@ export interface AgentDeps {
   resumeWorkflowId?: string;
   /** Estimated spend of earlier attempts (counts towards budgetUsd on resume). */
   priorSpentUsd?: number;
+  /** Per-step time limits (ms). A step that runs over is aborted (the model request is cancelled) and handled as a failed step. */
+  stepTimeoutsMs?: Partial<StepTimeouts>;
+}
+
+export interface StepTimeouts { research: number; strategy: number; draft: number; creative: number }
+/**
+ * Defaults sit above the SDK's own per-request timeout × retries for single calls, and allow for research's
+ * multi-turn web search. They bound how long one stuck call can hold a job.
+ */
+export const DEFAULT_STEP_TIMEOUTS_MS: StepTimeouts = { research: 480_000, strategy: 240_000, draft: 240_000, creative: 180_000 };
+
+/** Run one step with a time limit; on expiry abort it and return an error result instead of waiting for ever. */
+async function withStepTimeout<R>(label: string, ms: number, run: (signal: AbortSignal) => Promise<R>,
+                                  onTimeout: (message: string) => R): Promise<R> {
+  const ac = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<R>((resolve) => {
+    // Settle with the timeout result FIRST, then abort: otherwise the aborted request's own error would win the race.
+    timer = setTimeout(() => { resolve(onTimeout(`${label} timed out after ${Math.round(ms / 1000)}s`)); ac.abort(); }, ms);
+  });
+  try {
+    return await Promise.race([run(ac.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -129,6 +154,8 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
   const warnings: string[] = [];
   const budget = new Budget(deps.budgetUsd ?? null);
   budget.addPrior(deps.priorSpentUsd ?? 0);
+  const limits: StepTimeouts = { ...DEFAULT_STEP_TIMEOUTS_MS, ...deps.stepTimeoutsMs };
+  const asError = (message: string): SpecialistResult => ({ kind: "error", message });
   const checkpoint = async (stage: WorkflowProgress["stage"], extra: Partial<WorkflowProgress> = {}) => {
     if (!deps.onProgress) return;
     if ((await deps.onProgress({ stage, workflowId, estimatedUsd: budget.spentUsd, ...extra })) === "cancel") throw new WorkflowCancelledError();
@@ -169,10 +196,11 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
       findings = saved!.findings.map((f) => ({ ...f, source_title: f.source_title ?? "", relevance: "", flags: f.flags ?? [] }));
     }
     const researchStarted = new Date().toISOString();
-    const research: SpecialistResult = reuseResearch ? { kind: "ok", raw: null } : await deps.specialists.research.run({
-      goal, region: input.region ?? "UK", audience: input.audience ?? (entriesFor(brain, "icp")[0]?.body.slice(0, 500) ?? "UNKNOWN"),
-      brandSummary: entriesFor(brain, "identity").map((e) => e.body).join(" ").slice(0, 1000) || "UNKNOWN", maxFindings: 8,
-    });
+    const research: SpecialistResult = reuseResearch ? { kind: "ok", raw: null } : await withStepTimeout("research", limits.research,
+      (signal) => deps.specialists.research.run({
+        goal, region: input.region ?? "UK", audience: input.audience ?? (entriesFor(brain, "icp")[0]?.body.slice(0, 500) ?? "UNKNOWN"),
+        brandSummary: entriesFor(brain, "identity").map((e) => e.body).join(" ").slice(0, 1000) || "UNKNOWN", maxFindings: 8,
+      }, { signal }), asError);
     if (!reuseResearch) budget.add("research", deps.specialists.research.model, research.kind === "ok" ? research.usage : undefined, deps.specialists.research.provider);
     if (reuseResearch) {
       // already recorded by the earlier attempt
@@ -211,13 +239,13 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     await checkpoint("strategy");
     const recentTopics = brain.recent_topics.map((t) => t.topic);
     const strategyStarted = new Date().toISOString();
-    const strategyRaw = await deps.specialists.strategy.run({
+    const strategyRaw = await withStepTimeout("strategy", limits.strategy, (signal) => deps.specialists.strategy.run({
       goal, startDate, days, postCount, brandContext,
       accounts: accounts.map((a) => ({ kind: a.kind, pillars: a.pillars })),
       findings: evidence.map((f) => ({ id: f.id, statement: f.statement, source_url: f.source_url, confidence: f.confidence })),
       claims: brain.claims.map((c) => ({ id: c.id, statement: c.statement })),
       recentTopics, prohibitedTopics: prohibitedTopics(brain),
-    });
+    }, { signal }), asError);
     budget.add("strategy", deps.specialists.strategy.model, strategyRaw.kind === "ok" ? strategyRaw.usage : undefined, deps.specialists.strategy.provider);
     if (strategyRaw.kind !== "ok") {
       await recordRun("strategy", deps.specialists.strategy, strategyRaw, strategyStarted, { workflow_id: workflowId });
@@ -274,7 +302,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
         await checkpoint("drafting", { done: drafts.length, total: totalDrafts });
         drafts.push(await draftOne(deps, { workflowId, item, acct, group, startDate, brandContext, voice: voices[acct.kind].text,
           itemFindings, allFindings: findings, itemClaims, terms, identity: entriesFor(brain, "identity").map((e) => e.body).join("\n"), budget,
-          existing }));
+          existing, limits }));
       }
     }
 
@@ -311,6 +339,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
   } catch (err) {
     const message = (err as Error).message;
     const status = err instanceof WorkflowCancelledError ? "cancelled" : "failed";
+    if (err && typeof err === "object") (err as { estimatedUsd?: number }).estimatedUsd = budget.spentUsd;   // for the job's cost record
     await one("select lbe.workflow_finish($1, $2, $3, $4::jsonb, $5)", [deps.session, workflowId, status,
       JSON.stringify({ warnings, cost: { estimated_usd: budget.spentUsd } }), message]).catch(() => undefined);
     throw err;
@@ -323,6 +352,7 @@ async function draftOne(deps: AgentDeps, p: {
   allFindings: Array<ValidFinding & { id: string }>; terms: string[]; identity: string; budget: Budget;
   /** Resume: the draft an earlier attempt already created for this plan item and account (not yet settled). */
   existing?: SavedDraft;
+  limits: StepTimeouts;
 }): Promise<Record<string, unknown>> {
   const { one, recordRun } = helpers(deps);
   const pillar = p.existing?.pillar ?? p.item.pillars[p.acct.kind];
@@ -355,10 +385,11 @@ async function draftOne(deps: AgentDeps, p: {
   } else {
   // Writer (LinkedIn Writing Specialist = the existing drafter, now with Brand Brain context)
   const started = new Date().toISOString();
-  const written = await deps.writer.draft({
-    accountKind: p.acct.kind, accountName: p.acct.display_name, voiceProfile: p.voice, pillar,
-    allowedPillars: p.acct.pillars, brief, sourceMaterial, claims: p.itemClaims, brandContext: p.brandContext,
-  });
+  const written = await withStepTimeout(`writing the ${p.acct.kind === "company_page" ? "company" : "founder"} draft`, p.limits.draft,
+    (signal) => deps.writer.draft({
+      accountKind: p.acct.kind, accountName: p.acct.display_name, voiceProfile: p.voice, pillar,
+      allowedPillars: p.acct.pillars, brief, sourceMaterial, claims: p.itemClaims, brandContext: p.brandContext,
+    }, { signal }), (message) => ({ kind: "error" as const, message }));
   const writerMeta = { provider: deps.writer.provider, model: deps.writer.model, promptVersion: DRAFT_PROMPT_VERSION };
   p.budget.add(`draft:${p.acct.kind}`, deps.writer.model, written.kind === "ok" ? written.usage : undefined, deps.writer.provider);
   const asSpecialist: SpecialistResult = written.kind === "ok" ? { kind: "ok", raw: written.raw, usage: written.usage }
@@ -395,8 +426,9 @@ async function draftOne(deps: AgentDeps, p: {
   const cStarted = new Date().toISOString();
   const creative: SpecialistResult = p.budget.exhausted
     ? { kind: "error", message: "skipped: budget reached" }
-    : await deps.specialists.creative.run({ body, accountKind: p.acct.kind, topic: p.item.topic,
-        visualIdentity: p.identity, prohibitedTerms: p.terms });
+    : await withStepTimeout("visual brief", p.limits.creative, (signal) => deps.specialists.creative.run({ body, accountKind: p.acct.kind,
+        topic: p.item.topic, visualIdentity: p.identity, prohibitedTerms: p.terms }, { signal }),
+        (message): SpecialistResult => ({ kind: "error", message }));
   p.budget.add(`creative:${p.acct.kind}`, deps.specialists.creative.model, creative.kind === "ok" ? creative.usage : undefined, deps.specialists.creative.provider);
   if (creative.kind === "ok") {
     const cv = validateCreative(creative.raw, { body, prohibitedTerms: p.terms });

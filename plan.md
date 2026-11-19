@@ -17,12 +17,12 @@
 |---|---|
 | Current phase | **Phase 4 — Reliable orchestration** (Phases 0–1 DONE; Phase 2 engineering done, real content = owner OA-3; Phase 3 waits on OA-3/OA-6) |
 | Active task | — |
-| Next READY tasks | **P4-03 retry/timeouts** · P4-04 job UI polish · P2-04 account names · P2-03 document upload · P4-01 durable jobs · P3-01 pricing check · P5-00 render dependency review |
+| Next READY tasks | **P4-04 job UI polish** · P5-00 render dependency review · P2-04 account names · P2-03 document upload · P4-01 durable jobs · P3-01 pricing check · P5-00 render dependency review |
 | First safe milestone | **M1 Technical prototype hardened — REACHED 2026-11-19** (P1-01..06, P2-01/02; gate §H met: all suites green, restore proven, no open critical/high) |
-| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume |
+| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits |
 | Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · P0-07 off-machine code backup |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9) |
-| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 344 ✅ (10 PG skipped there) · `test:pg:embedded` 10/10 ✅ · Playwright 11 ✅ · secret scan ✅ · npm audit 0 ✅ |
+| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 348 ✅ (10 PG skipped there) · `test:pg:embedded` 10/10 ✅ · Playwright 11 ✅ · secret scan ✅ · npm audit 0 ✅ |
 | Latest commit | see `git log -1` (P1-02 follows `2ad93b5`) |
 | Next milestone | **M2 AI intelligence evaluation** (blocked on OA-3 real Brand Brain + OA-6 paid-run authorization) ∥ **M3 Internal MVP** engineering (P4 durable jobs, P5 visuals) |
 
@@ -225,7 +225,7 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 |---|---|---|---|---|---|---|---|---|
 | P4-01 | Durable job table + runner (claim/lease like outbox, lbe_agent role) | — | P1 | DONE | C | migration 1200, `jobs/agent-runner.ts`, orchestrator `onProgress`, api, web job page | Jobs persisted; one runner claims; lease expiry detected → job `interrupted` (safe, no duplicate re-run; true resume = P4-02) | **Evidence 2026-11-19:** `tests/db/agent-jobs` 9/9; `tests/integration/agent-jobs` 4/4 (202 + background run, cancel stops before next model call, redacted failure, job session refused by API); `brand-agent` rewired through the runner; PG 10/10 incl. claim race (mutation: no row lock → fails 3/3); e2e 11/11; live dev-server demo: queued → succeeded; ADR-028 |
 | P4-02 | Step checkpoints & safe partial results (resume an `interrupted` job without duplicate drafts). **Evidence 2026-11-19:** migration 1300 (unique draft per workflow/plan item/account; auto-requeue ≤3 attempts; `job_resume`; claim returns workflow + prior spend); orchestrator resume path (reuse findings/plan/drafts, deterministic `planItemGroup`, atomic create+link); integration "hung runner → B resumes → no duplicates, half-written draft continued, research not repeated, zombie cannot write" (mutation: random plan ids → fails); DB tests 11/11; PG 10/10 ×3; e2e 11/11; dev DB upgraded; dashboard "Resume where it stopped" | P4-01 | P1 | DONE | C | orchestrator | Kill mid-run → resume → no duplicates | integration test |
-| P4-03 | ~~Cancel~~ (done in P4-01); retry of failed/interrupted jobs, per-step timeouts; per-run cost on job (estimate already in progress) | P4-01 | P1 | READY | C | orchestrator, api | Retry creates a linked job; step timeout fails cleanly | tests |
+| P4-03 | ~~Cancel~~ (done in P4-01); retry of failed/cancelled jobs (interrupted → Resume, P4-02), per-step timeouts; per-run cost on job | P4-01 | P1 | DONE | C | migration 1400, orchestrator `withStepTimeout`, specialists/drafter `signal`, runner, api, web Retry button | Retry creates a linked job; step timeout fails cleanly | **Evidence 2026-11-19:** integration: stuck writer aborted at limit (signals aborted, drafts held with reason, run finishes); stuck strategy → job failed "strategy timed out" → Retry once → linked new run succeeds; DB retry rules; unit: SDK requests receive the abort signal; bug found & fixed (abort error used to win the race over the timeout message); Vitest 348, PG 10/10, e2e 11/11 |
 | P4-04 | Dashboard progress view — basic job page with stage/progress/cancel + "In progress" panel done in P4-01; remaining: job history, retry button, exclude job sessions from Users "open sessions" count | P4-01 | P2 | READY | C | web | Progress & cost visible; e2e | Playwright |
 | P4-05 | Safe parallelism (drafts per item) with budget awareness | P4-02 | P3 | NOT_STARTED | C | orchestrator | Faster, same results; budget respected | tests |
 
@@ -375,4 +375,5 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-19 | P2-01 DONE (owner-edited content pillars, single source) | `497bd1a` |
 | 2026-11-19 | P2-02 DONE (guided onboarding wizard) — **M1 Technical prototype hardened reached** (engineering scope) | `137a773` |
 | 2026-11-19 | P4-01 DONE (durable agent jobs, job sessions, ADR-028); test PostgreSQL now UTF-8 like production; P4-03/P4-04 rescoped | `bdcaf37` |
-| 2026-11-19 | P4-02 DONE (checkpointed resume, no duplicate drafts; ADR-028 updated) | P4-02 commit |
+| 2026-11-19 | P4-02 DONE (checkpointed resume, no duplicate drafts; ADR-028 updated) | `29b9eed` |
+| 2026-11-19 | P4-03 DONE (retry, per-step time limits with request abort, job cost) | P4-03 commit |

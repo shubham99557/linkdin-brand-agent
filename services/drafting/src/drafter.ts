@@ -12,5 +12,6 @@ export type DraftResult =
 export interface Drafter {
   readonly provider: "mock" | "anthropic";
   readonly model: string;
-  draft(input: DraftInput): Promise<DraftResult>;
+  /** `signal` aborts the underlying model request (per-step timeout / cancellation). */
+  draft(input: DraftInput, opts?: { signal?: AbortSignal }): Promise<DraftResult>;
 }

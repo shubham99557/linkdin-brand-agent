@@ -27,7 +27,7 @@ export class AnthropicDrafter implements Drafter {
     this.client = new Anthropic({ apiKey: opts.apiKey, timeout: opts.timeoutMs ?? 120_000, maxRetries: 2 });
   }
 
-  async draft(input: DraftInput): Promise<DraftResult> {
+  async draft(input: DraftInput, opts?: { signal?: AbortSignal }): Promise<DraftResult> {
     try {
       const response = await this.client.beta.messages.parse({
         model: this.model,
@@ -38,7 +38,7 @@ export class AnthropicDrafter implements Drafter {
         system: buildSystemPrompt(input),
         messages: [{ role: "user", content: buildUserPrompt(input) }],
         output_config: { effort: this.effort, format: zodOutputFormat(DraftOutputSchema) },
-      });
+      }, { signal: opts?.signal });
       if (response.stop_reason === "refusal") {
         const details = response.stop_details;
         return { kind: "refused", reason: details ? `${details.category ?? "unspecified"}: ${details.explanation ?? ""}` : "refused" };

@@ -4,7 +4,7 @@
 // If this process dies, the lease expires and job_recover_expired() marks the job 'interrupted'.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { runBrandWorkflow, WorkflowCancelledError, type Specialists, type WorkflowProgress } from "@lbe/agents";
+import { runBrandWorkflow, WorkflowCancelledError, type Specialists, type StepTimeouts, type WorkflowProgress } from "@lbe/agents";
 import type { Drafter } from "@lbe/drafting";
 import { redactForLog } from "@lbe/security";
 import type { Db } from "../db.ts";
@@ -19,6 +19,8 @@ export interface AgentRunnerDeps {
   /** Background heartbeat while a single model call is in progress. */
   heartbeatMs?: number;
   budgetUsd?: number;
+  /** Per-step time limits (defaults: DEFAULT_STEP_TIMEOUTS_MS in @lbe/agents). */
+  stepTimeoutsMs?: Partial<StepTimeouts>;
   log?: (msg: string, extra?: Record<string, unknown>) => void;
 }
 
@@ -54,8 +56,9 @@ export async function runAgentJobTick(deps: AgentRunnerDeps): Promise<AgentTickR
 
   let status: "succeeded" | "failed" | "cancelled" = "succeeded";
   let error: string | undefined;
+  let finalUsd: number | undefined;
   try {
-    await runBrandWorkflow({
+    const out = await runBrandWorkflow({
       db: deps.db, session: claim.session, specialists: deps.specialists, writer: deps.writer, budgetUsd: deps.budgetUsd,
       resumeWorkflowId: claim.workflow_id ?? undefined, priorSpentUsd: Number(claim.spent_usd) || 0,
       readVoiceFile: async (profile) => readFile(path.join(deps.voiceDir, `${profile}.md`), "utf8").catch(() => null),
@@ -65,15 +68,18 @@ export async function runAgentJobTick(deps: AgentRunnerDeps): Promise<AgentTickR
         await beat();
         return cancel ? "cancel" : undefined;
       },
+      stepTimeoutsMs: deps.stepTimeoutsMs,
     }, { goal: claim.params.goal, startDate: claim.params.start_date, days: claim.params.days, postCount: claim.params.post_count });
+    finalUsd = (out.result.cost as { estimated_usd?: number } | undefined)?.estimated_usd;
   } catch (err) {
+    finalUsd = (err as { estimatedUsd?: number }).estimatedUsd;
     status = err instanceof WorkflowCancelledError ? "cancelled" : "failed";
     error = status === "cancelled" ? "cancelled by user" : redactForLog(err);
   } finally {
     clearInterval(timer);
   }
   try {
-    lastProgress = { ...lastProgress, stage: status };
+    lastProgress = { ...lastProgress, stage: status, ...(finalUsd !== undefined ? { estimated_usd: finalUsd } : {}) };
     await beat().catch(() => undefined);
     await worker("select lbe.job_finish($1, $2, $3, $4)", [deps.workerId, claim.id, status, error ?? null]);
   } catch (err) {

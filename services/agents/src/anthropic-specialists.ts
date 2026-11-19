@@ -51,7 +51,7 @@ abstract class StructuredSpecialist<I> implements Specialist<I> {
     this.client = opts.client ?? new Anthropic({ apiKey: opts.apiKey, timeout: 180_000, maxRetries: 2 });
   }
 
-  async run(input: I): Promise<SpecialistResult> {
+  async run(input: I, opts?: { signal?: AbortSignal }): Promise<SpecialistResult> {
     try {
       const response = await this.client.beta.messages.parse({
         model: this.model,
@@ -61,7 +61,7 @@ abstract class StructuredSpecialist<I> implements Specialist<I> {
         system: this.system(input),
         messages: [{ role: "user", content: this.user(input) }],
         output_config: { effort: this.effort, format: zodOutputFormat(this.schema) },
-      });
+      }, { signal: opts?.signal });
       if (response.stop_reason === "refusal") {
         const d = response.stop_details;
         return { kind: "refused", reason: d ? `${d.category ?? "unspecified"}: ${d.explanation ?? ""}` : "refused" };
@@ -168,7 +168,7 @@ export class AnthropicResearchSpecialist implements Specialist<ResearchInput> {
     this.client = opts.client ?? new Anthropic({ apiKey: opts.apiKey, timeout: 300_000, maxRetries: 2 });
   }
 
-  async run(input: ResearchInput): Promise<SpecialistResult> {
+  async run(input: ResearchInput, opts?: { signal?: AbortSignal }): Promise<SpecialistResult> {
     const system = [
       "You are the Market Research Specialist for a UK B2B cybersecurity brand. Use web_search to find current, reputable sources (government, regulators, recognised research bodies, established industry reports).",
       "Every finding must come from a page returned by your searches, with its exact URL. Prefer sources from the last 24 months and give the publication date when shown.",
@@ -189,7 +189,7 @@ export class AnthropicResearchSpecialist implements Specialist<ResearchInput> {
           messages,
           tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 6 }],
           output_config: { effort: this.effort },
-        });
+        }, { signal: opts?.signal });
         usageIn += response.usage.input_tokens;
         usageOut += response.usage.output_tokens;
         searches += response.usage.server_tool_use?.web_search_requests ?? 0;

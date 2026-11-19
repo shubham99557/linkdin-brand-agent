@@ -131,6 +131,24 @@ describe("interruption", () => {
     await drain();
   });
 
+  it("P4-03: retry only for failed/cancelled jobs, by the requester or an admin, once; runs as the person who retried", async () => {
+    const id = await enqueue(editor, "retry rules goal");
+    await expectCode(t.api("select lbe.job_retry($1, $2)", [editor, id]), "LBE01");                 // still queued
+    await t.api("select lbe.job_cancel($1, $2)", [editor, id]);
+    await expectCode(t.api("select lbe.job_retry($1, $2)", [await t.login("approver"), id]), "LBE11");
+    const r = await t.api<string>("select lbe.job_retry($1, $2)", [admin, id]);
+    const [row] = await t.db.query<{ retry_of: string; requested_by: string; params: { goal: string }; status: string }>(
+      "select retry_of, requested_by, params, status from lbe.agent_jobs where id = $1", [r]);
+    expect(row).toMatchObject({ retry_of: id, requested_by: t.ids.users.admin, params: { goal: "retry rules goal" }, status: "queued" });
+    await expectCode(t.api("select lbe.job_retry($1, $2)", [editor, id]), "LBE01");                 // already retried
+    const [o] = await t.db.query<{ id: string }>("select id from lbe.organizations where slug = 'org-j'");
+    if (o) {
+      const other = (await t.api<{ token: string }>("select lbe.login('j@lbe.test', 'org-j-password-123')")).token;
+      await expectCode(t.api("select lbe.job_retry($1, $2)", [other, id]), "LBE04");
+    }
+    await drain();
+  });
+
   it("P4-02: the database allows only one draft per (workflow, plan item, account)", async () => {
     const id = await enqueue(editor);
     const c = (await claim("w1"))!;

@@ -353,6 +353,18 @@ dashboard or API. No browser session is ever stored or handed to a runner.
   can resume it.
 - Cancellation: a queued job is cancelled at once; a running job stops at the next step boundary, and work
   already saved is kept.
+- **Per-step time limits (P4-03).** Defaults: research 480 s, strategy 240 s, each draft 240 s, each visual
+  brief 180 s (`DEFAULT_STEP_TIMEOUTS_MS`). When a step runs over, its model request is **aborted** through
+  an `AbortSignal` passed to the Anthropic SDK, so no further cost accrues. The overrun is then handled like
+  a failed step:
+  - research: plan without new sources;
+  - strategy: the job fails;
+  - a draft: it is held as a draft with the reason;
+  - a visual brief: it is skipped.
+- **Retry (P4-03, migration 1400).** A failed or cancelled job can be retried once. The retry is a new, linked
+  job with a fresh workflow, and it runs with the permissions of whoever pressed Retry. The original run and
+  its drafts stay as they were. Interrupted jobs use Resume instead. The estimated cost is recorded on every
+  job, including failed and cancelled ones.
 - A limit of 5 queued or running jobs per organization.
 - "Sign out everywhere" and disabling a user also end that user's running jobs, by design.
 - Accepted risk: `lbe_worker` can act as a job's requester for the life of the lease. It is limited to the

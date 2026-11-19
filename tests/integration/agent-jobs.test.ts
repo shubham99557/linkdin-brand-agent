@@ -148,6 +148,51 @@ describe("durable Branding Agent jobs", () => {
     expect((await call(editor, "GET", `/api/agent/jobs/${jobId}`)).body.status).toBe("succeeded");
   });
 
+  it("P4-03: a stuck writer call is aborted at the step time limit; the draft is held with a clear reason and the run finishes", async () => {
+    const editor = await login();
+    const q = await call(editor, "POST", "/api/agent/workflows", { goal: "Timeout test goal for drafts", start_date: "2027-07-05" });
+    const signals: AbortSignal[] = [];
+    // A writer that never answers unless its request is aborted.
+    const stuck = { provider: "mock" as const, model: "mock-drafter-v1", draft: (_i: unknown, opts?: { signal?: AbortSignal }) => new Promise<never>((_, reject) => {
+      signals.push(opts!.signal!);
+      opts!.signal!.addEventListener("abort", () => reject(new Error("aborted")));
+    }) };
+    const started = Date.now();
+    const r = await runAgentJobTick({ db: t.db, specialists: mockSpecialists(), writer: stuck, voiceDir: VOICE, workerId: "runner-T",
+      stepTimeoutsMs: { draft: 150 } });
+    expect(Date.now() - started).toBeLessThan(20_000);
+    expect(r.job?.status).toBe("succeeded");
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((s) => s.aborted)).toBe(true);                 // the model request itself was cancelled
+    const job = (await call(editor, "GET", `/api/agent/jobs/${q.body.job_id}`)).body;
+    const wf = (await call(editor, "GET", `/api/agent/workflows/${job.workflow_id}`)).body;
+    const drafts = wf.result.drafts as Array<{ status: string; error?: string }>;
+    expect(drafts.every((d) => d.status === "draft" && /timed out after 0s|timed out/.test(d.error ?? ""))).toBe(true);
+    expect(wf.drafts.every((d: { status: string }) => d.status === "draft")).toBe(true);   // nothing reached review
+  });
+
+  it("P4-03: a stuck strategy step fails the job cleanly; Retry starts a linked new run that succeeds", async () => {
+    const editor = await login();
+    const q = await call(editor, "POST", "/api/agent/workflows", { goal: "Strategy timeout then retry", start_date: "2027-07-12" });
+    const base = mockSpecialists();
+    const r1 = await runAgentJobTick({ db: t.db, workerId: "runner-T", writer: new MockDrafter(), voiceDir: VOICE, stepTimeoutsMs: { strategy: 100 },
+      specialists: { ...base, strategy: { ...base.strategy, run: (_i, opts) => new Promise((_, rej) => opts?.signal?.addEventListener("abort", () => rej(new Error("aborted")))) } } });
+    expect(r1.job?.status).toBe("failed");
+    const failed = (await call(editor, "GET", `/api/agent/jobs/${q.body.job_id}`)).body;
+    expect(failed.error).toMatch(/strategy timed out/);
+    expect(failed.progress.estimated_usd).toBeDefined();
+
+    const retry = await call(editor, "POST", `/api/agent/jobs/${q.body.job_id}/retry`);
+    expect(retry.status).toBe(202);
+    expect((await call(editor, "POST", `/api/agent/jobs/${q.body.job_id}/retry`)).status).toBe(409);   // only once
+    const r2 = await tick();
+    expect(r2.job).toMatchObject({ id: retry.body.job_id, status: "succeeded" });
+    const newJob = (await call(editor, "GET", `/api/agent/jobs/${retry.body.job_id}`)).body;
+    expect(newJob).toMatchObject({ retry_of: q.body.job_id, goal: "Strategy timeout then retry" });
+    expect(newJob.workflow_id).not.toBe(failed.workflow_id);            // a fresh run; the failed one stays as it was
+    expect((await call(editor, "GET", `/api/agent/jobs/${q.body.job_id}`)).body.retried_as).toBe(retry.body.job_id);
+  });
+
   it("viewers cannot start jobs; the API never accepts a job session as a login", async () => {
     await t.db.query("select lbe.admin_create_user('viewer@lbe.test', 'Viewer', 'viewer', 'viewer-password-123')");
     const viewer = await login("viewer@lbe.test", "viewer-password-123");

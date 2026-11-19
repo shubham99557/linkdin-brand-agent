@@ -312,6 +312,7 @@ interface Job {
   id: string; goal: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
   workflow_id: string | null; progress: { stage?: string; done?: number | null; total?: number | null; estimated_usd?: number };
   cancel_requested: boolean; error: string | null; requested_by_name: string; created_at: string; started_at: string | null; finished_at: string | null;
+  retry_of: string | null; retried_as: string | null;
 }
 const STAGE_TEXT: Record<string, string> = {
   starting: "Starting…", resuming: "Resuming where it stopped…", started: "Loading the Brand Brain…", research: "Researching sources…", strategy: "Planning the content…",
@@ -371,6 +372,16 @@ export function JobPage({ id }: { id: string }) {
         {job.status === "cancelled" && <p>Cancelled. Drafts created before cancelling were kept in the review queue.</p>}
         {(job.status === "failed" || job.status === "interrupted") && <p className="error">{job.error ?? "The job did not finish."}</p>}
         {job.workflow_id && !active && job.status !== "succeeded" && <p><a href={`#/agent/${job.workflow_id}`}>See what was produced</a></p>}
+        {!active && job.progress.estimated_usd !== undefined && <p className="small muted">Estimated model cost: ${(job.progress.estimated_usd ?? 0).toFixed(2)}</p>}
+        {job.retry_of && <p className="small">This is a retry of <a href={`#/agent/job/${job.retry_of}`}>an earlier run</a>.</p>}
+        {job.retried_as && <p className="small">Retried as <a href={`#/agent/job/${job.retried_as}`}>a new run</a>.</p>}
+        {(job.status === "failed" || job.status === "cancelled") && !job.retried_as && (
+          <button className="primary" data-testid="retry-job" onClick={async () => {
+            setActionError(null);
+            try { const r = await api<{ job_id: string }>(`/agent/jobs/${job.id}/retry`, { method: "POST" }); go(`/agent/job/${r.job_id}`); }
+            catch (e) { setActionError((e as Error).message); }
+          }}>Retry</button>
+        )}
         <ErrorText error={actionError} />
         {job.status === "interrupted" && (
           <button className="primary" data-testid="resume-job" onClick={async () => {
