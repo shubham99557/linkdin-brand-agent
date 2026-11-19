@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmt, type Me } from "./api.ts";
 import { Badge, ErrorText, ReleaseButton, useLoad, VisualPreview } from "./components.tsx";
+import { diffWords } from "./diff.ts";
 
 interface Detail {
   item: {
@@ -29,6 +30,65 @@ const toLocalInput = (iso: string | null) => {
 };
 
 interface MediaInfo { id: string; kind: string; sha256: string; byte_size: number; page_count: number | null; alt_text: string; attached: boolean; created_at: string }
+
+interface Revision {
+  version: number; created_at: string; package_hash: string; is_current: boolean; actor: string; via: string | null; actor_name: string;
+  body: string; visibility: string; scheduled_for: string | null; media_ids: string[]; claim_ids: string[];
+  decisions: Array<{ decision: string; note: string | null; created_at: string; approver_name: string }>;
+}
+
+/** P5-04: every version of the post, who changed it, what the approver decided on each, and a word-level comparison. */
+function HistoryPanel({ contentId, version }: { contentId: string; version: number }) {
+  const [revs] = useLoad<Revision[]>(`/content/${contentId}/history?v=${version}`);
+  const [from, setFrom] = useState<number | null>(null);
+  const [to, setTo] = useState<number | null>(null);
+  if (!revs || revs.length === 0) return null;
+  const newest = revs[0]!.version;
+  const a = revs.find((r) => r.version === (from ?? revs[1]?.version ?? newest))!;
+  const b = revs.find((r) => r.version === (to ?? newest))!;
+  const fieldChanges = [
+    a.visibility !== b.visibility && `Visibility: ${a.visibility} → ${b.visibility}`,
+    a.scheduled_for !== b.scheduled_for && `Schedule: ${fmt(a.scheduled_for)} → ${fmt(b.scheduled_for)}`,
+    JSON.stringify(a.media_ids) !== JSON.stringify(b.media_ids) && `Visual: ${a.media_ids.length ? "attached" : "none"} → ${b.media_ids.length ? (a.media_ids.length ? "replaced" : "attached") : "removed"}`,
+    JSON.stringify(a.claim_ids) !== JSON.stringify(b.claim_ids) && `Cited claims: ${a.claim_ids.length} → ${b.claim_ids.length}`,
+  ].filter(Boolean) as string[];
+  const by = (r: Revision) => `${r.actor_name}${r.via === "lbe_agent" ? " (via the agent)" : ""}`;
+  return (
+    <details className="panel" style={{ marginTop: 12 }} data-testid="history">
+      <summary><strong>History</strong> <span className="small muted">({revs.length} version{revs.length === 1 ? "" : "s"})</span></summary>
+      <table className="small" style={{ marginTop: 8 }}>
+        <thead><tr><th>Version</th><th>When</th><th>Changed by</th><th>Review decisions on this version</th></tr></thead>
+        <tbody>{revs.map((r) => (
+          <tr key={r.version} data-testid={`revision-${r.version}`}>
+            <td>v{r.version}{r.is_current ? " (current)" : ""}</td><td>{fmt(r.created_at)}</td><td>{by(r)}</td>
+            <td>{r.decisions.length ? r.decisions.map((d) => `${d.decision.replace(/_/g, " ")} by ${d.approver_name}${d.note ? ` — “${d.note}”` : ""}`).join("; ") : "—"}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+      {revs.length > 1 && (
+        <div style={{ marginTop: 8 }}>
+          <div className="row">
+            <label htmlFor={`cmp-from-${contentId}`} className="small">Compare</label>
+            <select id={`cmp-from-${contentId}`} style={{ width: "auto" }} value={a.version} onChange={(e) => setFrom(Number(e.target.value))}>
+              {revs.map((r) => <option key={r.version} value={r.version}>v{r.version}</option>)}
+            </select>
+            <label htmlFor={`cmp-to-${contentId}`} className="small">with</label>
+            <select id={`cmp-to-${contentId}`} style={{ width: "auto" }} value={b.version} onChange={(e) => setTo(Number(e.target.value))}>
+              {revs.map((r) => <option key={r.version} value={r.version}>v{r.version}</option>)}
+            </select>
+          </div>
+          <div className="preview" style={{ marginTop: 6 }} data-testid="diff">
+            {diffWords(a.body, b.body).map((p, i) => p.type === "same" ? <span key={i}>{p.text}</span>
+              : p.type === "add" ? <ins key={i} className="diff-add"><span className="sr-only">added: </span>{p.text}</ins>
+              : <del key={i} className="diff-del"><span className="sr-only">removed: </span>{p.text}</del>)}
+          </div>
+          {a.body === b.body && <p className="small muted">The text is identical in these versions.</p>}
+          {fieldChanges.length > 0 && <ul className="small">{fieldChanges.map((f) => <li key={f}>{f}</li>)}</ul>}
+        </div>
+      )}
+    </details>
+  );
+}
 
 /** Same rule as lbe.alt_text_problem (the database enforces it; this only gives early feedback). */
 export function altTextProblem(alt: string): string | null {
@@ -211,6 +271,7 @@ export function ContentPage({ id, me, onChange }: { id: string; me: Me; onChange
             )}
             <AttachedVisual contentId={id} status={item.status} canEdit={me.hints.canEdit} hasBrief={!!item.visual_brief && item.visual_brief.format !== "text_only"}
               version={item.version} onChange={() => { reload(); onChange(); }} />
+            <HistoryPanel contentId={id} version={item.version} />
             {item.visual_brief && item.visual_brief.format !== "text_only" && (
               <details style={{ marginTop: 8 }}>
                 <summary className="small">Live preview from the visual brief ({item.visual_brief.format.replace(/_/g, " ")}) — not attached</summary>

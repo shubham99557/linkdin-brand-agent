@@ -671,6 +671,10 @@ export function createApp(deps: AppDeps) {
     return c.json(await one("select lbe.attach_media($1, $2, $3::jsonb)", [c.get("session"), id, JSON.stringify(asset)]), 201);
   });
 
+  // P5-04: every version of the post (text, visual, visibility, schedule, claims) with who/when and decisions.
+  api.get("/content/:id/history", async (c) =>
+    c.json(await one("select lbe.content_history($1, $2)", [c.get("session"), param(c, "id")])));
+
   // P5-06: the visual's description (alt text). Part of the approval → editing it returns the post to draft.
   api.put("/content/:id/visual/alt-text", async (c) => {
     const b = await json(c, z.object({ alt_text: z.string().max(1000) }));

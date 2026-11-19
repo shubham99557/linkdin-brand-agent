@@ -159,4 +159,15 @@ test("editing approved content sends it back to draft", async ({ page }) => {
   await page.getByTestId("save").click();
   await expect(page.getByTestId("status-badge").first()).toHaveText("draft");
   await expect(page.getByTestId("enqueue")).toHaveCount(0);
+  // P5-04: history shows the approved version and the edit, and what changed between them.
+  const history = page.getByTestId("history");
+  await history.locator("summary").click();
+  await expect(history.locator("tbody tr").first()).toContainText("(current)");
+  await expect(history).toContainText("approved by");
+  // (each <ins> also carries a screen-reader-only "added:" prefix)
+  await expect(history.getByTestId("diff").locator("ins", { hasText: "Edited after approval." })).toHaveCount(1);
+  // compare the current version with the very first one (empty draft): everything is an addition
+  const first = await history.locator("tbody tr").last().locator("td").first().innerText();
+  await page.locator("select[id^=cmp-from-]").selectOption({ label: first });
+  await expect(history.getByTestId("diff").locator("del")).toHaveCount(0);
 });
