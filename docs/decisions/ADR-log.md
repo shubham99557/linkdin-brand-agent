@@ -32,6 +32,9 @@ This log records corrections and Phase 1 decisions. Where an ADR conflicts with 
 | 024 | Migration upgrade & rollback policy | Accepted | — |
 | 025 | Evidence integrity: contradictions and claim-to-source checks | Accepted | ADR-020 (extends) |
 | 026 | Evaluation policy: no automatic "ready", gated paid runs, hard budget | Accepted | — |
+| 027 | Internal-first (Customer Zero), SaaS later; plan.md is the execution plan | Accepted (owner) | implementation-roadmap phase numbering |
+| 028 | Durable agent jobs with job sessions; resume, retry, step time limits | Accepted | ADR-020 (extends) |
+| 029 | Render dependencies: satori, resvg-wasm, pdfkit, Inter (P5-00 gate) | Accepted | selective-reuse-plan "resvg-js" → resvg-wasm |
 
 ---
 
@@ -144,6 +147,7 @@ needed). Selected on 2026-11-19:
 | Docker image postgres | 18.6-alpine3.23 | PostgreSQL |
 | embedded-postgres (dev only, added 2026-11-19 with owner approval) | 18.6.0-beta.19 | MIT (bundles PostgreSQL binaries; `postgres.exe` unsigned — registry signature verified) |
 | Microsoft VC++ Redistributable x64 (system, owner-approved) | 14.52.37029.0 | Microsoft licence |
+| satori / @resvg/resvg-wasm / pdfkit / @fontsource/inter (approved 2026-11-19 for P5-01, see ADR-029) | 0.63.2 / 2.6.2 / 0.20.2 / 5.3.0 (+ fflate 0.7.5 override) | MPL-2.0 / MPL-2.0 / MIT / OFL-1.1 |
 
 Newer releases existed (e.g. vitest 5.1.1, @anthropic-ai/sdk 1.10.0) but were inside the cooldown window.
 
@@ -369,6 +373,51 @@ dashboard or API. No browser session is ever stored or handed to a runner.
 - "Sign out everywhere" and disabling a user also end that user's running jobs, by design.
 - Accepted risk: `lbe_worker` can act as a job's requester for the life of the lease. It is limited to the
   requester's own permissions, and the agent role still cannot approve or publish.
+
+## ADR-029 — Render dependencies for the Creative Studio (P5-00 gate)
+**Decision (2026-11-19).** Approved for P5-01, with exact pins:
+
+| Package | Version | Released | Licence | Notes |
+|---|---|---|---|---|
+| satori | 0.63.2 | 2026-10-20 | MPL-2.0 | Vercel; active (frequent 0.x releases). Used unmodified (MPL file-level copyleft is not triggered) |
+| @resvg/resvg-wasm | 2.6.2 | 2024-03-26 | MPL-2.0 | **Chosen over the native `@resvg/resvg-js`** |
+| pdfkit | 0.20.2 | 2026-08-30 | MIT | Maintained (foliojs) |
+| @fontsource/inter | 5.3.0 | 2026-07-19 | OFL-1.1 | Default font until the brand font is known. Satori needs WOFF/TTF (not WOFF2); the WOFF files are present |
+| fflate (override under satori) | 0.7.5 | 2026-07-20 | MIT | Patched version, see below |
+
+Why `@resvg/resvg-wasm` over the native `@resvg/resvg-js`: it runs as WebAssembly, so it is memory-sandboxed and ships
+no platform binary. The native package would add an unsigned `.node` binary per platform. Performance is
+adequate for 1–10 slides.
+
+**Evidence.** The packages were trial-installed in an isolated scratch folder outside the repository with
+`--ignore-scripts`, and nothing was executed:
+- 41 packages in total, **no install scripts**.
+- Licences: 33 MIT, 4 MPL-2.0, 1 Apache-2.0, 1 ISC, 1 OFL-1.1. `png-js` declares no licence in package.json,
+  but its LICENSE file is MIT.
+- `npm audit signatures`: 41 of 41 have verified registry signatures.
+- `npm audit`: 2 moderate findings before the override, both GHSA-px8p-9vwx-vf98. Satori pins fflate 0.7.3,
+  which has an infinite loop in `unzipSync` on malformed ZIP64 archives. Satori's bundle imports only
+  `inflateSync` (WOFF font decompression), so the issue is unreachable in our use. We still add
+  `overrides: { satori: { fflate: "0.7.5" } }`, which brings `npm audit` to 0.
+- Every version is more than 14 days old (cooldown).
+
+**Risks and conditions for P5-01 (render service).**
+1. **Maintenance.** resvg's last stable release is from 2024; only alphas since (2.7.0-alpha, 2026-01). Keep the
+   rasteriser behind an interface. Fallback options are `sharp` (Apache-2.0, bundles LGPL libvips) or newer
+   resvg releases after review.
+2. **No network or file access while rendering (SSRF).** Satori fetches `<img src>` and emoji assets over HTTP
+   if given URLs. Templates may only use `data:` URIs. The renderer rejects any other `src`, provides no
+   `loadAdditionalAsset` network hook, and tests assert that no `fetch` happens during rendering. pdfkit is
+   given Buffers only, never paths or URLs.
+3. **Untrusted text.** Draft text is passed as text nodes, never as markup. Length and slide-count limits apply
+   (LinkedIn documents: ≤ 300 pages, ≤ 100 MB).
+4. **Notices.** Add the MPL-2.0 (satori, resvg) and OFL-1.1 (Inter) notices to `THIRD_PARTY_NOTICES.md` when
+   installing.
+5. **Deterministic output.** Embedded fonts only, no system fonts. Snapshot tests compare rendered output.
+
+**PDF approach.** Each slide is rendered to PNG (Satori → SVG → resvg) and placed one per page with pdfkit.
+The text in the PDF is not selectable. Accessibility comes from the post's alt text and description
+(P5-06). A vector SVG-to-PDF path can be revisited later.
 
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried

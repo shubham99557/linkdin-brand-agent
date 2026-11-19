@@ -17,9 +17,9 @@
 |---|---|
 | Current phase | **Phase 4 — Reliable orchestration** (Phases 0–1 DONE; Phase 2 engineering done, real content = owner OA-3; Phase 3 waits on OA-3/OA-6) |
 | Active task | — |
-| Next READY tasks | **P5-00 render dependency review** (gate for Creative Studio) · P3-01 pricing check · P2-04 account names · P2-03 document upload · P4-05 safe parallel drafting (P3, optional) |
+| Next READY tasks | **P5-01 render service** · P3-01 pricing check · P2-04 account names · P2-03 document upload · P4-05 safe parallel drafting (P3, optional) |
 | First safe milestone | **M1 Technical prototype hardened — REACHED 2026-11-19** (P1-01..06, P2-01/02; gate §H met: all suites green, restore proven, no open critical/high) |
-| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history |
+| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate |
 | Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · P0-07 off-machine code backup |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9) |
 | Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 349 ✅ (10 PG skipped there) · `test:pg:embedded` 10/10 ✅ · Playwright 11 ✅ · secret scan ✅ · npm audit 0 ✅ |
@@ -232,8 +232,8 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 ### Phase 5 — Content production & Creative Studio
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
 |---|---|---|---|---|---|---|---|---|
-| P5-00 | **Gate:** dependency review for Satori / resvg-js / pdfkit (licence, maintainers, native binaries, 14-day cooldown, install scripts) recorded in ADR dependency table | — | P1 | READY | C | ADR-log | Approved versions pinned or alternative chosen | ADR entry |
-| P5-01 | Render service (Satori + resvg-js + pdfkit — selected in research) | P5-00 | P1 | NOT_STARTED | C | services/render | No network egress; data-URI assets; tests | unit tests |
+| P5-00 | **Gate:** dependency review for Satori / resvg-js / pdfkit (licence, maintainers, native binaries, 14-day cooldown, install scripts) recorded in ADR dependency table | — | P1 | DONE | C | ADR-log | Approved versions pinned or alternative chosen | **Evidence 2026-11-19:** ADR-029 — satori 0.63.2, **@resvg/resvg-wasm** 2.6.2 (chosen over native resvg-js), pdfkit 0.20.2, @fontsource/inter 5.3.0, fflate override 0.7.5; isolated trial install (scratch, `--ignore-scripts`): 41 pkgs, 0 install scripts, licences MIT/MPL/Apache/ISC/OFL, 41/41 registry signatures, audit 0 after override (advisory shown unreachable: satori uses only `inflateSync`); 5 conditions for P5-01 (no-egress, data-URI only, Buffers only, notices, deterministic fonts) |
+| P5-01 | Render service (Satori + resvg-wasm + pdfkit per ADR-029; must meet its 5 conditions) | P5-00 | P1 | READY | C | services/render | No network egress; data-URI assets; tests | unit tests |
 | P5-02 | Brand templates (single image, document carousel) from Brand Brain identity (placeholder identity until P2-08) | P5-01 | P1 | NOT_STARTED | C | templates | Rendered PNG/PDF previews | snapshot tests |
 | P5-03 | Attach assets to drafts (media ids in package → approval covers visuals) | P5-02 | P1 | NOT_STARTED | C | migration, api | Editing visual invalidates approval | DB tests |
 | P5-04 | Draft revisions & history view | P4-02 | P2 | NOT_STARTED | C | web, api | Version diff visible | e2e |
@@ -340,6 +340,8 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | Cost overrun | Vendor | Hard budget; unknown models priced ∞; P3-01 pricing verification |
 | Unsigned embedded PostgreSQL binary | Supply chain | Dev-only, isolated, registry signature verified; hash recorded |
 | Beta dependencies (embedded-postgres beta tag, server-side fallback beta) | Vendor | Dev-only / optional; pinned |
+| resvg stable release is from 2024 (alpha-only since) | Supply chain | WASM build (sandboxed), behind an interface; fallback sharp (ADR-029) |
+| Renderer fetching remote assets (SSRF) | Security | data-URI only, no network hook, no-fetch tests (ADR-029 condition 2) |
 | Single-process in-memory rate limiting | Security | Acceptable internal; revisit at P9 |
 | Docker licence | Licensing | Not used currently |
 | UK GDPR/PECR for leads | Privacy | Phase 8 gated on P8-01 |
@@ -377,4 +379,5 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-19 | P4-01 DONE (durable agent jobs, job sessions, ADR-028); test PostgreSQL now UTF-8 like production; P4-03/P4-04 rescoped | `bdcaf37` |
 | 2026-11-19 | P4-02 DONE (checkpointed resume, no duplicate drafts; ADR-028 updated) | `29b9eed` |
 | 2026-11-19 | P4-03 DONE (retry, per-step time limits with request abort, job cost) | `7a95a8c` |
-| 2026-11-19 | P4-04 DONE (run history, job summary, Users session count) — Phase 4 core done (P4-05 optional) | P4-04 commit |
+| 2026-11-19 | P4-04 DONE (run history, job summary, Users session count) — Phase 4 core done (P4-05 optional) | `4cfbf7f` |
+| 2026-11-19 | P5-00 DONE (ADR-029: render dependencies approved; resvg-wasm instead of native resvg-js) | P5-00 commit |
