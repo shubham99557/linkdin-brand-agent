@@ -26,12 +26,12 @@ _Updated 2026-11-19 (Phase 1)._
 | D-01c | Stage 2.2 founder pilot | **APPROVED by owner, 2026-11-19** ("continue with stage 2.2"). Each live post still requires the owner present and an explicit release (runbook step G). | — |
 | D-02 | Create LinkedIn developer apps (founder: Share on LinkedIn + OIDC; company: separate app for Community Management API review). | Yes, when ready for Phase 2 | Live publishing |
 | D-03 | Legal: does scheduled release of a human-approved post count as "automated posting" under LinkedIn API Terms §3.1(26)? | Ask counsel; fallback = release on explicit click | Live scheduling |
-| D-04 | Mode A only, or plan for SaaS (Mode B)? | Stay Mode A until product–market fit | Tenancy, licensing |
+| D-04 | Mode A only, or plan for SaaS (Mode B)? | **DECIDED by owner, 2026-11-19:** internal-first (Customer Zero), commercial SaaS later (ADR-027, `plan.md` Phase 10) | — |
 | D-05 | Keep in-database auth, or adopt Supabase Auth / SSO before production? | Adopt SSO/Supabase Auth before multi-user production | Production |
 | D-06 | Provide an Anthropic API key with a spend limit to enable real AI drafting (currently mock). | Yes, with a monthly cap | Real drafts |
 | D-07 | Replace placeholder voice profiles and seed real verified claims with evidence. | Founder + marketing to write | Real content |
 | D-08 | Should rescheduling an approved post require re-approval? (Current: yes — schedule is part of the package.) | Keep yes | — |
 | D-09 | Hosting choice for any shared environment (local only today). | Decide at Phase 2 | Staging |
-| D-10 | Docker Desktop licence: free only for organisations under 250 staff and $10M revenue. Confirm eligibility. | Confirm | Local Postgres |
+| D-10 | Docker Desktop licence: free only for organisations under 250 staff and $10M revenue. Confirm eligibility. | Moot for now — real-PostgreSQL tests use `embedded-postgres`, not Docker | — |
 | D-11 | Privacy: approve LIA, privacy notice and retention policy before any personal data is processed (Phase 4 leads). | Required by law | Lead features |
 | D-12 | Spending money or changing LinkedIn account permissions — always owner-only. | Standing rule | — |

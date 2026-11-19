@@ -327,6 +327,13 @@ are covered by tests. Procedure: `docs/migrations-runbook.md`.
 - Web-search pricing is an unverified assumption until checked against Anthropic's pricing page.
 - Synthetic or placeholder knowledge is flagged in every workflow result and fails staging pre-flight.
 
+## ADR-027 — Internal-first (Customer Zero), commercial SaaS later; plan.md is the execution plan
+**Decision (owner, 2026-11-19).** ActTrident is Customer Zero. Build for internal production launch first
+(Mode A, ADR-001); keep SaaS boundaries (organizations, isolation, budgets, STOP levels) but defer RLS,
+memberships, billing, customer onboarding and per-tenant apps to Phase 10. No integration with the older
+`ai-social-media-team`. Root `plan.md` is the single execution plan; ADRs remain the architectural record.
+Supersedes the phase numbering in `docs/implementation-roadmap.md` (kept for history).
+
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried
 automatically, with exponential backoff (30 s × 2ⁿ, max 1 h, max 5 attempts). Timeouts, 5xx, thrown errors,
