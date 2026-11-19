@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, daysUntil, fmt, type Account, type Claim, type ContentSummary, type Health, type Me } from "./api.ts";
 import { Badge, ErrorText, ReleaseButton, useLoad } from "./components.tsx";
+import { AccountNameEditor } from "./agentPages.tsx";
 
 const go = (path: string) => { window.location.hash = path; };
 
@@ -241,6 +242,7 @@ export function AccountsPage({ me }: { me: Me }) {
   const [health] = useLoad<Health>("/health");
   const [voice, setVoice] = useState<{ id: string; markdown: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   const toggle = async (a: Account) => {
     setActionError(null);
     try {
@@ -252,8 +254,9 @@ export function AccountsPage({ me }: { me: Me }) {
     <div>
       <h2>Accounts & voices</h2>
       <ErrorText error={error ?? actionError} />
+      {msg && <div className="notice" role="status">{msg}</div>}
       {accounts?.map((a) => (
-        <div className="panel" key={a.id}>
+        <div className="panel" key={a.id} data-testid={`account-${a.kind}`}>
           <div className="row">
             <strong>{a.display_name}</strong><span className="badge">{a.kind.replace("_", " ")}</span>
             <span className={`badge ${a.publishing_mode === "live" ? "bad" : ""}`}>mode: {a.publishing_mode}</span>
@@ -263,6 +266,9 @@ export function AccountsPage({ me }: { me: Me }) {
               <button className={a.stopped ? "" : "danger"} onClick={() => toggle(a)} data-testid={`stop-account-${a.kind}`}>{a.stopped ? "Resume this account" : "Stop this account"}</button>}
           </div>
           {a.stopped && a.stop_reason && <p className="small error">Stop reason: {a.stop_reason}</p>}
+          {me.role === "admin" && <div className="row" style={{ marginTop: 8 }}>
+            <AccountNameEditor key={a.display_name} a={a} onSaved={(from, to) => { setMsg(`Renamed “${from}” to “${to}”.`); reload(); }} />
+          </div>}
           <p className="small muted">LinkedIn URN: {a.linkedin_urn ?? "not set"} · approvers: {a.approvers.map((x) => x.display_name).join(", ") || "none"}</p>
           <LinkedInConnection a={a} me={me} live={!!health?.live_publishing} onChange={reload} onError={setActionError} />
           <p className="small">Approved pillars: {a.pillars.join(", ")} <span className="muted">(edit in <a href="#/brain">Brand Brain</a>)</span></p>

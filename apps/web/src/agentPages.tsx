@@ -141,6 +141,63 @@ function VisualIdentityPanel({ isOwner, onSaved }: { isOwner: boolean; onSaved: 
   );
 }
 
+/**
+ * P2-04: owner renames an account (e.g. the real company name, the founder's name). Validated and audited in the
+ * database. The name is not part of the approved publication package, so nothing already approved changes.
+ */
+export function AccountNameEditor({ a, onSaved }: {
+  a: { id: string; kind: string; display_name: string }; onSaved: (from: string, to: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(a.display_name);
+  const [error, setError] = useState<string | null>(null);
+  const inputId = `account-name-${a.kind}`;
+  if (!editing) {
+    return <button type="button" onClick={() => { setName(a.display_name); setError(null); setEditing(true); }}
+      aria-label={`Rename ${a.display_name}`} data-testid={`rename-${a.kind}`}>Rename</button>;
+  }
+  return (
+    <form style={{ width: "100%" }} onSubmit={async (e) => {
+      e.preventDefault();
+      setError(null);
+      try {
+        const r = await api<{ display_name: string }>(`/accounts/${a.id}/name`, { method: "PUT", body: { display_name: name } });
+        setEditing(false);
+        onSaved(a.display_name, r.display_name);
+      } catch (err) { setError((err as Error).message); }
+    }}>
+      <label htmlFor={inputId}>New name for this {a.kind === "company_page" ? "company page" : "founder profile"}</label>
+      <div className="row">
+        <input id={inputId} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required style={{ flex: 1, minWidth: 0 }} />
+        <button className="primary" type="submit" disabled={!name.trim()}>Save name</button>
+        <button type="button" onClick={() => setEditing(false)}>Cancel</button>
+      </div>
+      <p className="small muted" style={{ margin: "4px 0 0" }}>New drafts use this name. Posts that already exist and anything already approved are not changed.</p>
+      <ErrorText error={error} />
+    </form>
+  );
+}
+
+export function AccountNamesPanel({ accounts, onSaved }: {
+  accounts: Brain["accounts"]; onSaved: (from: string, to: string) => void;
+}) {
+  return (
+    <div className="panel" data-testid="account-names">
+      <h3 style={{ marginTop: 0 }}>Account names</h3>
+      <p className="small muted">The writer is told whose account it is writing for, so use the real company name and the
+        founder's name as they should appear.</p>
+      {accounts.map((a) => (
+        <div key={a.id} className="row" style={{ marginTop: 8 }} data-testid={`account-name-row-${a.kind}`}>
+          <span className="badge">{a.kind === "company_page" ? "Company page" : "Founder profile"}</span>
+          <strong>{a.display_name}</strong>
+          <span style={{ flex: 1 }} />
+          <AccountNameEditor a={a} onSaved={onSaved} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Turn "Threat landscape" into "threat-landscape" (the stored pillar id). */
 export const pillarSlug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 

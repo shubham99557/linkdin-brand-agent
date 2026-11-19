@@ -14,6 +14,35 @@ async function signOut(page: Page) {
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 }
 
+test("P2-04: owner renames an account on the Accounts page; the guided setup shows it; editors cannot rename", async ({ page }) => {
+  const renamed = "ActTrident Ltd (renamed in test)";
+  await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
+  await page.getByRole("link", { name: "Accounts & voices" }).click();
+  const company = page.getByTestId("account-company_page");
+  const original = (await company.locator("strong").first().textContent())!;
+  await company.getByTestId("rename-company_page").click();
+  await page.getByLabel("New name for this company page").fill(renamed);
+  await company.getByRole("button", { name: "Save name" }).click();
+  await expect(page.getByText(`Renamed “${original}” to “${renamed}”.`)).toBeVisible();
+  await expect(company.locator("strong").first()).toHaveText(renamed);
+
+  await page.goto("/#/brain/onboarding");
+  await page.getByRole("link", { name: /Account names & pillars/ }).click();
+  const row = page.getByTestId("account-name-row-company_page");
+  await expect(row).toContainText(renamed);
+  // Restore the seeded name so other tests are unaffected.
+  await row.getByTestId("rename-company_page").click();
+  await page.getByLabel("New name for this company page").fill(original);
+  await page.getByRole("button", { name: "Save name" }).click();
+  await expect(row).toContainText(original);
+  await signOut(page);
+
+  await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await page.getByRole("link", { name: "Accounts & voices" }).click();
+  await expect(page.getByTestId("account-company_page")).toContainText(original);
+  await expect(page.getByTestId("rename-company_page")).toHaveCount(0);
+});
+
 test("owner edits an account's content pillars in the Brand Brain; editors see but cannot edit", async ({ page }) => {
   await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
   await page.getByRole("link", { name: "Brand Brain" }).click();

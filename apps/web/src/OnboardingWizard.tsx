@@ -3,7 +3,7 @@
 // owner-only endpoints as the Brand Brain page; nothing here bypasses approval rules.
 import { useEffect, useState } from "react";
 import { api, type Claim, type Me } from "./api.ts";
-import { isVisualEntry, PillarsPanel, type Brain, type Entry } from "./agentPages.tsx";
+import { AccountNamesPanel, isVisualEntry, PillarsPanel, type Brain, type Entry } from "./agentPages.tsx";
 import { ErrorText, useLoad } from "./components.tsx";
 
 const STEP_HELP: Record<string, string> = {
@@ -15,14 +15,14 @@ const STEP_HELP: Record<string, string> = {
   messaging: "The few messages you want repeated. Proof for them goes in the Claims step at the end.",
   voice_company: "How the company page should sound. Example posts help a lot.",
   voice_founder: "How the founder sounds when writing personally, in the first person.",
-  pillars: "The themes posts rotate through, per account. Use plain words; they're saved as short ids.",
+  pillars: "Check each account's name, then the themes posts rotate through, per account. Use plain words for pillars; they're saved as short ids.",
   pillars_goals: "What LinkedIn should achieve this quarter and why the pillars matter.",
   prohibited: "Words, claims and topics that must never appear. The agent's checks block these.",
   audience_language: "Optional: phrases your buyers really use, and jargon to avoid.",
   communication_rules: "Optional: formatting, hashtags, emoji, length or legal wording rules.",
   claims: "Facts with numbers or strong statements need evidence. Add them here; an approver verifies each one.",
 };
-const STEP_LABEL: Record<string, string> = { pillars: "Content pillars", claims: "Proof (claims)" };
+const STEP_LABEL: Record<string, string> = { pillars: "Account names & pillars", claims: "Proof (claims)" };
 
 const stepFromRoute = (route: string) => Number(new URLSearchParams(route.split("?")[1] ?? "").get("step") ?? NaN);
 const goStep = (n: number) => { window.location.hash = `/brain/onboarding?step=${n}`; };
@@ -80,6 +80,7 @@ export function OnboardingWizard({ me, route }: { me: Me; route: string }) {
         : step === "pillars" ? (
           <>
             <p>{STEP_HELP.pillars}</p>
+            <AccountNamesPanel accounts={brain.accounts} onSaved={(from, to) => saved(`Renamed “${from}” to “${to}”.`)} />
             <PillarsPanel accounts={brain.accounts} isOwner onSaved={(n) => saved(`Saved content pillars for ${n}.`)} />
             <Nav index={index} onNext={next} nextLabel="Next" />
           </>

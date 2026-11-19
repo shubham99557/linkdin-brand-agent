@@ -60,6 +60,10 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 - **Steps:** click **Start guided setup** and answer one step at a time (14 steps, ending with claims). Use
   *Skip for now* for anything you're unsure about — it stays UNKNOWN. You can stop and come back; it resumes at the
   first unanswered step. Then ask an approver (or yourself, if you are one) to verify your claims in *Claims register*.
+- **Account names:** staging starts with placeholder names ("ActTrident (company page)", "Founder (authorised
+  profile)"). In the guided setup step **Account names & pillars** (or on **Accounts & voices** → *Rename*), enter
+  the real company name and the founder's name exactly as they should appear. The writer is told whose account it
+  is writing for. Renaming never changes posts that already exist or anything already approved.
 - **Also:** in Brand Brain → **Visual identity**, click *Set brand colours* and pick your background, text and accent
   colours, and optionally upload a small logo (max 150 KB). Until then, image previews use neutral placeholder colours.
 - **Confirm:** `npm run brain:audit:staging` shows no required section UNKNOWN and no synthetic content.

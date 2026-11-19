@@ -814,6 +814,14 @@ export function createApp(deps: AppDeps) {
     return c.json({ pillars });
   });
 
+  // Account display name, e.g. the real company or founder name (admin; validated and audited in the database).
+  // Not part of the publication package, so approved content is unaffected; new drafts use the new name.
+  api.put("/accounts/:id/name", async (c) => {
+    const b = await json(c, z.object({ display_name: z.string().min(1).max(120) }));
+    const display_name = await one<string>("select lbe.set_account_display_name($1, $2, $3)", [c.get("session"), param(c, "id"), b.display_name]);
+    return c.json({ display_name });
+  });
+
   api.post("/accounts/:id/live", async (c) => {
     const id = param(c, "id");
     const b = await json(c, z.object({ live: z.boolean(), org_urn: z.string().max(80).nullable().optional() }));
