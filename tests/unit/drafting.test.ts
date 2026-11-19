@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VerifiedClaim } from "@lbe/domain";
 import { buildSystemPrompt, buildUserPrompt, escapeUntrusted, MockDrafter, validateDraftOutput, type DraftInput } from "@lbe/drafting";
+import { checkBrandRules } from "@lbe/agents";
 
 const claims: VerifiedClaim[] = [
   { id: "11111111-1111-4111-8111-111111111111", statement: "ActTrident is a UK-registered cybersecurity company.",
@@ -113,5 +114,66 @@ describe("MockDrafter", () => {
     const v = validateDraftOutput(r.raw, claims);
     expect(v.ok && v.draft.citations).toHaveLength(1);
     expect(v.ok && v.draft.unsupported).toEqual([]);
+    const again = await new MockDrafter().draft(input);
+    expect(again.kind === "ok" && again.raw).toEqual(r.raw);
+  });
+
+  // P3-02: mock drafts must pass the same automated checks the evaluation applies to real drafts, so a free mock
+  // evaluation tests the pipeline rather than failing on the template.
+  const briefs = [
+    "Why phishing emails look boring.\n\nTopic: Phishing awareness\nAudience problem: Staff cannot tell a real invoice from a fake one.",
+    "A short checklist a busy team can run this week.\n\nTopic: Password Hygiene: five-minute checklist\nAudience problem: Teams are unsure how to approach password hygiene.",
+    "What to ask suppliers before trusting them.\n\nTopic: Supplier security reviews for UK firms",
+    "Write about incident response.",
+  ];
+  const kinds = ["company_page", "founder_profile"] as const;
+  const draftAll = async () => {
+    const out: Array<{ kind: (typeof kinds)[number]; body: string }> = [];
+    for (const kind of kinds) for (const brief of briefs) {
+      const r = await new MockDrafter().draft({ ...input, accountKind: kind, brief, claims: [] });
+      if (r.kind !== "ok") throw new Error("mock draft failed");
+      out.push({ kind, body: String((r.raw as { body: string }).body) });
+    }
+    return out;
+  };
+  const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length;
+  const trigrams = (s: string) => {
+    const w = s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+    return new Set(w.slice(2).map((_, i) => `${w[i]} ${w[i + 1]} ${w[i + 2]}`));
+  };
+
+  it("P3-02: drafts are 120–250 words, free of claim-like text, and in the right voice", async () => {
+    for (const { kind, body } of await draftAll()) {
+      expect(wordCount(body), body).toBeGreaterThanOrEqual(120);
+      expect(wordCount(body), body).toBeLessThanOrEqual(250);
+      expect(body).not.toMatch(/\d/);
+      const v = validateDraftOutput({ ...raw(), body, claims_used: [] }, []);
+      expect(v.ok && v.draft.unsupported, body).toEqual([]);
+      expect(checkBrandRules(body, { accountKind: kind, prohibitedTerms: [] }).warnings, body).toEqual([]);
+      expect((body.match(/#\w+/g) ?? []).length).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it("P3-02: posts for the same account share little text (evaluation fails overlap above 0.25)", async () => {
+    const all = await draftAll();
+    for (const kind of kinds) {
+      const posts = all.filter((p) => p.kind === kind).map((p) => trigrams(p.body));
+      for (let i = 0; i < posts.length; i++) for (let j = i + 1; j < posts.length; j++) {
+        const shared = [...posts[i]!].filter((t) => posts[j]!.has(t)).length;
+        expect(shared / (posts[i]!.size + posts[j]!.size - shared)).toBeLessThanOrEqual(0.25);
+      }
+    }
+  });
+
+  it("P3-02: opens differently from the other posts in the plan, and reads naturally mid-sentence", async () => {
+    const brief = briefs[1]!;
+    const first = await new MockDrafter().draft({ ...input, brief, claims: [] });
+    if (first.kind !== "ok") throw new Error("mock draft failed");
+    const firstLine = String((first.raw as { body: string }).body).split("\n")[0]!;
+    expect(firstLine).not.toMatch(/ Hygiene/);                         // Title-Case topic is lower-cased mid-sentence
+    const second = await new MockDrafter().draft({ ...input, brief, claims: [], otherOpenings: [firstLine] });
+    if (second.kind !== "ok") throw new Error("mock draft failed");
+    const open4 = (s: string) => s.toLowerCase().split(/\s+/).slice(0, 4).join(" ");
+    expect(open4(String((second.raw as { body: string }).body))).not.toBe(open4(firstLine));
   });
 });
