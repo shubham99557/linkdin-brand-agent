@@ -99,12 +99,22 @@ test("owner onboards a Brand Brain section; editor runs the Branding Agent; draf
   await expect(pairs.first()).toContainText("Company page");
   await expect(pairs.first()).toContainText("Founder");
   await expect(page.getByTestId("claims-report")).toContainText("Submitted for review: 8");
+  // Run history (P4-04): the finished run is listed; opening it shows its summary instead of jumping away.
+  await page.getByRole("link", { name: "Agent workspace", exact: true }).click();
+  const row = page.getByTestId("run-history").getByTestId("run-row").first();
+  await expect(row).toContainText("phishing awareness");
+  await expect(row).toContainText("done");
+  await expect(row).toContainText("8 (8)");
+  await row.click();
+  await expect(page.getByTestId("job-summary")).toContainText("8 draft(s), 8 in review");
+  await expect(page.getByRole("link", { name: "Open the results" })).toBeVisible();
   await signOut(page);
 
   // Approver: the agent's drafts are in the normal review flow (nothing auto-approved)
   await signIn(page, "marketing@lbe.test", TEST_PASSWORDS.approver);
   await page.getByRole("link", { name: "Agent workspace" }).click();
-  await page.getByRole("row").filter({ hasText: "phishing awareness" }).first().click();
+  await page.getByTestId("run-history").getByTestId("run-row").filter({ hasText: "phishing awareness" }).first().click();
+  await page.getByRole("link", { name: "Open the results" }).click();
   await page.getByTestId("draft-pair").first().getByRole("link", { name: "Open for review →" }).first().click();
   await expect(page.getByTestId("status-badge").first()).toHaveText("in review");
   await expect(page.getByTestId("review-panel")).toBeVisible();

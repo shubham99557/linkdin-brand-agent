@@ -6,7 +6,7 @@ import { ErrorText, useLoad } from "./components.tsx";
 
 interface ManagedUser {
   id: string; email: string; display_name: string; role: Role; disabled: boolean; locked: boolean; is_me: boolean;
-  created_at: string; last_seen_at: string | null; active_sessions: number;
+  created_at: string; last_seen_at: string | null; active_sessions: number; running_jobs: number;
   approver_for: Array<{ id: string; display_name: string }>;
 }
 
@@ -66,7 +66,8 @@ function UserCard({ u, accounts, onChange, onMessage }: {
         {u.disabled ? <span className="badge bad">disabled</span> : <span className="badge ok">active</span>}
         {u.locked && <span className="badge warn">locked (too many failed sign-ins)</span>}
         <span style={{ flex: 1 }} />
-        <span className="small muted">last active {fmt(u.last_seen_at)} · {u.active_sessions} open session(s)</span>
+        <span className="small muted" data-testid="user-activity">last active {fmt(u.last_seen_at)} · {u.active_sessions} open session(s)
+          {u.running_jobs > 0 ? ` · ${u.running_jobs} agent run(s) in progress` : ""}</span>
       </div>
       <div className="row" style={{ marginTop: 8 }}>
         <label htmlFor={`role-${u.id}`} className="small">Role</label>

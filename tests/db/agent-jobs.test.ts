@@ -47,6 +47,18 @@ describe("queue and claim", () => {
     expect(s!.n).toBe(0);
   });
 
+  it("P4-04: the Users page counts only real sign-ins as open sessions, and shows running agent jobs separately", async () => {
+    const id = await enqueue(editor, "sessions count goal");
+    const before = (await t.api<Array<{ email: string; active_sessions: number; running_jobs: number }>>("select lbe.admin_list_users($1)", [admin]))
+      .find((u) => u.email === "editor@lbe.test")!;
+    await claim("w1");                                                             // mints a job session for the editor
+    const after = (await t.api<Array<{ email: string; active_sessions: number; running_jobs: number }>>("select lbe.admin_list_users($1)", [admin]))
+      .find((u) => u.email === "editor@lbe.test")!;
+    expect(after.active_sessions).toBe(before.active_sessions);
+    expect(after.running_jobs).toBe(1);
+    await t.worker("select lbe.job_finish('w1', $1, 'succeeded', null)", [id]);
+  });
+
   it("only the lease owner can heartbeat or finish", async () => {
     const id = await enqueue(editor);
     await claim("w1");

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, fmt, type Me } from "./api.ts";
 import { Badge, ErrorText, useLoad } from "./components.tsx";
 
@@ -279,7 +279,7 @@ export function AgentPage({ me }: { me: Me }) {
               setBusy(true); setActionError(null); setMsg(null);
               try {
                 const r = await api<{ job_id: string }>("/agent/workflows", { method: "POST", body: { goal, start_date: start, days: 7, post_count: posts } });
-                go(`/agent/job/${r.job_id}`);
+                go(`/agent/job/${r.job_id}?new=1`);
               } catch (e) { setActionError((e as Error).message); reload(); } finally { setBusy(false); }
             }}>{busy ? "Queuing…" : "Run the Branding Agent"}</button>
             <button disabled={busy} onClick={async () => {
@@ -293,8 +293,9 @@ export function AgentPage({ me }: { me: Me }) {
         </div>
       )}
       <ActiveJobs />
-      <div className="panel table-wrap">
-        <h3 style={{ marginTop: 0 }}>Agent activity</h3>
+      <RunHistory />
+      <details className="panel table-wrap">
+        <summary><strong>All results</strong> <span className="small muted">(every plan the agent produced, including runs from before background jobs)</span></summary>
         <table><thead><tr><th>Goal</th><th>Status</th><th>Drafts</th><th>Started</th></tr></thead>
           <tbody>{list?.map((w) => (
             <tr key={w.id} style={{ cursor: "pointer" }} onClick={() => go(`/agent/${w.id}`)}>
@@ -302,7 +303,7 @@ export function AgentPage({ me }: { me: Me }) {
             </tr>
           ))}</tbody></table>
         {list?.length === 0 && <p className="muted">No agent runs yet.</p>}
-      </div>
+      </details>
     </div>
   );
 }
@@ -312,7 +313,42 @@ interface Job {
   id: string; goal: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
   workflow_id: string | null; progress: { stage?: string; done?: number | null; total?: number | null; estimated_usd?: number };
   cancel_requested: boolean; error: string | null; requested_by_name: string; created_at: string; started_at: string | null; finished_at: string | null;
-  retry_of: string | null; retried_as: string | null;
+  retry_of: string | null; retried_as: string | null; attempts: number;
+  duration_seconds: number | null; drafts: number; in_review: number; estimated_usd: number;
+}
+
+const JOB_BADGE: Record<Job["status"], string> = {
+  queued: "queued", running: "dispatching", succeeded: "succeeded", failed: "failed", cancelled: "cancelled", interrupted: "needs_reconciliation",
+};
+const JOB_LABEL: Record<Job["status"], string> = {
+  queued: "waiting", running: "running", succeeded: "done", failed: "failed", cancelled: "cancelled", interrupted: "interrupted — can resume",
+};
+export const duration = (s: number | null) =>
+  s === null ? "—" : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+
+function RunHistory() {
+  const [jobs, error] = useLoad<Job[]>("/agent/jobs");
+  if (error) return <ErrorText error={error} />;
+  return (
+    <div className="panel table-wrap" data-testid="run-history">
+      <h3 style={{ marginTop: 0 }}>Run history</h3>
+      {jobs && jobs.length === 0 && <p className="muted">No runs yet. Give the agent a goal above.</p>}
+      {jobs && jobs.length > 0 && (
+        <table><thead><tr><th>Goal</th><th>Status</th><th>Started by</th><th>When</th><th>Took</th><th>Drafts (in review)</th><th>Est. cost</th></tr></thead>
+          <tbody>{jobs.map((j) => (
+            <tr key={j.id} style={{ cursor: "pointer" }} onClick={() => go(`/agent/job/${j.id}`)} data-testid="run-row">
+              <td>{j.goal}{j.retry_of ? <span className="small muted"> (retry)</span> : null}</td>
+              <td><Badge value={JOB_BADGE[j.status]} /> <span className="small">{JOB_LABEL[j.status]}</span></td>
+              <td className="small">{j.requested_by_name}</td>
+              <td className="small">{fmt(j.created_at)}</td>
+              <td className="small">{duration(j.duration_seconds)}</td>
+              <td className="small">{j.drafts} ({j.in_review})</td>
+              <td className="small">${Number(j.estimated_usd ?? 0).toFixed(2)}</td>
+            </tr>
+          ))}</tbody></table>
+      )}
+    </div>
+  );
 }
 const STAGE_TEXT: Record<string, string> = {
   starting: "Starting…", resuming: "Resuming where it stopped…", started: "Loading the Brand Brain…", research: "Researching sources…", strategy: "Planning the content…",
@@ -340,7 +376,8 @@ function ActiveJobs() {
   );
 }
 
-export function JobPage({ id }: { id: string }) {
+/** `fresh` = the user just started this run here, so take them to the results when it finishes. */
+export function JobPage({ id, fresh = false }: { id: string; fresh?: boolean }) {
   const [job, error, reload] = useLoad<Job>(`/agent/jobs/${id}`);
   const [actionError, setActionError] = useState<string | null>(null);
   const active = !!job && ACTIVE.has(job.status);
@@ -349,9 +386,12 @@ export function JobPage({ id }: { id: string }) {
     const t = setInterval(reload, 1500);
     return () => clearInterval(t);
   }, [active, reload]);
+  // Jump to the results only when this page watched the run finish (not when opening a finished run from history).
+  const watched = useRef(fresh);
   useEffect(() => {
-    if (job?.status === "succeeded" && job.workflow_id) go(`/agent/${job.workflow_id}`);   // done → show the results
-  }, [job?.status, job?.workflow_id]);
+    if (active) watched.current = true;
+    else if (watched.current && job?.status === "succeeded" && job.workflow_id) go(`/agent/${job.workflow_id}`);
+  }, [active, job?.status, job?.workflow_id]);
   if (error) return <ErrorText error={error} />;
   if (!job) return <p className="muted">Loading…</p>;
   const p = job.progress;
@@ -372,13 +412,20 @@ export function JobPage({ id }: { id: string }) {
         {job.status === "cancelled" && <p>Cancelled. Drafts created before cancelling were kept in the review queue.</p>}
         {(job.status === "failed" || job.status === "interrupted") && <p className="error">{job.error ?? "The job did not finish."}</p>}
         {job.workflow_id && !active && job.status !== "succeeded" && <p><a href={`#/agent/${job.workflow_id}`}>See what was produced</a></p>}
-        {!active && job.progress.estimated_usd !== undefined && <p className="small muted">Estimated model cost: ${(job.progress.estimated_usd ?? 0).toFixed(2)}</p>}
+        {!active && (
+          <p className="small muted" data-testid="job-summary">
+            Started by {job.requested_by_name} · {fmt(job.started_at ?? job.created_at)} · took {duration(job.duration_seconds)} ·
+            {" "}{job.drafts} draft(s), {job.in_review} in review · estimated model cost ${Number(job.estimated_usd ?? 0).toFixed(2)}
+            {job.attempts > 1 ? ` · ${job.attempts} attempts (resumed after interruption)` : ""}
+          </p>
+        )}
+        {job.status === "succeeded" && job.workflow_id && <p><a href={`#/agent/${job.workflow_id}`}>Open the results</a></p>}
         {job.retry_of && <p className="small">This is a retry of <a href={`#/agent/job/${job.retry_of}`}>an earlier run</a>.</p>}
         {job.retried_as && <p className="small">Retried as <a href={`#/agent/job/${job.retried_as}`}>a new run</a>.</p>}
         {(job.status === "failed" || job.status === "cancelled") && !job.retried_as && (
           <button className="primary" data-testid="retry-job" onClick={async () => {
             setActionError(null);
-            try { const r = await api<{ job_id: string }>(`/agent/jobs/${job.id}/retry`, { method: "POST" }); go(`/agent/job/${r.job_id}`); }
+            try { const r = await api<{ job_id: string }>(`/agent/jobs/${job.id}/retry`, { method: "POST" }); go(`/agent/job/${r.job_id}?new=1`); }
             catch (e) { setActionError((e as Error).message); }
           }}>Retry</button>
         )}

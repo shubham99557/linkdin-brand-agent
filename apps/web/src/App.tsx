@@ -91,11 +91,11 @@ export function App() {
 
   const contentMatch = route.match(/^\/content\/([0-9a-f-]{36})$/);
   const workflowMatch = route.match(/^\/agent\/([0-9a-f-]{36})$/);
-  const jobMatch = route.match(/^\/agent\/job\/([0-9a-f-]{36})$/);
+  const jobMatch = route.match(/^\/agent\/job\/([0-9a-f-]{36})(\?new=1)?$/);
   let page;
   if (contentMatch) page = <ContentPage id={contentMatch[1]!} me={me} onChange={() => setRefreshKey((k) => k + 1)} />;
   else if (workflowMatch) page = <WorkflowPage id={workflowMatch[1]!} me={me} />;
-  else if (jobMatch) page = <JobPage id={jobMatch[1]!} />;
+  else if (jobMatch) page = <JobPage key={jobMatch[1]} id={jobMatch[1]!} fresh={!!jobMatch[2]} />;
   else if (route === "/agent") page = <AgentPage me={me} />;
   else if (route === "/brain") page = <BrandBrainPage me={me} />;
   else if (route.startsWith("/brain/onboarding")) page = <OnboardingWizard me={me} route={route} />;

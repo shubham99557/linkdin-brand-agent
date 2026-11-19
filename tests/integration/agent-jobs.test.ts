@@ -46,8 +46,13 @@ describe("durable Branding Agent jobs", () => {
     const r = await tick();
     expect(r.job).toMatchObject({ id: q.body.job_id, status: "succeeded" });
     const job = (await call(editor, "GET", `/api/agent/jobs/${q.body.job_id}`)).body;
-    expect(job).toMatchObject({ status: "succeeded", progress: { stage: "succeeded" } });
+    expect(job).toMatchObject({ status: "succeeded", progress: { stage: "succeeded" }, attempts: 1 });
     expect(job.progress.total).toBeGreaterThan(0);
+    // P4-04 history fields
+    expect(job.drafts).toBe(job.progress.total);
+    expect(job.in_review).toBeLessThanOrEqual(job.drafts);
+    expect(job.duration_seconds).toBeGreaterThanOrEqual(0);
+    expect(Number(job.estimated_usd)).toBe(0);                          // mock agents cost nothing
     const wf = (await call(editor, "GET", `/api/agent/workflows/${job.workflow_id}`)).body;
     expect(wf.status).toBe("completed");
     expect(wf.drafts.length).toBe(job.progress.total);
