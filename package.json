@@ -21,6 +21,7 @@
     "dev:api": "tsx watch services/api/src/main.ts",
     "dev:web": "npm run dev -w @lbe/web",
     "worker": "tsx services/api/src/worker.ts",
+    "demo": "tsx scripts/demo-flow.ts",
     "build:web": "npm run build -w @lbe/web",
     "start": "tsx services/api/src/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && npm run typecheck -w @lbe/web",

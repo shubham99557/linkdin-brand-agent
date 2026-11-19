@@ -1,5 +1,8 @@
 # Integration Contracts
 
+> **2026-11-19:** Superseded where they differ by the implemented migrations in `supabase/migrations/` and by
+> [decisions/ADR-log.md](decisions/ADR-log.md) (notably ADR-002, 003, 004, 013). Original text preserved below.
+
 _Draft v0.1 · 2026-11-18. Contracts between components. Field lists are proposals, finalized in Stage 7 migrations._
 
 ## 1. Data model (Supabase / Postgres)

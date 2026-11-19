@@ -1,5 +1,8 @@
 # Target Architecture — LinkedIn Brand Engine
 
+> **2026-11-19:** Parts of this document are corrected by [decisions/ADR-log.md](decisions/ADR-log.md)
+> (ADR-001…013). The original text below is preserved as the research record.
+
 _Version 0.1 (proposal, awaiting owner approval) · 2026-11-18_
 
 ## 1. Product definition

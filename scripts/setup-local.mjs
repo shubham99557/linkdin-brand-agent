@@ -12,7 +12,7 @@ if (existsSync(target)) {
 }
 const pw = () => randomBytes(18).toString("base64url");
 let text = readFileSync(path.join(root, ".env.example"), "utf8");
-for (const key of ["LBE_DEV_ADMIN_PASSWORD", "LBE_DEV_APPROVER_PASSWORD", "LBE_DEV_FOUNDER_PASSWORD", "LBE_DEV_EDITOR_PASSWORD"]) {
+for (const key of ["LBE_PG_PASSWORD", "LBE_DEV_ADMIN_PASSWORD", "LBE_DEV_APPROVER_PASSWORD", "LBE_DEV_FOUNDER_PASSWORD", "LBE_DEV_EDITOR_PASSWORD"]) {
   text = text.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${pw()}`);
 }
 writeFileSync(target, text, { encoding: "utf8", flag: "wx" });
