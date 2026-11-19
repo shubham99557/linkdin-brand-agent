@@ -118,7 +118,7 @@ export type ExtractionOutput = z.infer<typeof ExtractionOutputSchema>;
 
 // ---------------------------------------------------------------- common
 export type SpecialistResult =
-  | { kind: "ok"; raw: unknown; usage?: { inputTokens: number; outputTokens: number; webSearchRequests?: number }; allowedUrls?: string[] }
+  | { kind: "ok"; raw: unknown; usage?: { inputTokens: number; outputTokens: number; webSearchRequests?: number; servedBy?: string }; allowedUrls?: string[] }
   | { kind: "refused"; reason: string }
   | { kind: "error"; message: string };
 

@@ -331,7 +331,24 @@ are covered by tests. Procedure: `docs/migrations-runbook.md`.
 - Automated evaluation returns `NOT_READY` or `NEEDS_HUMAN_REVIEW`, never "ready"; human scoring decides.
 - Paid Claude runs require an API key, an explicit budget and an explicit authorization flag.
 - The workflow enforces a hard budget on estimated spend. Unknown models are priced as infinite, never free.
-- Web-search pricing is an unverified assumption until checked against Anthropic's pricing page.
+- ~~Web-search pricing is an unverified assumption~~. **Verified 2026-11-19 (P3-01)** against
+  https://platform.claude.com/docs/en/about-claude/pricing. Prices per million tokens (input/output):
+  - Opus 5.5: $4 / $20.
+  - Sonnet 5.5: $2 / $10.
+  - Fable 5.2: $8 / $40.
+  - Haiku 5.5: $0.10 / $0.50 for prompts up to 100k tokens, $0.50 / $2.50 above. **The budget uses the higher
+    tier.**
+  - Web search: $10 per 1,000 searches; search results are also billed as input tokens.
+  - Opus 4.8 (fallback target): $5 / $25.
+- **Server-side fallbacks.** We send `fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta, and
+  that pairing is valid. Cyber-category refusals, which fit our domain, are re-run on **Claude Opus 4.8** and
+  billed at its rates. Each Claude adapter now reports the serving model (`response.model`). When a fallback
+  ran, the estimate charges the dearer price twice, once for the declined attempt and once for the rescue,
+  as an upper bound.
+- **Not used:** US-only routing (`inference_geo: "us"`, 1.1×), fast mode, prompt caching and batch. Estimates
+  count all input at full price, so they err high.
+- **Model availability:** `claude-opus-5-5` is current and will not be retired before 22 Sep 2027.
+  `web_search_20260209` is the right tool version for it.
 - Synthetic or placeholder knowledge is flagged in every workflow result and fails staging pre-flight.
 
 ## ADR-027 — Internal-first (Customer Zero), commercial SaaS later; plan.md is the execution plan

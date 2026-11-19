@@ -69,7 +69,9 @@ abstract class StructuredSpecialist<I> implements Specialist<I> {
       if (response.stop_reason === "max_tokens") return { kind: "error", message: "output truncated (max_tokens)" };
       if (!response.parsed_output) return { kind: "error", message: "output did not match the schema" };
       return { kind: "ok", raw: response.parsed_output,
-        usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens } };
+        // servedBy: with fallbacks "default", a declined request is re-run on another model (cyber → Opus 4.8);
+        // the response's model says who served it, so the budget can price it correctly.
+        usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens, servedBy: response.model } };
     } catch (err) {
       return toResult(err);
     }

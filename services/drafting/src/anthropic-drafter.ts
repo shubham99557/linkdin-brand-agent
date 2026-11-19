@@ -52,7 +52,7 @@ export class AnthropicDrafter implements Drafter {
       return {
         kind: "ok",
         raw: response.parsed_output,
-        usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
+        usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens, servedBy: response.model },
       };
     } catch (err) {
       if (err instanceof Anthropic.AuthenticationError) return { kind: "error", message: "Anthropic API key rejected" };

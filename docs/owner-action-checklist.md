@@ -98,7 +98,10 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
   npm run eval:campaign -- --provider anthropic --budget-usd 5 --i-authorize-paid-api --brain eval-results/brain-staging.json
   Remove-Item Env:ANTHROPIC_API_KEY
   ```
-  (Claude will confirm the exact command when P3-01 pricing verification is done.)
+  Command confirmed (P3-01, 2026-11-19). Prices were checked against Anthropic's official pricing page.
+  One weekly run is expected to cost about **$1–2**, so a **$5** budget covers it with margin (details in
+  `docs/evaluation-plan.md`). Spending stops automatically when the budget is reached. Also set a monthly
+  limit in the Anthropic Console as a second safety net.
 - **Then:** score the output with `eval-results/<run>/scoring-sheet.md`.
 - **Secret:** the API key.
 - **Meanwhile:** Claude verifies pricing (P3-01) and builds durable jobs (P4).

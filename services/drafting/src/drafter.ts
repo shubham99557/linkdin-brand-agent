@@ -1,7 +1,7 @@
 import type { DraftInput } from "./prompt.ts";
 
 export type DraftResult =
-  | { kind: "ok"; raw: unknown; usage?: { inputTokens: number; outputTokens: number } }
+  | { kind: "ok"; raw: unknown; usage?: { inputTokens: number; outputTokens: number; servedBy?: string } }
   | { kind: "refused"; reason: string }
   | { kind: "error"; message: string };
 

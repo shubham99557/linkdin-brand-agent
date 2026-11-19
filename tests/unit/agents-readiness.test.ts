@@ -1,10 +1,10 @@
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { describe, expect, it } from "vitest";
 import {
-  Budget, CreativeOutputSchema, estimateCostUsd, ExtractionOutputSchema, findingRestatements, PerformanceOutputSchema,
-  ResearchOutputSchema, StrategyOutputSchema, usableEvidence, validateResearch,
+  anthropicSpecialists, Budget, CreativeOutputSchema, estimateCostUsd, ExtractionOutputSchema, findingRestatements, PerformanceOutputSchema,
+  PRICING, PRICING_SOURCE, ResearchOutputSchema, StrategyOutputSchema, usableEvidence, validateResearch, WEB_SEARCH_USD_PER_1K,
 } from "@lbe/agents";
-import { DraftOutputSchema } from "@lbe/drafting";
+import { AnthropicDrafter, DraftOutputSchema } from "@lbe/drafting";
 
 const NOW = new Date("2026-11-19T12:00:00Z");
 const f = (url: string, statement = "s") => ({ statement, source_url: url, source_title: "t", publisher: null, published_date: "2026-06-01", confidence: "high", relevance: "r" });
@@ -70,6 +70,27 @@ describe("cost estimation and budget", () => {
     expect(estimateCostUsd("claude-opus-5-5", { inputTokens: 1_000_000, outputTokens: 100_000 })).toBeCloseTo(4 + 2, 5);
     expect(estimateCostUsd("claude-opus-5-5", { inputTokens: 0, outputTokens: 0, webSearchRequests: 5 })).toBeCloseTo(0.05, 5);
     expect(estimateCostUsd("some-new-model", { inputTokens: 1, outputTokens: 1 })).toBe(Number.POSITIVE_INFINITY);
+  });
+  it("P3-01: prices match Anthropic's official pricing page (verified 2026-11-19)", () => {
+    expect(PRICING_SOURCE).toEqual({ url: "https://platform.claude.com/docs/en/about-claude/pricing", checkedOn: "2026-11-19" });
+    expect(PRICING["claude-opus-5-5"]).toEqual({ input: 4, output: 20 });
+    expect(PRICING["claude-sonnet-5-5"]).toEqual({ input: 2, output: 10 });
+    expect(PRICING["claude-fable-5-2"]).toEqual({ input: 8, output: 40 });
+    expect(WEB_SEARCH_USD_PER_1K).toBe(10);
+  });
+  it("P3-01: Haiku 5.5 is priced at its higher (>100k-token prompt) tier so the budget never under-counts", () => {
+    // official: $0.10/$0.50 up to 100k-token prompts, $0.50/$2.50 above
+    expect(estimateCostUsd("claude-haiku-5-5", { inputTokens: 200_000, outputTokens: 10_000 })).toBeCloseTo(0.2 * 0.5 + 0.01 * 2.5, 6);
+  });
+  it("P3-01: a server-side fallback (cyber refusals → Opus 4.8, $5/$25) is priced as an upper bound, never at Opus 5.5 rates", () => {
+    const u = { inputTokens: 1_000_000, outputTokens: 100_000 };
+    expect(estimateCostUsd("claude-opus-5-5", { ...u, servedBy: "claude-opus-5-5" })).toBeCloseTo(4 + 2, 5);
+    expect(estimateCostUsd("claude-opus-5-5", { ...u, servedBy: "claude-opus-4-8" })).toBeCloseTo(2 * (5 + 2.5), 5);
+    expect(estimateCostUsd("claude-opus-5-5", { ...u, servedBy: "claude-unknown-x" })).toBe(Number.POSITIVE_INFINITY);
+  });
+  it("P3-01: every model the product calls by default has a verified price (else budgets would refuse every call)", () => {
+    const models = [new AnthropicDrafter({ apiKey: "not-used" }).model, ...Object.values(anthropicSpecialists({ apiKey: "not-used" })).map((s) => s.model)];
+    for (const m of models) expect(PRICING[m], m).toBeDefined();
   });
   it("mock providers cost nothing; the budget reports exhaustion", () => {
     const b = new Budget(1);
