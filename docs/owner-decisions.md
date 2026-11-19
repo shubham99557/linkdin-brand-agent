@@ -21,7 +21,7 @@ _Updated 2026-11-19 (Phase 1)._
 
 | # | Decision | Recommendation | Blocks |
 |---|---|---|---|
-| D-01 | Approve Phase 1 results and allow Phase 2 planning (real LinkedIn API). | Review demo + test evidence first | Phase 2 |
+| D-01 | Approve Phase 1 results and allow Phase 2 planning (real LinkedIn API). | **APPROVED by owner, 2026-11-19.** Scope: Phase 1 accepted; Phase 2 *planning* authorised. Does **not** authorise live LinkedIn calls, credentials, spending or account-permission changes. | — |
 | D-02 | Create LinkedIn developer apps (founder: Share on LinkedIn + OIDC; company: separate app for Community Management API review). | Yes, when ready for Phase 2 | Live publishing |
 | D-03 | Legal: does scheduled release of a human-approved post count as "automated posting" under LinkedIn API Terms §3.1(26)? | Ask counsel; fallback = release on explicit click | Live scheduling |
 | D-04 | Mode A only, or plan for SaaS (Mode B)? | Stay Mode A until product–market fit | Tenancy, licensing |
