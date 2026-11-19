@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
@@ -110,6 +110,7 @@ export interface DbConfig {
 
 export async function openDb(cfg: DbConfig): Promise<Db> {
   if (cfg.url === "pglite") {
+    if (cfg.dataDir) await mkdir(cfg.dataDir, { recursive: true });
     const pglite = await PGlite.create({ dataDir: cfg.dataDir, extensions: { pgcrypto } });
     return new PgliteDb(pglite);
   }

@@ -35,7 +35,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, loadDotEnv = tr
   if (env.LBE_ENV === "production" || env.NODE_ENV === "production") {
     throw new Error("Phase 1 is not approved for production deployment (owner approval gate).");
   }
-  const parsed = EnvSchema.safeParse(env);
+  // Blank lines like `ANTHROPIC_API_KEY=` in .env mean "not set".
+  const cleaned = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined && v.trim() !== ""));
+  const parsed = EnvSchema.safeParse(cleaned);
   if (!parsed.success) {
     throw new Error(`Invalid configuration: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
   }

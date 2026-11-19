@@ -46,6 +46,6 @@ if (cfg.LBE_RUN_WORKER) {
 serve({ fetch: app.fetch, hostname: cfg.LBE_HOST, port: cfg.LBE_PORT }, (info) => {
   console.log(`LinkedIn Brand Engine API listening on http://${info.address}:${info.port}`);
   console.log(`  database: ${cfg.LBE_DATABASE_URL === "pglite" ? `PGlite (${cfg.pgliteDir})` : "PostgreSQL"}`);
-  console.log(`  drafter: ${drafter.provider} (${drafter.model}) · publishing: ${provider.name} (no external calls)`);
+  console.log(`  drafter: ${drafter.provider} (${drafter.model}) | publishing: ${provider.name} (no external calls)`);
   console.log(`  in-process publisher worker: ${cfg.LBE_RUN_WORKER ? `every ${cfg.LBE_WORKER_INTERVAL_MS}ms` : "off"}`);
 });
