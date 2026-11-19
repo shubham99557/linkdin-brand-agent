@@ -37,7 +37,11 @@ export function buildLinkedIn(cfg: Config, db: Db): LinkedInDeps | undefined {
     tokenKey,
     tokenKeyId: cfg.LBE_TOKEN_KEY_ID,
     liveProvider: cfg.liveEnabled
-      ? new LinkedInProvider({ getAccessToken: dbTokenSource(db, cfg.LBE_WORKER_ID, tokenKey), version: cfg.LBE_LINKEDIN_VERSION })
+      ? new LinkedInProvider({
+          getAccessToken: dbTokenSource(db, cfg.LBE_WORKER_ID, tokenKey),
+          version: cfg.LBE_LINKEDIN_VERSION,
+          memberEndpoint: cfg.LBE_LINKEDIN_MEMBER_ENDPOINT,
+        })
       : undefined,
   };
 }

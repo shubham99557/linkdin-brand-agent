@@ -42,8 +42,8 @@ export const CAPABILITIES: readonly Capability[] = [
     label: "Live text post via Posts API (manual release)",
     companyPage: "contract_tested",
     founderProfile: "contract_tested",
-    linkedinProduct: "POST /rest/posts, Linkedin-Version 202611",
-    notes: "Stage 2.1: built and tested against a local fake only. Founder use of /rest/posts with only w_member_social is UNCONFIRMED (Stage 2.2 pilot).",
+    linkedinProduct: "Founder: POST /v2/ugcPosts (documented for Share on LinkedIn). Company: POST /rest/posts, Linkedin-Version 202611",
+    notes: "Built and tested against a local fake only. Verification on LinkedIn happens in the Stage 2.2 founder pilot (docs/pilot-2.2-runbook.md).",
     source: POSTS_API,
   },
   {

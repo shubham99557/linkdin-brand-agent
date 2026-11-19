@@ -105,7 +105,8 @@ write-only for `w_member_social`).
 
 ## 4. Stages and gates
 
-> **Status 2026-11-19:** Stage 2.1 **complete** — see `phase-2.1-report.md`. Stages 2.2–2.5 not started.
+> **Status 2026-11-19:** Stage 2.1 **complete** (`phase-2.1-report.md`). Stage 2.2 **approved by owner** and
+> **prepared** (`pilot-2.2-runbook.md`) — waiting on owner actions B–C (LinkedIn app, real users). Stages 2.3–2.5 not started.
 
 | Stage | Scope | Needs credentials? | Exit criteria | Gate |
 |---|---|---|---|---|

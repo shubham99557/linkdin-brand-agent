@@ -132,21 +132,22 @@ describe("live publishing — founder (manual release)", () => {
     const admin = await login("admin");
     expect((await call(admin, "POST", `/api/accounts/${t.ids.accounts.founder}/live`, { live: true })).status).toBe(200);
     const { id, outboxId, approverCookie } = await approvedLivePost("founder", "Lessons from (another) week #founders");
-    const before = fake.requests.filter((r) => r.path === "/rest/posts").length;
+    const before = fake.requests.filter((r) => r.path === "/v2/ugcPosts").length;
     expect((await tick()).claimed).toBe(0);                                       // waits for a human
     expect((await call(approverCookie, "POST", `/api/outbox/${outboxId}/release`, {})).status).toBe(422);   // must confirm
     expect((await call(approverCookie, "POST", `/api/outbox/${outboxId}/release`, { confirm_public_post: true })).status).toBe(200);
     const s = await tick();
     expect(s.succeeded).toBe(1);
-    const sent = fake.requests.filter((r) => r.path === "/rest/posts");
+    const sent = fake.requests.filter((r) => r.path === "/v2/ugcPosts");   // documented Share on LinkedIn endpoint
     expect(sent.length).toBe(before + 1);
     expect(JSON.parse(sent.at(-1)!.body)).toMatchObject({
-      author: `urn:li:person:${fake.sub}`, commentary: "Lessons from \\(another\\) week \\#founders" });
+      author: `urn:li:person:${fake.sub}`,
+      specificContent: { "com.linkedin.ugc.ShareContent": { shareCommentary: { text: "Lessons from (another) week #founders" } } } });
     const d = await call(approverCookie, "GET", `/api/content/${id}`);
     expect(d.body.item.status).toBe("published");
     expect(d.body.item.provider_post_ref).toMatch(/^urn:li:share:\d+$/);
     expect((await tick()).claimed).toBe(0);
-    expect(fake.requests.filter((r) => r.path === "/rest/posts").length).toBe(before + 1);   // no duplicate
+    expect(fake.requests.filter((r) => r.path === "/v2/ugcPosts").length).toBe(before + 1);   // no duplicate
   });
 
   it("a 500 after the post was created → reconciliation; founder posts cannot be auto-checked", async () => {

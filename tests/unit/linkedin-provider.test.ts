@@ -4,10 +4,10 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PublicationPackage } from "@lbe/domain";
 import {
-  assertAllowedUrl, buildAuthorizeUrl, escapeLittleText, exchangeCode, fetchUserInfo, LinkedInProvider, MockLinkedInProvider,
+  assertAllowedUrl, buildAuthorizeUrl, escapeLittleText, exchangeCode, fetchUserInfo, introspectToken, LinkedInProvider, MockLinkedInProvider,
 } from "@lbe/publishing";
 import { decryptToken, encryptToken, parseTokenKey } from "@lbe/security";
-import { loadConfig } from "../../services/api/src/config.ts";
+import { envFilePath, loadConfig } from "../../services/api/src/config.ts";
 import { startFakeLinkedIn, type FakeLinkedIn, type PostBehaviour } from "../helpers/fake-linkedin.ts";
 
 let fake: FakeLinkedIn;
@@ -21,9 +21,40 @@ const pkg = (over: Partial<PublicationPackage["destination"]> = {}, body = "Hell
   destination: { account_id: "acct-1", kind: "founder_profile", linkedin_urn: "urn:li:person:abc123XYZ", publishing_mode: "live", ...over },
   body, media_ids: [], visibility: "PUBLIC", scheduled_for: null, claim_ids: [],
 });
-const provider = (timeoutMs = 2000, token: string | null = null) => new LinkedInProvider({
+const provider = (timeoutMs = 2000, token: string | null = null, memberEndpoint: "posts" | "ugcPosts" = "posts") => new LinkedInProvider({
   getAccessToken: async () => token ?? fake.issuedToken,
-  apiBase: fake.base, allowedHosts: ["127.0.0.1"], timeoutMs,
+  apiBase: fake.base, allowedHosts: ["127.0.0.1"], timeoutMs, memberEndpoint,
+});
+
+describe("Share on LinkedIn — documented /v2/ugcPosts request (default for person authors)", () => {
+  it("sends the documented body and headers, plain-text commentary, and reads X-RestLi-Id", async () => {
+    const r = await provider(2000, null, "ugcPosts").publish({ pkg: pkg({}, "Hello (world) #security"), idempotencyKey: "k" });
+    expect(r.kind === "success" && r.providerRef).toMatch(/^urn:li:share:\d+$/);
+    const req = fake.requests.at(-1)!;
+    expect(req.path).toBe("/v2/ugcPosts");
+    expect(req.headers["x-restli-protocol-version"]).toBe("2.0.0");
+    expect(req.headers["linkedin-version"]).toBeUndefined();
+    expect(JSON.parse(req.body)).toEqual({
+      author: "urn:li:person:abc123XYZ",
+      lifecycleState: "PUBLISHED",
+      specificContent: { "com.linkedin.ugc.ShareContent": { shareCommentary: { text: "Hello (world) #security" }, shareMediaCategory: "NONE" } },
+      visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+    });
+  });
+  it("is the default for person authors; organizations always use /rest/posts", async () => {
+    const def = new LinkedInProvider({ getAccessToken: async () => fake.issuedToken, apiBase: fake.base, allowedHosts: ["127.0.0.1"] });
+    await def.publish({ pkg: pkg(), idempotencyKey: "k" });
+    expect(fake.requests.at(-1)!.path).toBe("/v2/ugcPosts");
+    await def.publish({ pkg: pkg({ kind: "company_page", linkedin_urn: "urn:li:organization:42" }), idempotencyKey: "k" });
+    expect(fake.requests.at(-1)!.path).toBe("/rest/posts");
+  });
+  it("maps failures the same way (500 → ambiguous, 401 → credential alert)", async () => {
+    fake.behaviour.post = 500;
+    expect((await provider(2000, null, "ugcPosts").publish({ pkg: pkg(), idempotencyKey: "k" })).kind).toBe("ambiguous");
+    fake.behaviour.post = 401;
+    const r = await provider(2000, null, "ugcPosts").publish({ pkg: pkg(), idempotencyKey: "k" });
+    expect(r.kind === "rejected" && r.alert?.kind).toBe("credential_invalid");
+  });
 });
 
 describe("LinkedIn Posts API contract (fake server)", () => {
@@ -163,6 +194,13 @@ describe("OAuth client (fake server)", () => {
     const u = await fetchUserInfo({ accessToken: t.accessToken, ...ep() });
     expect(u.sub).toBe(fake.sub);
   });
+  it("introspects a token (read-only) and reports inactive tokens", async () => {
+    const ok = await introspectToken({ token: fake.issuedToken, clientId: "cid", clientSecret: "sec", ...ep() });
+    expect(ok.active).toBe(true);
+    expect(ok.scope).toContain("w_member_social");
+    expect(new URLSearchParams(fake.requests.at(-1)!.body).get("token")).toBe(fake.issuedToken);
+    expect((await introspectToken({ token: "unknown-token-value", clientId: "cid", clientSecret: "sec", ...ep() })).active).toBe(false);
+  });
   it("a bad code fails without leaking the client secret", async () => {
     await expect(exchangeCode({ code: "bad", clientId: "cid", clientSecret: "SUPERSECRET", redirectUri: "https://x/cb", ...ep() }))
       .rejects.toThrow(/token exchange failed \(400\)/);
@@ -207,6 +245,12 @@ describe("Phase 2 configuration guards", () => {
   it("requires an https redirect URI and an encryption key when an app is configured", () => {
     expect(() => loadConfig({ ...app, LBE_TOKEN_ENC_KEY: key, LBE_LINKEDIN_REDIRECT_URI: "http://localhost/cb" }, false)).toThrow(/Invalid configuration/);
     expect(() => loadConfig({ ...app, LBE_LINKEDIN_REDIRECT_URI: "https://localhost/cb" }, false)).toThrow(/LBE_TOKEN_ENC_KEY/);
+  });
+  it("only loads .env or .env.<name> from the project folder", () => {
+    expect(() => envFilePath({ LBE_ENV_FILE: "../secrets.txt" })).toThrow(/LBE_ENV_FILE/);
+    expect(() => envFilePath({ LBE_ENV_FILE: ".env.staging/../../x" })).toThrow(/LBE_ENV_FILE/);
+    expect(envFilePath({ LBE_ENV_FILE: ".env.staging" })).toMatch(/[\\/]\.env\.staging$/);
+    expect(loadConfig({}, false).LBE_LINKEDIN_MEMBER_ENDPOINT).toBe("ugcPosts");
   });
   it("rejects a malformed encryption key and half-configured apps", () => {
     expect(() => loadConfig({ LBE_TOKEN_ENC_KEY: "short" }, false)).toThrow(/32 random bytes/);

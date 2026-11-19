@@ -59,6 +59,28 @@ export async function exchangeCode(p: { code: string; clientId: string; clientSe
   };
 }
 
+/** Read-only token check (POST /oauth/v2/introspectToken). Returns LinkedIn's view of the token. */
+export async function introspectToken(p: { token: string; clientId: string; clientSecret: string } & OAuthEndpoints): Promise<{
+  active: boolean; status: string | null; expiresAt: number | null; scope: string | null;
+}> {
+  const url = assertAllowedUrl(`${p.authBase ?? "https://www.linkedin.com"}/oauth/v2/introspectToken`, p.allowedHosts ?? LINKEDIN_HOSTS);
+  const res = await (p.fetchImpl ?? fetch)(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: p.clientId, client_secret: p.clientSecret, token: p.token }).toString(),
+    redirect: "manual",
+    signal: AbortSignal.timeout(p.timeoutMs ?? 20_000),
+  });
+  if (!res.ok) throw new Error(`introspection failed (${res.status})`);
+  const d = (await res.json()) as { active?: unknown; status?: unknown; expires_at?: unknown; scope?: unknown };
+  return {
+    active: d.active === true,
+    status: typeof d.status === "string" ? d.status : null,
+    expiresAt: typeof d.expires_at === "number" ? d.expires_at : null,
+    scope: typeof d.scope === "string" ? d.scope : null,
+  };
+}
+
 export async function fetchUserInfo(p: { accessToken: string } & OAuthEndpoints): Promise<{ sub: string; name: string | null }> {
   const url = assertAllowedUrl(`${p.apiBase ?? "https://api.linkedin.com"}/v2/userinfo`, p.allowedHosts ?? LINKEDIN_HOSTS);
   const res = await (p.fetchImpl ?? fetch)(url, {

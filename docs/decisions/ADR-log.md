@@ -22,6 +22,7 @@ This log records corrections and Phase 1 decisions. Where an ADR conflicts with 
 | 014 | Live publishing gate and manual release (Stage 2.1) | Accepted | ADR-006 (extends) |
 | 015 | LinkedIn credentials: encryption and identity binding | Accepted | security-review §E |
 | 016 | OAuth callback hand-off through the dashboard | Accepted | — |
+| 017 | Founder endpoint and pilot environment (Stage 2.2) | Accepted | ADR-014, phase-2-plan §3.5 |
 
 ---
 
@@ -194,6 +195,22 @@ the callback.
 The dashboard then POSTs the code and state with the admin's session. The database accepts the state only for
 the **same admin** who started the flow, only once, and within 10 minutes. Storing the credential requires the
 consumed state. HTTPS redirect URIs are enforced by config. Local HTTPS is supported through `LBE_TLS_PFX`.
+
+## ADR-017 — Founder endpoint and pilot environment (Stage 2.2)
+**Context.** The plan targeted `/rest/posts` with a fallback to `/v2/ugcPosts`. The official Share on LinkedIn page,
+checked 2026-11-19 (page updated 2023-12-14), documents **only** `POST /v2/ugcPosts`
+(`X-Restli-Protocol-Version: 2.0.0`, `specificContent.com.linkedin.ugc.ShareContent.shareCommentary.text`,
+`201` with `X-RestLi-Id`). Its examples send hashtags unescaped.
+
+**Decision.**
+- Person authors default to the documented `/v2/ugcPosts`, with plain-text commentary.
+  `LBE_LINKEDIN_MEMBER_ENDPOINT=posts` switches to `/rest/posts`, but only after the pilot confirms it works.
+- Organization authors always use `/rest/posts`.
+- The pilot runs on a **separate** configuration (`.env.staging`), a separate database (`.data/staging`),
+  HTTPS on `localhost:8443` with a self-signed certificate, the background worker **off** (an admin runs the
+  publisher deliberately), and no synthetic users.
+- Tooling: `setup:staging`, `staging:init`, `staging:user`, `start:staging`; `pilot:preflight` (no LinkedIn
+  calls); `pilot:verify` (read-only userinfo + introspection, explicit flag required).
 
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried

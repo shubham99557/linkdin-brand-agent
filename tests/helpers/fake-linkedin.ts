@@ -66,9 +66,35 @@ export async function startFakeLinkedIn(): Promise<FakeLinkedIn> {
       state.validTokens.add(state.issuedToken);
       return json(200, { access_token: state.issuedToken, expires_in: 5183999, scope: "openid,profile,w_member_social" });
     }
+    if (req.method === "POST" && url.pathname === "/oauth/v2/introspectToken") {
+      const p = new URLSearchParams(body);
+      if (!p.get("client_id") || !p.get("client_secret")) return json(401, { message: "client auth required" });
+      const active = state.validTokens.has(p.get("token") ?? "");
+      return json(200, active
+        ? { active: true, client_id: p.get("client_id"), status: "active", expires_at: Math.floor(Date.now() / 1000) + 5_000_000, scope: "openid,profile,w_member_social" }
+        : { active: false });
+    }
     if (req.method === "GET" && url.pathname === "/v2/userinfo") {
       if (!state.validTokens.has(bearer)) return json(401, { message: "Invalid access token" });
       return json(200, { sub: state.sub, name: "Test Profile at Example", email_verified: false });
+    }
+    if (req.method === "POST" && url.pathname === "/v2/ugcPosts") {
+      if (req.headers["x-restli-protocol-version"] !== "2.0.0") return json(400, { message: "bad protocol version" });
+      const b = state.behaviour.post;
+      if (b === "hang") return;
+      if (b === "destroy") { req.socket.destroy(); return; }
+      if (!state.validTokens.has(bearer)) return json(401, { message: "Invalid access token" });
+      const post = JSON.parse(body) as { author: string; specificContent: { "com.linkedin.ugc.ShareContent": { shareCommentary: { text: string } } } };
+      const text = post.specificContent["com.linkedin.ugc.ShareContent"].shareCommentary.text;
+      if (b === "created" || b === "created_no_id") {
+        const id = `urn:li:share:${seq++}`;
+        state.posts.push({ id, author: post.author, commentary: text, createdAt: Date.now() });
+        res.writeHead(201, b === "created" ? { "X-RestLi-Id": id } : {});
+        return res.end(JSON.stringify(b === "created" ? { id } : {}));
+      }
+      if (b === 429) return json(429, { message: "Too many requests" }, { "retry-after": "120" });
+      if (b === 500 || b === 503) state.posts.push({ id: `urn:li:share:${seq++}`, author: post.author, commentary: text, createdAt: Date.now() });
+      return json(b, { message: `fake ${b}` });
     }
     if (url.pathname === "/rest/posts") {
       if (!req.headers["linkedin-version"]) return json(400, { message: "Missing LinkedIn-Version header" });

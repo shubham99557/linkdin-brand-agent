@@ -31,6 +31,7 @@ const EnvSchema = z.object({
   LBE_TOKEN_ENC_KEY: z.string().optional(),
   LBE_TOKEN_KEY_ID: z.string().regex(/^[a-z0-9_-]{1,32}$/).default("k1"),
   LBE_LINKEDIN_VERSION: z.string().regex(/^\d{6}$/).default("202611"),
+  LBE_LINKEDIN_MEMBER_ENDPOINT: z.enum(["ugcPosts", "posts"]).default("ugcPosts"),
   LBE_LINKEDIN_REDIRECT_URI: z.string().url().startsWith("https://").optional(),
   LBE_LINKEDIN_FOUNDER_CLIENT_ID: z.string().optional(),
   LBE_LINKEDIN_FOUNDER_CLIENT_SECRET: z.string().optional(),
@@ -46,8 +47,16 @@ export type Config = z.infer<typeof EnvSchema> & {
 };
 
 /** Load `.env` (if present) then validate. Phase 1/2.1 deliberately has no "production" mode. */
+/** Which env file to load: `.env` by default, or LBE_ENV_FILE (must be a `.env*` file in the repo root, e.g. `.env.staging`). */
+export function envFilePath(env: NodeJS.ProcessEnv = process.env): string {
+  const name = env.LBE_ENV_FILE ?? ".env";
+  if (!/^\.env(\.[a-z0-9-]+)?$/.test(name)) throw new Error("LBE_ENV_FILE must be .env or .env.<name> in the project folder");
+  return path.join(REPO_ROOT, name);
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, loadDotEnv = true): Config {
-  const envFile = path.join(REPO_ROOT, ".env");
+  const envFile = envFilePath(env);
+  if (loadDotEnv && env.LBE_ENV_FILE && !existsSync(envFile)) throw new Error(`${env.LBE_ENV_FILE} not found`);
   if (loadDotEnv && existsSync(envFile)) process.loadEnvFile(envFile);
   if (env.LBE_ENV === "production" || env.NODE_ENV === "production") {
     throw new Error("This build is not approved for production deployment (owner approval gate).");
