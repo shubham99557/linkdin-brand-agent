@@ -712,6 +712,22 @@ export function createApp(deps: AppDeps) {
     return c.json({ job_id: jobId, status: "queued" }, 202);
   });
 
+  // P5-05: a month (1–5 weeks) of weekly agent runs with one objective; weeks run in order, no duplicate topics.
+  const OBJECTIVES = ["awareness", "engagement", "thought_leadership", "lead_generation", "event_promotion"] as const;
+  api.post("/agent/campaigns", async (c) => {
+    const b = await json(c, z.object({
+      name: z.string().trim().min(3).max(120), objective: z.enum(OBJECTIVES), goal: z.string().trim().min(3).max(800),
+      start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), weeks: z.number().int().min(1).max(5), posts_per_week: z.number().int().min(3).max(5),
+    }));
+    const id = await one<string>("select lbe.campaign_create($1, $2, $3, $4, $5::date, $6, $7)",
+      [c.get("session"), b.name, b.objective, b.goal, b.start_date, b.weeks, b.posts_per_week]);
+    return c.json({ campaign_id: id }, 201);
+  });
+  api.get("/agent/campaigns", async (c) => c.json(await one("select lbe.campaign_list($1)", [c.get("session")])));
+  api.get("/agent/campaigns/:id", async (c) => c.json(await one("select lbe.campaign_get($1, $2)", [c.get("session"), param(c, "id")])));
+  api.post("/agent/campaigns/:id/cancel", async (c) =>
+    c.json({ jobs_cancelled: await one<number>("select lbe.campaign_cancel($1, $2)", [c.get("session"), param(c, "id")]) }));
+
   api.get("/agent/jobs", async (c) => c.json(await one("select lbe.job_list($1)", [c.get("session")])));
   api.get("/agent/jobs/:id", async (c) => c.json(await one("select lbe.job_get($1, $2)", [c.get("session"), param(c, "id")])));
   api.post("/agent/jobs/:id/resume", async (c) => {

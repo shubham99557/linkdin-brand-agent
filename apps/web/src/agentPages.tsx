@@ -362,6 +362,8 @@ export function AgentPage({ me }: { me: Me }) {
           </div>
         </div>
       )}
+      {canRun && <CampaignPlanner />}
+      <CampaignList />
       <ActiveJobs />
       <RunHistory />
       <details className="panel table-wrap">
@@ -374,6 +376,128 @@ export function AgentPage({ me }: { me: Me }) {
           ))}</tbody></table>
         {list?.length === 0 && <p className="muted">No agent runs yet.</p>}
       </details>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ Monthly campaigns (P5-05)
+const OBJECTIVES: Array<[string, string]> = [
+  ["awareness", "Build awareness"], ["engagement", "Drive engagement and conversation"], ["thought_leadership", "Establish thought leadership"],
+  ["lead_generation", "Generate inbound interest (no cold outreach)"], ["event_promotion", "Promote an event"],
+];
+interface CampaignWeek { week: number; job_id: string; status: Job["status"]; workflow_id: string | null; start_date: string; focus: string | null; error: string | null; drafts: number }
+interface Campaign {
+  id: string; name: string; objective: string; goal: string; start_date: string; weeks: number; posts_per_week: number; created_at: string;
+  created_by_name: string; status: "planned" | "running" | "completed" | "partially_completed" | "cancelled"; week_jobs: CampaignWeek[];
+  posts?: Array<{ content_id: string; week: number; topic: string | null; pillar: string; account_kind: string; status: string; scheduled_for: string | null }>;
+}
+const CAMPAIGN_BADGE: Record<Campaign["status"], string> = {
+  planned: "queued", running: "dispatching", completed: "succeeded", partially_completed: "changes_requested", cancelled: "cancelled",
+};
+const nextMonday = () => { const d = new Date(); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return d.toISOString().slice(0, 10); };
+
+function CampaignPlanner() {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ name: "", objective: "awareness", goal: "", start_date: nextMonday(), weeks: 4, posts_per_week: 3 });
+  const [error, setError] = useState<string | null>(null);
+  if (!open) return <div className="panel"><button onClick={() => setOpen(true)} data-testid="plan-month">Plan a month (campaign)</button>
+    <span className="small muted"> — the agent plans one week at a time, never repeating a topic.</span></div>;
+  return (
+    <form className="panel" data-testid="campaign-form" onSubmit={async (e) => {
+      e.preventDefault(); setError(null);
+      try {
+        const r = await api<{ campaign_id: string }>("/agent/campaigns", { method: "POST", body: { ...f, weeks: Number(f.weeks), posts_per_week: Number(f.posts_per_week) } });
+        go(`/agent/campaign/${r.campaign_id}`);
+      } catch (err) { setError((err as Error).message); }
+    }}>
+      <h3 style={{ marginTop: 0 }}>Plan a month</h3>
+      <label htmlFor="cp-name">Campaign name</label>
+      <input id="cp-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required minLength={3} maxLength={120} placeholder="e.g. March: phishing awareness" />
+      <label htmlFor="cp-objective">Objective</label>
+      <select id="cp-objective" value={f.objective} onChange={(e) => setF({ ...f, objective: e.target.value })}>
+        {OBJECTIVES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+      <label htmlFor="cp-goal">What should the month achieve?</label>
+      <textarea id="cp-goal" style={{ minHeight: 60 }} value={f.goal} onChange={(e) => setF({ ...f, goal: e.target.value })} required minLength={3} maxLength={800} />
+      <div className="row">
+        <div style={{ flex: 1 }}><label htmlFor="cp-start">First week starts</label>
+          <input id="cp-start" type="date" value={f.start_date} onChange={(e) => setF({ ...f, start_date: e.target.value })} required /></div>
+        <div style={{ flex: 1 }}><label htmlFor="cp-weeks">Weeks</label>
+          <select id="cp-weeks" value={f.weeks} onChange={(e) => setF({ ...f, weeks: Number(e.target.value) })}>{[1, 2, 3, 4, 5].map((n) => <option key={n}>{n}</option>)}</select></div>
+        <div style={{ flex: 1 }}><label htmlFor="cp-ppw">Posts per week</label>
+          <select id="cp-ppw" value={f.posts_per_week} onChange={(e) => setF({ ...f, posts_per_week: Number(e.target.value) })}>{[3, 4, 5].map((n) => <option key={n}>{n}</option>)}</select></div>
+      </div>
+      <p className="small muted">Each week focuses on one of your content pillars in turn. Every post goes to the review queue — nothing is published automatically.</p>
+      <ErrorText error={error} />
+      <div className="row"><button className="primary" type="submit">Start planning</button><button type="button" onClick={() => setOpen(false)}>Cancel</button></div>
+    </form>
+  );
+}
+
+function CampaignList() {
+  const [list] = useLoad<Campaign[]>("/agent/campaigns");
+  if (!list || list.length === 0) return null;
+  return (
+    <div className="panel table-wrap" data-testid="campaigns">
+      <h3 style={{ marginTop: 0 }}>Campaigns</h3>
+      <table><thead><tr><th>Campaign</th><th>Objective</th><th>Starts</th><th>Weeks done</th><th>Status</th></tr></thead>
+        <tbody>{list.map((c) => (
+          <tr key={c.id} style={{ cursor: "pointer" }} onClick={() => go(`/agent/campaign/${c.id}`)}>
+            <td>{c.name}</td><td className="small">{OBJECTIVES.find(([v]) => v === c.objective)?.[1]}</td><td className="small">{c.start_date}</td>
+            <td className="small">{c.week_jobs.filter((w) => w.status === "succeeded").length} / {c.weeks}</td>
+            <td><Badge value={CAMPAIGN_BADGE[c.status]} /> <span className="small">{c.status.replace(/_/g, " ")}</span></td>
+          </tr>
+        ))}</tbody></table>
+    </div>
+  );
+}
+
+export function CampaignPage({ id }: { id: string }) {
+  const [c, error, reload] = useLoad<Campaign>(`/agent/campaigns/${id}`);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const active = !!c && (c.status === "planned" || c.status === "running");
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(reload, 2000);
+    return () => clearInterval(t);
+  }, [active, reload]);
+  if (error) return <ErrorText error={error} />;
+  if (!c) return <p className="muted">Loading…</p>;
+  const posts = c.posts ?? [];
+  return (
+    <div>
+      <h2>{c.name}</h2>
+      <p className="small muted">{OBJECTIVES.find(([v]) => v === c.objective)?.[1]} · {c.weeks} week(s) × {c.posts_per_week} posts, from {c.start_date} · planned by {c.created_by_name}</p>
+      <p>{c.goal}</p>
+      <div className="panel" data-testid="campaign-status">
+        <div className="row"><strong>Status: {c.status.replace(/_/g, " ")}</strong><span style={{ flex: 1 }} />
+          {active && <button className="danger" onClick={async () => {
+            setActionError(null);
+            try { await api(`/agent/campaigns/${c.id}/cancel`, { method: "POST" }); reload(); } catch (e) { setActionError((e as Error).message); }
+          }}>Cancel the remaining weeks</button>}</div>
+        <ErrorText error={actionError} />
+        <table className="small"><thead><tr><th>Week</th><th>Starts</th><th>Focus</th><th>Status</th><th>Drafts</th></tr></thead>
+          <tbody>{c.week_jobs.map((w) => (
+            <tr key={w.week} data-testid={`campaign-week-${w.week}`}>
+              <td>Week {w.week}</td><td>{w.start_date}</td><td>{w.focus ?? "—"}</td>
+              <td><a href={`#/agent/job/${w.job_id}`}>{JOB_LABEL[w.status]}</a>{w.error ? <span className="error"> — {w.error}</span> : null}</td>
+              <td>{w.drafts}</td>
+            </tr>
+          ))}</tbody></table>
+        <p className="small muted">Weeks are planned one after another, so each week knows what earlier weeks already cover.</p>
+      </div>
+      {posts.length > 0 && (
+        <div className="panel table-wrap" data-testid="campaign-posts">
+          <h3 style={{ marginTop: 0 }}>The month's posts</h3>
+          <table className="small"><thead><tr><th>Date</th><th>Week</th><th>Topic</th><th>Account</th><th>Pillar</th><th>Status</th></tr></thead>
+            <tbody>{posts.map((p) => (
+              <tr key={p.content_id}><td>{fmt(p.scheduled_for)}</td><td>{p.week}</td>
+                <td><a href={`#/content/${p.content_id}`}>{p.topic ?? "(untitled)"}</a></td>
+                <td>{p.account_kind === "company_page" ? "Company page" : "Founder"}</td><td>{p.pillar}</td><td><Badge value={p.status} /></td></tr>
+            ))}</tbody></table>
+        </div>
+      )}
+      <p><a href="#/agent">← Agent workspace</a></p>
     </div>
   );
 }

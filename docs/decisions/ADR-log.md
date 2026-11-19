@@ -36,6 +36,7 @@ This log records corrections and Phase 1 decisions. Where an ADR conflicts with 
 | 028 | Durable agent jobs with job sessions; resume, retry, step time limits | Accepted | ADR-020 (extends) |
 | 029 | Render dependencies: satori, resvg-wasm, pdfkit, Inter (P5-00 gate) | Accepted | selective-reuse-plan "resvg-js" → resvg-wasm |
 | 030 | Visuals are part of the approved publication package | Accepted | ADR-005 (extends) |
+| 031 | Monthly campaigns are sequential weekly agent jobs | Accepted | ADR-028 (extends) |
 
 ---
 
@@ -452,6 +453,22 @@ The text in the PDF is not selectable. Accessibility comes from the post's alt t
     generic placeholder. The database enforces this with `lbe.alt_text_problem`.
   - An agent draft that fails this check is held as a draft with a note; the run itself does not fail.
 - Bytes are stored in PostgreSQL. Moving them to object storage is a Phase 9/10 option.
+
+## ADR-031 — Monthly campaigns are sequential weekly agent jobs (P5-05)
+**Decision.** A campaign (name, objective, goal, 1–5 weeks, 3–5 posts a week) creates one durable job per week.
+We did not use one large planning call. This reuses resume, cancel, retry, budgets, time limits and the
+duplicate-topic rule unchanged.
+- `job_claim` never hands out week k while an earlier week of the same campaign is queued or running. This
+  holds with several runners, and is tested on real PostgreSQL.
+- Each week's strategy therefore sees all earlier weeks' drafts, which feed into the recent-topics check, and
+  the duplicate rule (topic similarity ≥ 0.5 is dropped) covers the whole month.
+- Week focus rotates through the company page's pillars. The objective is written into each week's goal.
+- One active campaign per organization. Campaign weeks don't count towards the 5 ad-hoc job limit.
+- A failed week doesn't block later weeks. The campaign is then honestly reported as "partially completed",
+  and the week can be retried in place.
+
+**Consequence.** A month's plan is produced over several runs rather than all at once. That makes it slower,
+but each step is resumable and cheaper to retry.
 
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried

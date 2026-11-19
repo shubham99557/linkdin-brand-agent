@@ -96,6 +96,14 @@ function goalBank(goal: string): typeof TOPIC_BANK {
     ["myths versus reality", "Separating common myths from practical reality.", "threat-landscape", "industry-commentary"],
     ["questions for the board", "Questions leaders should ask their team.", "security-culture", "security-leadership"],
     ["first steps after an incident", "What to do in the first hour.", "threat-landscape", "founder-lessons"],
+    // More angles so a multi-week campaign has distinct topics (the validator still drops anything similar).
+    ["budget priorities", "Where a small budget makes the biggest difference.", "product-education", "security-leadership"],
+    ["supplier questions", "What to ask suppliers before trusting them.", "security-culture", "industry-commentary"],
+    ["training that sticks", "How to make awareness training actually change habits.", "security-culture", "founder-lessons"],
+    ["metrics worth tracking", "Measures that show real progress.", "product-education", "security-leadership"],
+    ["remote working risks", "Risks that grow when teams work from home.", "threat-landscape", "industry-commentary"],
+    ["regulation explained", "What recent rules mean in plain English.", "threat-landscape", "security-leadership"],
+    ["lessons from near misses", "What near misses teach before a real incident.", "security-culture", "founder-lessons"],
   ];
   return angles.map(([suffix, angle, company, founder]) => ({
     topic: `${subject}: ${suffix}`, angle, objective: `Help the audience act on ${subject.toLowerCase()}.`,

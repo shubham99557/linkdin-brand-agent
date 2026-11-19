@@ -231,5 +231,16 @@ suite("PostgreSQL concurrency", () => {
     expect(["running", "queued"]).toContain(v!.status);
     const [live] = await db.query<{ n: number }>("select count(*)::int as n from lbe.sessions where job_id = $1 and revoked_at is null", [victim]);
     expect(live!.n).toBe(v!.status === "running" ? 1 : 0);
+    await db.query("update lbe.agent_jobs set status = 'cancelled', lease_owner = null, lease_expires_at = null where status in ('queued', 'running')");
+  });
+
+  it("campaigns (P5-05): concurrent runners can only ever take week 1 first", async () => {
+    const start = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+    const id = await api<string>("select lbe.campaign_create($1, 'Race campaign', 'awareness', 'Race goal text', $2::date, 3, 3)", [sessions.editor, start]);
+    const claims = await Promise.all(Array.from({ length: 8 }, (_, i) =>
+      db.tx("lbe_worker", async (q) => (await q.query<{ r: { params: { campaign?: { id: string; week: number } } } | null }>(
+        "select lbe.job_claim($1, 60) as r", [`camp-${i}`]))[0]!.r)));
+    const got = claims.filter((c) => c?.params.campaign?.id === id).map((c) => c!.params.campaign!.week);
+    expect(got).toEqual([1]);
   });
 });

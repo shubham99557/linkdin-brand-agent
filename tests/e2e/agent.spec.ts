@@ -73,6 +73,24 @@ test("Creative Studio: owner sets brand colours; agent drafts show rendered visu
   await expect(page.getByTestId("attached-visual")).toContainText("fingerprint");
 });
 
+test("plan a month: a 2-week campaign runs week by week and lists the month's posts without repeated topics", async ({ page }) => {
+  await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await page.getByRole("link", { name: "Agent workspace", exact: true }).click();
+  await page.getByTestId("plan-month").click();
+  await page.getByLabel("Campaign name").fill("E2E fortnight on backups");
+  await page.getByLabel("Objective").selectOption("thought_leadership");
+  await page.getByLabel("What should the month achieve?").fill("Backup readiness for small UK firms");
+  await page.getByLabel("Weeks").selectOption("2");
+  await page.getByRole("button", { name: "Start planning" }).click();
+  await expect(page.getByRole("heading", { name: "E2E fortnight on backups" })).toBeVisible();
+  await expect(page.getByTestId("campaign-status")).toContainText("Status: completed", { timeout: 30_000 });
+  await expect(page.getByTestId("campaign-week-1")).toContainText("done");
+  await expect(page.getByTestId("campaign-week-2")).toContainText("done");
+  const topics = await page.getByTestId("campaign-posts").locator("tbody tr td:nth-child(3)").allInnerTexts();
+  expect(topics.length).toBe(12);                                  // 2 weeks × 3 posts × 2 accounts
+  expect(new Set(topics).size).toBe(6);                            // each topic used once per account, never repeated
+});
+
 test("guided setup: owner answers, skips (stays UNKNOWN), resumes, adds a draft claim and reviews", async ({ page }) => {
   await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
   await page.getByRole("link", { name: "Brand Brain" }).click();
