@@ -154,6 +154,22 @@ test("guided setup: owner answers, skips (stays UNKNOWN), resumes, adds a draft 
   await expect(page.getByText("Only the owner (admin) can complete the Brand Brain")).toBeVisible();
 });
 
+test("P2-03: editor uploads a .md file, reviews the text, creates grounded proposals; a PDF gets a clear message", async ({ page }) => {
+  await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await page.getByRole("link", { name: "Brand Brain" }).click();
+  await page.getByText("Add knowledge from a document").click();
+  const md = "## Customer language\nOur buyers say 'we just need it to work' and 'nobody here is a security person'.";
+  await page.getByLabel(/Upload a file/).setInputFiles({ name: "website-copy.md", mimeType: "text/markdown", buffer: Buffer.from(md) });
+  await expect(page.getByText(/Read [\d,]+ characters from “website-copy.md”/)).toBeVisible();
+  await expect(page.getByLabel("Document name")).toHaveValue("website-copy.md");
+  await expect(page.locator("#ingest-text")).toHaveValue(md);
+  await page.getByRole("button", { name: "Create proposals" }).click();
+  await expect(page.getByText("1 proposal(s) created from your document")).toBeVisible();
+
+  await page.getByLabel(/Upload a file/).setInputFiles({ name: "guide.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7\n") });
+  await expect(page.getByText(/PDF upload is not switched on yet/)).toBeVisible();
+});
+
 test("owner onboards a Brand Brain section; editor runs the Branding Agent; drafts land in review", async ({ page }) => {
   // Owner: guided onboarding for one section
   await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);

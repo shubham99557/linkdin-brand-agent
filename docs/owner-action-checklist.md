@@ -21,6 +21,7 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 | OA-7 | Legal question on scheduled posting | P6-06 | Low |
 | OA-8 | Privacy documents for leads | Phase 8 | Low (later) |
 | OA-9 | Hosting choice for internal production | Phase 9 | Low (later) |
+| OA-10 | Approve (or decline) the PDF reader library for document upload | P2-03b | Low (copy/paste or .txt works today) |
 
 ---
 
@@ -121,6 +122,16 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 
 ## OA-9 — Hosting choice (only before production)
 - Where the internal production system runs (D-09). Claude will prepare options and costs at Phase 9; no spending without your approval.
+
+## OA-10 — PDF reader library for document upload (optional)
+- **What:** decide whether Claude may add the open-source PDF reader `unpdf` 2.1.0 (MIT; bundles Mozilla's pdf.js)
+  so PDFs can be uploaded on the Brand Brain page. `.txt` and `.md` uploads already work without it.
+- **Why ask:** it is new third-party code that reads untrusted files. It was reviewed without running it (no install
+  scripts, no native binaries, signed, 0 known vulnerabilities; details and safety conditions in ADR-032), but
+  running it for the first time needs your go-ahead.
+- **Tell Claude:** "OA-10 approved" (Claude installs and tests it, PDFs then parse in an isolated worker with size,
+  page and time limits) or "OA-10 declined" (PDFs stay copy/paste only).
+- **Cost / secrets:** none.
 
 ## Optional
 - **WSL2** (`wsl --install`, admin PowerShell, reboot): only needed if you later want Docker. Not required now.

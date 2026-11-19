@@ -61,7 +61,11 @@ export function BrandBrainPage({ me }: { me: Me }) {
       <VisualIdentityPanel isOwner={isOwner} onSaved={() => { setMsg("Saved your visual identity."); reload(); }} />
       <PillarsPanel accounts={brain.accounts} isOwner={isOwner}
         onSaved={(name) => { setMsg(`Saved content pillars for ${name}.`); reload(); }} />
-      <IngestPanel onDone={(n) => { setMsg(`${n} proposal(s) created from your document — review them above.`); reload(); }} />
+      <IngestPanel onDone={(n, dropped) => {
+        setMsg(`${n} proposal(s) created from your document — review them above.` +
+          (dropped ? ` ${dropped} suggestion(s) were left out because they weren't backed by a quote from your text.` : ""));
+        reload();
+      }} />
 
       {brain.sections.map((meta) => (
         <SectionCard key={meta.section} meta={meta} entries={brain.entries.filter((e) => e.section === meta.section && !isVisualEntry(e))}
@@ -353,22 +357,44 @@ function ProposalsPanel({ isOwner, onChange }: { isOwner: boolean; onChange: () 
   );
 }
 
-function IngestPanel({ onDone }: { onDone: (n: number) => void }) {
+const UPLOAD_MAX_BYTES = 256 * 1024;   // matches the API limit (services/api/src/documents.ts)
+
+function IngestPanel({ onDone }: { onDone: (n: number, dropped: number) => void }) {
   const [name, setName] = useState("brand-notes.md");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notes, setNotes] = useState<string[]>([]);
+  const upload = async (file: File | undefined) => {
+    setError(null); setNotes([]);
+    if (!file) return;
+    if (file.size > UPLOAD_MAX_BYTES) { setError(`“${file.name}” is larger than 256 KB. Split it into smaller files or paste the relevant parts.`); return; }
+    setBusy(true);
+    try {
+      const r = await api<{ name: string; text: string; chars: number; warnings: string[] }>(
+        `/brain/extract-text?name=${encodeURIComponent(file.name)}`, { method: "POST", raw: file });
+      setName(r.name); setText(r.text);
+      setNotes([`Read ${r.chars.toLocaleString("en-GB")} characters from “${r.name}”. Check the text below, remove anything that shouldn't be used, then create proposals.`, ...r.warnings]);
+    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  };
   return (
     <details className="panel">
       <summary><strong>Add knowledge from a document</strong> (website copy, pitch deck notes, brand guide)</summary>
       <p className="small muted">The agent extracts entries that are supported by a verbatim quote from your text and creates <strong>proposals</strong> for the owner to review. Nothing is approved automatically.</p>
-      <label>Document name</label><input value={name} onChange={(e) => setName(e.target.value)} />
-      <label>Paste text (headings like “## Positioning” help)</label>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} />
+      <label htmlFor="ingest-file">Upload a file (.txt or .md, up to 256 KB) — or paste text below</label>
+      <input id="ingest-file" type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" disabled={busy}
+        onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ""; }} />
+      {notes.length > 0 && <div className="notice small" role="status">{notes.map((n) => <div key={n}>{n}</div>)}</div>}
+      <label htmlFor="ingest-name">Document name</label><input id="ingest-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} />
+      <label htmlFor="ingest-text">Text (headings like “## Positioning” help)</label>
+      <textarea id="ingest-text" value={text} onChange={(e) => setText(e.target.value)} />
       <ErrorText error={error} />
       <button disabled={busy || text.trim().length < 20} onClick={async () => {
         setBusy(true); setError(null);
-        try { const r = await api<{ proposalIds: string[] }>("/brain/ingest", { method: "POST", body: { name, text } }); setText(""); onDone(r.proposalIds.length); }
+        try {
+          const r = await api<{ proposalIds: string[]; dropped: string[] }>("/brain/ingest", { method: "POST", body: { name, text } });
+          setText(""); setNotes([]); onDone(r.proposalIds.length, r.dropped.length);
+        }
         catch (e) { setError((e as Error).message); } finally { setBusy(false); }
       }}>Create proposals</button>
     </details>

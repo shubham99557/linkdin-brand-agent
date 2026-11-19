@@ -487,6 +487,54 @@ duplicate-topic rule unchanged.
 **Consequence.** A month's plan is produced over several runs rather than all at once. That makes it slower,
 but each step is resumable and cheaper to retry.
 
+## ADR-032 — Document upload; PDF text extraction dependency (P2-03) — PDF part PROPOSED, awaiting owner approval
+**Decision (2026-11-19).**
+- **Done, no new dependency:** `.txt` and `.md` uploads become plain text (`services/api/src/documents.ts`). The
+  user reviews the text in the paste box, and it then goes through the existing ingest. Every proposal must quote
+  the text word for word, so proposals stay grounded.
+- **Rules for uploads:**
+  - The 256 KB API limit applies, and the text is capped at the ingest limit of 50,000 characters, cut at a
+    paragraph boundary with a visible warning.
+  - Decoding is strict: UTF-8 with any BOM removed, UTF-16 with a BOM, otherwise Windows-1252 with a warning.
+  - Files containing NUL bytes are refused as binary.
+  - Control characters, invisible characters and stray BOMs are removed.
+  - Only a safe base name is kept; nothing is stored, and the file name is not logged.
+- **PDF is not switched on.** A PDF upload gets a clear message suggesting copy and paste or a `.txt` file.
+
+**Proposed PDF dependency: `unpdf` 2.1.0.**
+- **Package:** MIT licence, from the unjs organisation, with one maintainer. It is a single package with no
+  dependencies; it bundles Mozilla pdf.js (Apache-2.0) with its JBIG2 (Apache-2.0) and OpenJPEG (BSD-2)
+  decoders.
+- **Version:** released 2026-10-30, which passes the 14-day cooldown. 2.2.x is newer but too recent.
+- **Static review** (trial install in the scratch folder with `--ignore-scripts`, outside the repository):
+  - 1 package;
+  - **no install scripts**;
+  - **no native binaries**: the optional `@napi-rs/canvas` peer is *not* installed, unlike `pdfjs-dist`, which
+    installs it by default;
+  - verified registry signature **and** provenance attestation;
+  - `npm audit` 0.
+- Chosen over `pdfjs-dist`, which adds a native canvas binary as an optional dependency, and over `pdf-parse`
+  1.x, which bundles a 2018 pdf.js older than the CVE-2024-4367 fix.
+- **Not yet done:** running the package. Executing the newly downloaded code was refused by this session's
+  permission check, so the owner decides (OA-10).
+
+**Conditions if approved (the implementation must meet all of them):**
+1. **Parse in a worker thread with limits:** `resourceLimits`, roughly 256 MB heap, and a 15 s timeout with
+   `terminate()`. A malicious or huge PDF can then never stall or crash the API.
+2. **Bytes only, no network or file access:** no URL options (`cMapUrl`, `standardFontDataUrl`, `wasmUrl`), with
+   `isEvalSupported: false`, `useSystemFonts: false` and `disableFontFace: true`. A test asserts no network
+   attempt.
+3. **Limits:** at most 5 MB and 50 pages, via a route-specific body limit for this endpoint only. Must start
+   with `%PDF-`. Encrypted PDFs are refused. A PDF with no text layer (a scan) gets "no readable text, paste
+   instead".
+4. **Same review step and grounding as text uploads:** the extracted text is shown for review, then goes through
+   the normal ingest.
+5. **Notices:** pdf.js, JBIG2 and OpenJPEG notices go in `THIRD_PARTY_NOTICES.md`; the exact pin and `npm audit`
+   stay at 0.
+
+**Alternative without a dependency:** the owner copies text out of the PDF (or saves it as `.txt`) and uploads or
+pastes it. This works today.
+
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried
 automatically, with exponential backoff (30 s × 2ⁿ, max 1 h, max 5 attempts). Timeouts, 5xx, thrown errors,

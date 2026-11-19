@@ -7,12 +7,13 @@ export class ApiError extends Error {
 let onSessionEnded: (() => void) | undefined;
 export const setSessionEndedHandler = (fn: () => void) => { onSessionEnded = fn; };
 
-export async function api<T = unknown>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function api<T = unknown>(path: string, init: { method?: string; body?: unknown; raw?: Blob } = {}): Promise<T> {
+  // `raw` sends a file's bytes as-is (document upload); `body` sends JSON.
   const res = await fetch(`/api${path}`, {
     method: init.method ?? "GET",
     credentials: "same-origin",
-    headers: init.body !== undefined ? { "content-type": "application/json" } : undefined,
-    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    headers: init.raw ? { "content-type": "application/octet-stream" } : init.body !== undefined ? { "content-type": "application/json" } : undefined,
+    body: init.raw ?? (init.body !== undefined ? JSON.stringify(init.body) : undefined),
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;

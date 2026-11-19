@@ -431,6 +431,54 @@ describe("content pillars (P2-01: single source, owner-edited)", () => {
   });
 });
 
+describe("document upload (P2-03: file → reviewed text → grounded proposals)", () => {
+  const upload = async (cookie: string | null, name: string, bytes: Uint8Array, origin = ORIGIN) => {
+    const res = await app.request(`/api/brain/extract-text?name=${encodeURIComponent(name)}`, {
+      method: "POST", body: bytes as Uint8Array<ArrayBuffer>,
+      headers: { ...(cookie ? { cookie } : {}), origin, "content-type": "application/octet-stream" } });
+    const text = await res.text();
+    return { status: res.status, body: text ? JSON.parse(text) : null };
+  };
+  const md = "## Audience problems\nOur buyers worry that one convincing invoice email could empty the company account.\n\n## Key messages\nSecurity habits should fit the way small teams already work.";
+
+  it("an editor uploads a .md file and gets its text back; nothing is stored until they create proposals", async () => {
+    const editor = await login("editor");
+    const proposalsBefore = (await call(editor, "GET", "/api/brain/proposals")).body.length;
+    const r = await upload(editor, "C:\\fakepath\\brand notes.md", new TextEncoder().encode(md));
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ name: "brand notes.md", kind: "markdown", text: md, truncated: false });
+    expect((await call(editor, "GET", "/api/brain/proposals")).body.length).toBe(proposalsBefore);   // no side effects
+
+    // The reviewed text goes through the normal ingest: every proposal quotes the uploaded text word for word.
+    const ing = await call(editor, "POST", "/api/brain/ingest", { name: r.body.name, text: r.body.text });
+    expect(ing.status).toBe(200);
+    expect(ing.body, JSON.stringify(ing.body)).toMatchObject({ dropped: [] });
+    expect(ing.body.proposalIds.length).toBe(2);
+    const proposals = (await call(editor, "GET", "/api/brain/proposals?status=pending")).body as Array<{ id: string; evidence: Array<{ quote: string; source: string }> }>;
+    for (const id of ing.body.proposalIds as string[]) {
+      const p = proposals.find((x) => x.id === id)!;
+      expect(p.evidence[0]!.source).toBe("brand notes.md");
+      expect(md).toContain(p.evidence[0]!.quote);
+    }
+  });
+
+  it("refuses PDFs (not switched on yet), other types and binary files with a clear message", async () => {
+    const editor = await login("editor");
+    const pdf = await upload(editor, "guide.pdf", new TextEncoder().encode("%PDF-1.7\n1 0 obj"));
+    expect(pdf.status).toBe(422);
+    expect(pdf.body.error).toMatch(/PDF upload is not switched on yet/);
+    expect((await upload(editor, "deck.docx", new TextEncoder().encode(md))).status).toBe(422);
+    expect((await upload(editor, "fake.txt", new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]))).status).toBe(422);
+  });
+
+  it("enforces size, sign-in and same-origin", async () => {
+    const editor = await login("editor");
+    expect((await upload(editor, "big.txt", new Uint8Array(300 * 1024).fill(0x61))).status).toBe(413);
+    expect((await upload(null, "notes.md", new TextEncoder().encode(md))).status).toBe(401);
+    expect((await upload(editor, "notes.md", new TextEncoder().encode(md), "https://evil.example")).status).toBe(403);
+  });
+});
+
 describe("account names (P2-04: owner-edited, used for new drafts)", () => {
   it("only the owner can rename; the new name reaches the writer for new drafts; bad names are refused", async () => {
     const editor = await login("editor");

@@ -24,6 +24,7 @@ import {
   validateIdentity, VISUAL_IDENTITY_KEY, type VisualBrief,
 } from "@lbe/render";
 import { dbErrorStatus, type Db } from "./db.ts";
+import { DocumentError, extractDocumentText } from "./documents.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 
 export interface LinkedInDeps {
@@ -575,6 +576,22 @@ export function createApp(deps: AppDeps) {
   api.post("/brain/ingest", async (c) => {
     const b = await json(c, z.object({ name: z.string().min(1).max(200), text: z.string().min(20).max(50000) }));
     return c.json(await ingestSourceMaterial(agentDeps(c.get("session")), { name: b.name, text: b.text }));
+  });
+
+  // P2-03: uploaded file (raw bytes, name in ?name=) → plain text for the user to review in the paste box before
+  // "Create proposals". Nothing is stored and no AI call is made. Same roles as ingest. The access log records the
+  // route pattern only, so file names are not logged.
+  api.post("/brain/extract-text", async (c) => {
+    if (!["editor", "approver", "admin"].includes(c.get("user").role)) {
+      throw new HTTPException(403, { message: "your role cannot add documents" });
+    }
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    try {
+      return c.json(extractDocumentText({ name: c.req.query("name") ?? "", bytes }));
+    } catch (e) {
+      if (e instanceof DocumentError) throw new HTTPException(422, { message: e.message });
+      throw e;
+    }
   });
 
   api.get("/brain/proposals", async (c) => {
