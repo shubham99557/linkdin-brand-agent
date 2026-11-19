@@ -13,7 +13,7 @@ _Updated 2026-11-19 (Phase 1)._
 | A-05 | Only an admin may reconcile ambiguous publications. | `reconcile_publication` |
 | A-06 | Posts are UK English, 120–250 words, ≤3 hashtags by default. | Drafting prompt |
 | A-07 | Content pillars per account are as seeded (placeholders). | `social_accounts.pillars` |
-| A-08 | Sessions last 12 hours; 5 failed logins lock an account for 15 minutes. | `lbe.login` |
+| A-08 | Sessions last at most 12 hours and end after **60 minutes of inactivity** (P1-02); "Sign out everywhere" ends all of a user's sessions; 5 failed logins lock an account for 15 minutes. | `lbe.login`, `lbe.session_idle_timeout` (migration 0700) |
 | A-09 | The default AI model is `claude-opus-5-5` at `medium` effort, with server-side refusal fallback enabled. | `AnthropicDrafter` |
 | A-10 | All seeded users, accounts and claims are synthetic (`*.test` emails, `[SYNTHETIC]` claims). | `seed.ts` |
 

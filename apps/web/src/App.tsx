@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, type Me } from "./api.ts";
+import { api, ApiError, setSessionEndedHandler, type Me } from "./api.ts";
 import { ErrorText, StopBar } from "./components.tsx";
 import { ContentPage } from "./ContentPage.tsx";
 import { AgentPage, BrandBrainPage, WorkflowPage } from "./agentPages.tsx";
@@ -23,7 +23,7 @@ const NAV: Array<[string, string]> = [
   ["/outbox", "Publishing outbox"], ["/mock", "Mock LinkedIn"], ["/audit", "Audit log"], ["/capabilities", "LinkedIn capabilities"],
 ];
 
-function Login({ onLogin }: { onLogin: () => void }) {
+function Login({ onLogin, notice }: { onLogin: () => void; notice?: string | null }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +40,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
     }}>
       <h2>LinkedIn Brand Engine</h2>
       <p className="muted small">Phase 1 · development build · mock publishing only</p>
+      {notice && <p className="small" role="status">{notice}</p>}
       <label htmlFor="email">Email</label>
       <input id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
       <label htmlFor="password">Password</label>
@@ -55,8 +56,14 @@ export function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [checked, setChecked] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => setSessionEndedHandler(() => {
+    setMe(null);
+    setNotice("Your session ended (inactive for 60 minutes or signed out elsewhere). Please sign in again.");
+  }), []);
 
   const loadMe = () => {
+    setNotice(null);
     api<Me>("/me").then(setMe).catch((e) => {
       if (!(e instanceof ApiError && e.status === 401)) console.error(e);
       setMe(null);
@@ -66,7 +73,7 @@ export function App() {
   useEffect(() => setRefreshKey((k) => k + 1), [route]);
 
   if (!checked) return null;
-  if (!me) return <Login onLogin={loadMe} />;
+  if (!me) return <Login onLogin={loadMe} notice={notice} />;
 
   const contentMatch = route.match(/^\/content\/([0-9a-f-]{36})$/);
   const workflowMatch = route.match(/^\/agent\/([0-9a-f-]{36})$/);
@@ -96,7 +103,10 @@ export function App() {
         <div className="who">
           Signed in as <strong>{me.display_name}</strong><br />{me.email} · {me.role}
           <div style={{ marginTop: 8 }}>
-            <button onClick={async () => { await api("/auth/logout", { method: "POST" }); setMe(null); }}>Sign out</button>
+            <button onClick={async () => { await api("/auth/logout", { method: "POST" }); setMe(null); }}>Sign out</button>{" "}
+            <button title="Ends your sessions in every browser and device" onClick={async () => {
+              await api("/auth/logout-all", { method: "POST" }); setMe(null); setNotice("Signed out on all devices.");
+            }}>Sign out everywhere</button>
           </div>
         </div>
       </nav>

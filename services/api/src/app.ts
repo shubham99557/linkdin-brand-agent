@@ -209,6 +209,13 @@ export function createApp(deps: AppDeps) {
     return c.json({ ok: true });
   });
 
+  // Sign out everywhere: revokes every session of the current user (all browsers/devices).
+  api.post("/auth/logout-all", async (c) => {
+    const revoked = await one<number>("select lbe.logout_all($1)", [c.get("session")]);
+    deleteCookie(c, SESSION_COOKIE, { path: "/" });
+    return c.json({ ok: true, sessions_revoked: revoked });
+  });
+
   api.get("/me", (c) => {
     const user = c.get("user");
     return c.json({ ...user, hints: ROLE_HINTS[user.role] });

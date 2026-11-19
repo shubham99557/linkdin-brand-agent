@@ -9,7 +9,7 @@ async function signIn(page: Page, email: string, password: string) {
   await expect(page.getByText("Signed in as")).toBeVisible();
 }
 async function signOut(page: Page) {
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 }
 
@@ -19,6 +19,18 @@ test("rejects a wrong password", async ({ page }) => {
   await page.getByLabel("Password").fill("not-the-password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("alert")).toHaveText("invalid email or password");
+});
+
+test("sign out everywhere ends other browser sessions, which then see the sign-in notice", async ({ page, browser }) => {
+  const other = await (await browser.newContext()).newPage();
+  await signIn(other, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await page.getByRole("button", { name: "Sign out everywhere" }).click();
+  await expect(page.getByRole("status")).toHaveText("Signed out on all devices.");
+  await other.getByRole("link", { name: "Claims register" }).click();     // next request from the other browser → 401
+  await expect(other.getByRole("status")).toContainText("Your session ended");
+  await expect(other.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await other.context().close();
 });
 
 test("full mock vertical slice through the dashboard", async ({ page }) => {

@@ -16,7 +16,7 @@ const WORKER = ["claim_outbox", "complete_outbox", "expire_credentials", "expire
   "worker_get_credential", "worker_mark_credential"];
 const API = ["begin_oauth", "brain_decide_proposal", "brain_list_proposals", "brain_load", "brain_propose", "brain_retire_entry",
   "brain_upsert_entry", "cancel_publication", "consume_oauth_state", "create_claim", "create_content", "decide_content",
-  "enqueue_publication", "is_stopped", "learning_inputs", "login", "logout", "reconcile_publication", "record_agent_run",
+  "enqueue_publication", "is_stopped", "learning_inputs", "login", "logout", "logout_all", "reconcile_publication", "record_agent_run",
   "release_publication", "research_list", "research_record", "research_review", "research_to_claim", "revoke_linkedin_credential",
   "set_agent_metadata", "set_claim_status", "set_draft_output", "set_live_publishing", "set_stop", "store_linkedin_credential",
   "strategy_save", "submit_for_review", "update_content", "whoami", "workflow_create", "workflow_finish", "workflow_get",
@@ -32,7 +32,8 @@ describe("function execute privileges match the reviewed allowlists", () => {
     expect(rows).toEqual([]);
   });
   it("operator-only functions are not granted to any application role", async () => {
-    for (const fn of ["platform_set_stop", "purge_expired_sessions", "admin_create_user", "brain_write_entry", "require_user", "subject_org"]) {
+    for (const fn of ["platform_set_stop", "purge_expired_sessions", "admin_create_user", "brain_write_entry", "require_user", "subject_org",
+      "session_user_touch", "session_idle_timeout"]) {
       for (const role of ["lbe_api", "lbe_worker", "lbe_agent"]) {
         const [r] = await t.db.query<{ ok: boolean }>(`select bool_or(has_function_privilege($1, p.oid, 'execute')) as ok
           from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'lbe' and p.proname = $2`, [role, fn]);

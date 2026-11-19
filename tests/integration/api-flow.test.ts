@@ -104,6 +104,22 @@ describe("authentication & request hygiene", () => {
     expect((await call(cookie, "GET", "/api/me")).status).toBe(401);
   });
 
+  it("sign out everywhere ends all of the user's sessions and clears the cookie", async () => {
+    const one = await login("approver");
+    const two = await login("approver");
+    const r = await call(one, "POST", "/api/auth/logout-all");
+    expect(r.status).toBe(200);
+    expect(r.body.sessions_revoked).toBeGreaterThanOrEqual(2);
+    expect(r.headers.get("set-cookie")).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/);
+    expect((await call(two, "GET", "/api/me")).status).toBe(401);
+  });
+
+  it("refuses sign out everywhere from another origin (CSRF)", async () => {
+    const cookie = await login("editor");
+    expect((await call(cookie, "POST", "/api/auth/logout-all", undefined, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await call(cookie, "GET", "/api/me")).status).toBe(200);
+  });
+
   it("internal job endpoint requires the bearer token", async () => {
     const bad = await app.request("/api/internal/publisher-tick", { method: "POST", headers: { authorization: "Bearer nope" } });
     expect(bad.status).toBe(401);

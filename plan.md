@@ -17,13 +17,13 @@
 |---|---|
 | Current phase | **Phase 1 — Security & engineering foundation** (Phase 0 DONE) |
 | Active task | — |
-| Next READY tasks | **P1-02 sessions** · P2-01 pillars UI · P4-01 durable jobs · P3-01 pricing check · P5-00 render dependency review |
+| Next READY tasks | **P1-03 user management** · P2-01 pillars UI · P4-01 durable jobs · P3-01 pricing check · P5-00 render dependency review |
 | First safe milestone | **M1 Technical prototype hardened** — P1-01..05 + P2-01/02 need no external action |
-| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups |
+| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions |
 | Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · P0-07 off-machine code backup |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9) |
-| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 281 ✅ (9 PG skipped there) · `test:pg:embedded` 9/9 ✅ · Playwright 6 ✅ · secret scan ✅ · npm audit 0 ✅ |
-| Latest commit | see `git log -1` (P1-01 commit follows `6429aaa`) |
+| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 290 ✅ (9 PG skipped there) · `test:pg:embedded` 9/9 ✅ · Playwright 7 ✅ · secret scan ✅ · npm audit 0 ✅ |
+| Latest commit | see `git log -1` (P1-02 follows `2ad93b5`) |
 | Next milestone | **M1 Technical prototype hardened** → then **M2 AI intelligence evaluation** (needs OA-3, OA-6) |
 
 No completion percentage is reported (no agreed weighting method).
@@ -192,8 +192,8 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
 |---|---|---|---|---|---|---|---|---|
 | P1-01 | **DB backup & tested restore** (`db:backup`, `db:restore`; PGlite now, `pg_dump` documented for PostgreSQL URLs). **Evidence 2026-11-19:** `tests/db/backup-restore.test.ts` 5/5; staging backup + verified restore (6 migrations, 13 rows); refusals verified (server running, non-empty target, outside `.data/`) | — | P0 | DONE | C | scripts/, services/api/src/cli, docs/migrations-runbook.md | Backup of dev & staging; restore into new dir reproduces row counts & checksums; refuses to overwrite a running/live DB | `tests/db/backup-restore.test.ts`, manual run |
-| P1-02 | Session hardening: idle timeout, sign-out-everywhere | — | P1 | READY | C | migration 0700, app.ts, web | Idle sessions rejected; revoke-all works; tests | `tests/db/sessions.test.ts` |
-| P1-03 | Admin user management UI (create/disable users, approver assignment) — no emails | P1-02 | P1 | NOT_STARTED | C | migration, app.ts, web | Admin-only; audited; org-scoped; tests | integration test |
+| P1-02 | Session hardening: idle timeout (60 min, DB-enforced in `require_user`/`whoami`), sign-out-everywhere (`lbe.logout_all`, `POST /api/auth/logout-all`, dashboard button + "session ended" notice). **Evidence 2026-11-19:** `tests/db/sessions.test.ts` 7/7 (mutation: removing idle check → 1 failure); api-flow +2; e2e +1 (7/7); privilege snapshot updated; PG concurrency 9/9 | — | P1 | DONE | C | migration 0700, app.ts, web | Idle sessions rejected; revoke-all works; tests | `tests/db/sessions.test.ts` |
+| P1-03 | Admin user management UI (create/disable users, approver assignment, admin "end user's sessions"; disabling revokes sessions) — no emails | P1-02 | P1 | READY | C | migration, app.ts, web | Admin-only; audited; org-scoped; tests | integration test |
 | P1-04 | Structured error logging & request IDs (no secrets/PII in logs) | — | P2 | NOT_STARTED | C | app.ts | Every 5xx logged with request id; secret-leak test still passes | test |
 | P1-05 | Security review sign-off for internal MVP; list SaaS blockers | P1-01..04 | P1 | NOT_STARTED | C | docs/hardening-report.md | Findings table updated | doc |
 

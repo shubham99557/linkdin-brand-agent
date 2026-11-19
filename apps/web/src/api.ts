@@ -4,6 +4,9 @@ export class ApiError extends Error {
   }
 }
 
+let onSessionEnded: (() => void) | undefined;
+export const setSessionEndedHandler = (fn: () => void) => { onSessionEnded = fn; };
+
 export async function api<T = unknown>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: init.method ?? "GET",
@@ -13,6 +16,8 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
+  // Session ended (idle timeout, signed out elsewhere): tell the app so it can show the sign-in form.
+  if (res.status === 401 && path !== "/auth/login" && path !== "/me") onSessionEnded?.();
   if (!res.ok) throw new ApiError(res.status, (data && data.error) || `Request failed (${res.status})`);
   return data as T;
 }
