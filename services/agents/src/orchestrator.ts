@@ -117,6 +117,9 @@ export interface WorkflowInput {
 const KINDS = ["company_page", "founder_profile"] as const;
 type Kind = (typeof KINDS)[number];
 
+/** The opening line of a post (what LinkedIn shows before "see more"). */
+const firstLine = (body: unknown) => (typeof body === "string" ? body.trim().split(/\n|(?<=[.!?])\s/)[0]?.trim().slice(0, 200) ?? "" : "");
+
 /** Drafts already decided by the pipeline (submitted for review, or held with blocking issues) — not touched again. */
 const isSettled = (d: SavedDraft) => !!d.body && (d.status !== "draft" || (d.unsupported ?? []).length > 0);
 
@@ -307,7 +310,9 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
         await checkpoint("drafting", { done: drafts.length, total: totalDrafts });
         drafts.push(await draftOne(deps, { workflowId, item, acct, group, startDate, brandContext, voice: voices[acct.kind].text,
           itemFindings, allFindings: findings, itemClaims, terms, identity: entriesFor(brain, "identity").map((e) => e.body).join("\n"), budget,
-          existing, limits }));
+          existing, limits,
+          // P3-03: the writer sees how earlier posts in this plan open, so it can open differently (originality check).
+          otherOpenings: drafts.map((d) => firstLine(d.body)).filter(Boolean) }));
       }
     }
 
@@ -358,6 +363,7 @@ async function draftOne(deps: AgentDeps, p: {
   /** Resume: the draft an earlier attempt already created for this plan item and account (not yet settled). */
   existing?: SavedDraft;
   limits: StepTimeouts;
+  otherOpenings?: string[];
 }): Promise<Record<string, unknown>> {
   const { one, recordRun } = helpers(deps);
   const pillar = p.existing?.pillar ?? p.item.pillars[p.acct.kind];
@@ -394,6 +400,7 @@ async function draftOne(deps: AgentDeps, p: {
     (signal) => deps.writer.draft({
       accountKind: p.acct.kind, accountName: p.acct.display_name, voiceProfile: p.voice, pillar,
       allowedPillars: p.acct.pillars, brief, sourceMaterial, claims: p.itemClaims, brandContext: p.brandContext,
+      otherOpenings: p.otherOpenings,
     }, { signal }), (message) => ({ kind: "error" as const, message }));
   const writerMeta = { provider: deps.writer.provider, model: deps.writer.model, promptVersion: DRAFT_PROMPT_VERSION };
   p.budget.add(`draft:${p.acct.kind}`, deps.writer.model, written.kind === "ok" ? written.usage : undefined, deps.writer.provider);

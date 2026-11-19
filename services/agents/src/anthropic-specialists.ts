@@ -80,14 +80,20 @@ abstract class StructuredSpecialist<I> implements Specialist<I> {
 
 export class AnthropicStrategySpecialist extends StructuredSpecialist<StrategyInput> {
   readonly role = "content_strategy" as const;
-  readonly promptVersion = "strategy.v1";
+  readonly promptVersion = "strategy.v2";
   protected schema = StrategyOutputSchema;
   protected system(i: StrategyInput) {
     return [
       "You are the Content Strategy Specialist for a B2B cybersecurity brand on LinkedIn. You plan; you never write final posts, approve, or publish.",
       `Produce exactly ${i.postCount} items spread across ${i.days} days starting ${i.startDate}. Each item is posted by BOTH the company page and the founder (different voices), so choose a pillar for each from its approved list.`,
-      "Use only the approved brand context. Where it says UNKNOWN, do not invent; plan around the gap.",
-      "Only reference finding_ids and claim_ids that appear in the inputs. Do not repeat recent topics. Never plan a prohibited topic.",
+      "Plan for the ideal customers in the brand context: each item addresses one concrete problem they have (state it in audience_problem, " +
+        "using the audience-problems section where it exists), and its objective serves the goal — the goal may name a campaign objective and a weekly focus; follow both. " +
+        "Where the ideal-customer or problem sections are UNKNOWN, choose problems any UK business would recognise and keep claims general.",
+      "The plan is read as a set: make the items distinct from each other and from the recent topics in the problem they address and in their angle " +
+        "(for example a story, a practical checklist, a myth corrected, a question for leaders). Prefer angles a generic security vendor could not post — " +
+        "ones that use the brand's point of view, a research finding or a verified claim. The system drops any item too similar to recent content, so a near-repeat is wasted.",
+      "Use only the approved brand context; where it says UNKNOWN, plan around the gap rather than inventing. Reference only finding_ids and claim_ids " +
+        "that appear in the inputs, and never plan a prohibited topic.",
       UNTRUSTED_NOTE,
       "<brand_context>", i.brandContext, "</brand_context>",
     ].join("\n");
@@ -104,12 +110,16 @@ export class AnthropicStrategySpecialist extends StructuredSpecialist<StrategyIn
 
 export class AnthropicCreativeSpecialist extends StructuredSpecialist<CreativeInput> {
   readonly role = "creative_brief" as const;
-  readonly promptVersion = "creative.v1";
+  readonly promptVersion = "creative.v2";
   protected schema = CreativeOutputSchema;
   protected system(i: CreativeInput) {
     return [
-      "You are the Creative Brief Specialist. Write a brief for a designer to produce the visual for an approved-for-review LinkedIn post.",
-      "Use only words and facts that already appear in the post. Never add statistics, customer names, certifications or claims.",
+      "You are the Creative Brief Specialist. Write a brief for the visual of a LinkedIn post that a human will review. The brief is rendered " +
+        "automatically into branded slides: the headline and each slide's title and text appear on the image exactly as you write them.",
+      "Choose the format that helps the reader: document_carousel when the post has steps or several points worth a slide each (the headline becomes the cover; up to 9 further slides), " +
+        "single_image for one strong message, text_only when a visual would add nothing.",
+      "Use only words and facts that already appear in the post. Never add statistics, customer names, certifications or claims — the post's facts were checked, the visual's would not be.",
+      "alt_text is read aloud to screen-reader users and published with the image: describe what the visual shows, including the text on it, in one or two full sentences.",
       "Follow the visual identity; where it is UNKNOWN, keep direction neutral and say so.",
       `Never use these terms: ${JSON.stringify(i.prohibitedTerms)}`,
       `<visual_identity>\n${i.visualIdentity || "UNKNOWN"}\n</visual_identity>`,

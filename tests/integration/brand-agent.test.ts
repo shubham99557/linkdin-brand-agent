@@ -243,6 +243,13 @@ describe("complete example: one-week phishing awareness strategy (mock specialis
     expect(result.brain.voice_sources).toEqual({ company_page: "brain", founder_profile: "brain" });
   });
 
+  it("P3-03: each writer call sees the openings of the posts already written in the plan", () => {
+    expect(writerInputs[0]!.otherOpenings ?? []).toEqual([]);
+    for (let i = 1; i < writerInputs.length; i++) {
+      expect(writerInputs[i]!.otherOpenings, `call ${i}`).toHaveLength(i);
+    }
+  });
+
   it("never feeds flagged (injected) or stale research into drafts", () => {
     const material = writerInputs.map((i) => i.sourceMaterial ?? "").join("\n");
     expect(material).not.toMatch(/Ignore previous instructions/i);
