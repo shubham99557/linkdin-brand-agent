@@ -30,6 +30,23 @@ export interface AgentDeps {
   now?: () => Date;
   /** Hard ceiling on estimated model spend for one workflow (USD). Calls stop once reached. */
   budgetUsd?: number;
+  /**
+   * Called at each step boundary (durable job runner: heartbeat + progress). Returning "cancel" stops the
+   * workflow before the next model call; work already saved (drafts, findings) is kept.
+   */
+  onProgress?: (p: WorkflowProgress) => Promise<void | "cancel">;
+}
+
+export interface WorkflowProgress {
+  stage: "started" | "research" | "strategy" | "drafting" | "finishing";
+  workflowId: string;
+  done?: number;
+  total?: number;
+  estimatedUsd?: number;
+}
+
+export class WorkflowCancelledError extends Error {
+  constructor() { super("cancelled by user"); this.name = "WorkflowCancelledError"; }
 }
 
 export interface WorkflowInput {
@@ -81,8 +98,13 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     [deps.session, goal, JSON.stringify({ startDate, days, postCount, region: input.region ?? "UK", audience: input.audience ?? null })]);
   const warnings: string[] = [];
   const budget = new Budget(deps.budgetUsd ?? null);
+  const checkpoint = async (stage: WorkflowProgress["stage"], extra: Partial<WorkflowProgress> = {}) => {
+    if (!deps.onProgress) return;
+    if ((await deps.onProgress({ stage, workflowId, estimatedUsd: budget.spentUsd, ...extra })) === "cancel") throw new WorkflowCancelledError();
+  };
 
   try {
+    await checkpoint("started");
     // 1. Brand Brain (org-scoped by the database)
     const brain = await loadBrain(deps);
     const brandContext = buildBrandContext(brain);
@@ -98,6 +120,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     if (accounts.length === 0) throw new Error("no social accounts configured for this organization");
 
     // 2. Research
+    await checkpoint("research");
     const researchStarted = new Date().toISOString();
     const research = await deps.specialists.research.run({
       goal, region: input.region ?? "UK", audience: input.audience ?? (entriesFor(brain, "icp")[0]?.body.slice(0, 500) ?? "UNKNOWN"),
@@ -133,6 +156,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
 
     // 3. Strategy
     if (budget.exhausted) throw new Error(`budget of $${budget.maxUsd} reached after research ($${budget.spentUsd}) — strategy not started`);
+    await checkpoint("strategy");
     const recentTopics = brain.recent_topics.map((t) => t.topic);
     const strategyStarted = new Date().toISOString();
     const strategyRaw = await deps.specialists.strategy.run({
@@ -173,6 +197,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     }
     const claimsById = new Map(brain.claims.map((c) => [c.id, c]));
     const drafts: Array<Record<string, unknown>> = [];
+    const totalDrafts = sv.strategy.items.length * accounts.length;
 
     outer: for (const item of sv.strategy.items) {
       const group = randomUUID();
@@ -185,12 +210,14 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
           warnings.push(`Budget of $${budget.maxUsd} reached ($${budget.spentUsd}); remaining drafts were not created.`);
           break outer;
         }
+        await checkpoint("drafting", { done: drafts.length, total: totalDrafts });
         drafts.push(await draftOne(deps, { workflowId, item, acct, group, startDate, brandContext, voice: voices[acct.kind].text,
           itemFindings, allFindings: findings, itemClaims, terms, identity: entriesFor(brain, "identity").map((e) => e.body).join("\n"), budget }));
       }
     }
 
     // 8. Report
+    await checkpoint("finishing", { done: drafts.length, total: totalDrafts });
     const used = new Map<string, number>();
     for (const d of drafts) for (const c of (d.citations as Array<{ claim_id: string }>)) used.set(c.claim_id, (used.get(c.claim_id) ?? 0) + 1);
     const result = {
@@ -221,7 +248,9 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     return { workflowId, result };
   } catch (err) {
     const message = (err as Error).message;
-    await one("select lbe.workflow_finish($1, $2, 'failed', $3::jsonb, $4)", [deps.session, workflowId, JSON.stringify({ warnings }), message]).catch(() => undefined);
+    const status = err instanceof WorkflowCancelledError ? "cancelled" : "failed";
+    await one("select lbe.workflow_finish($1, $2, $3, $4::jsonb, $5)", [deps.session, workflowId, status,
+      JSON.stringify({ warnings, cost: { estimated_usd: budget.spentUsd } }), message]).catch(() => undefined);
     throw err;
   }
 }

@@ -6,6 +6,7 @@ import { MockDrafter, type Drafter, type DraftInput, type DraftResult } from "@l
 import { MockLinkedInProvider } from "@lbe/publishing";
 import { createApp } from "../../services/api/src/app.ts";
 import { dbMockStore, runPublisherTick } from "../../services/api/src/jobs/publisher.ts";
+import { runAgentJobTick } from "../../services/api/src/jobs/agent-runner.ts";
 import { expectCode, freshDb, TEST_PASSWORDS, type TestDb } from "../helpers/db.ts";
 
 const ORIGIN = "http://localhost:5173";
@@ -16,6 +17,8 @@ let specialists: Specialists;
 let writerOverride: ((i: DraftInput) => DraftResult) | undefined;
 const writerInputs: DraftInput[] = [];
 let orgB: { org: string; account: string; password: string };
+let testWriter: Drafter;
+const app_writer = () => testWriter;
 
 const EMAIL = { admin: "admin@lbe.test", approver: "marketing@lbe.test", founder: "founder@lbe.test", editor: "editor@lbe.test",
   adminB: "admin@other.test" } as const;
@@ -25,6 +28,7 @@ beforeAll(async () => {
   t = await freshDb();
   const real = new MockDrafter();
   const writer: Drafter = { provider: "mock", model: "mock-drafter-v1", draft: async (i) => { writerInputs.push(i); return writerOverride ? writerOverride(i) : real.draft(i); } };
+  testWriter = writer;
   specialists = mockSpecialists();
   app = createApp({
     db: t.db, drafter: writer, provider: new MockLinkedInProvider(dbMockStore(t.db)), specialists,
@@ -51,6 +55,16 @@ async function call(cookie: string, method: string, url: string, body?: unknown)
     body: body !== undefined ? JSON.stringify(body) : undefined });
   const text = await res.text();
   return { status: res.status, body: text ? JSON.parse(text) : null };
+}
+/** Queue a workflow through the API (202 + job id), run the durable job runner once, return the finished workflow. */
+async function runWorkflow(cookie: string, body: Record<string, unknown>) {
+  const queued = await call(cookie, "POST", "/api/agent/workflows", body);
+  expect(queued.status).toBe(202);
+  const tick = await runAgentJobTick({ db: t.db, specialists, writer: app_writer(), voiceDir: path.resolve(import.meta.dirname, "../../brand/voice"), workerId: "it-runner" });
+  expect(tick.job?.id).toBe(queued.body.job_id);
+  const job = (await call(cookie, "GET", `/api/agent/jobs/${queued.body.job_id}`)).body;
+  const wf = job.workflow_id ? (await call(cookie, "GET", `/api/agent/workflows/${job.workflow_id}`)).body : null;
+  return { status: job.status === "succeeded" ? 201 : 500, job, body: { workflow_id: job.workflow_id, result: wf?.result } };
 }
 const asAgent = (sql: string, params: unknown[] = []) => t.db.tx("lbe_agent", (q) => q.query(sql, params));
 const count = async (sql: string, params: unknown[] = []) => (await t.db.query<{ n: number }>(sql, params))[0]!.n;
@@ -181,7 +195,7 @@ describe("complete example: one-week phishing awareness strategy (mock specialis
     const outboxBefore = await count("select count(*)::int as n from lbe.publication_outbox");
     writerInputs.length = 0;
     const editor = await login("editor");
-    const r = await call(editor, "POST", "/api/agent/workflows", { goal: GOAL, start_date: "2026-11-23", days: 7 });
+    const r = await runWorkflow(editor, { goal: GOAL, start_date: "2026-11-23", days: 7 });
     expect(r.status).toBe(201);
     workflowId = r.body.workflow_id;
     result = r.body.result;
@@ -246,7 +260,7 @@ describe("complete example: one-week phishing awareness strategy (mock specialis
 
   it("does not recommend duplicates of recent content on the next run", async () => {
     const editor = await login("editor");
-    const r = await call(editor, "POST", "/api/agent/workflows", { goal: GOAL, start_date: "2026-11-30", days: 7 });
+    const r = await runWorkflow(editor, { goal: GOAL, start_date: "2026-11-30", days: 7 });
     expect(r.status).toBe(201);
     const dropped = r.body.result.strategy.dropped as Array<{ reason: string }>;
     expect(dropped.length).toBeGreaterThan(0);
@@ -277,7 +291,7 @@ describe("safety: unsupported claims, injection and approval bypass", () => {
       body: i.accountKind === "company_page" ? "ActTrident blocks 99% of phishing attacks." : "Our approach makes you unhackable.",
       hook_variants: [], claims_used: [], unsupported_statements: [], notes_for_reviewer: "" } });
     const editor = await login("editor");
-    const r = await call(editor, "POST", "/api/agent/workflows", { goal: "Week of posts on ransomware readiness for UK firms", start_date: "2026-12-07" });
+    const r = await runWorkflow(editor, { goal: "Week of posts on ransomware readiness for UK firms", start_date: "2026-12-07" });
     writerOverride = undefined;
     expect(r.status).toBe(201);
     const drafts = r.body.result.drafts as Array<{ status: string; unsupported: string[]; account_kind: string }>;
@@ -288,7 +302,7 @@ describe("safety: unsupported claims, injection and approval bypass", () => {
   it("model output that tries to set extra fields (e.g. approval) is rejected", async () => {
     writerOverride = () => ({ kind: "ok", raw: { body: "x", hook_variants: [], claims_used: [], unsupported_statements: [], notes_for_reviewer: "", status: "approved" } });
     const editor = await login("editor");
-    const r = await call(editor, "POST", "/api/agent/workflows", { goal: "Supply-chain security week", start_date: "2026-12-14" });
+    const r = await runWorkflow(editor, { goal: "Supply-chain security week", start_date: "2026-12-14" });
     writerOverride = undefined;
     expect(r.body.result.drafts.every((d: { status: string; error?: string }) => d.status === "draft" && /schema validation/.test(d.error ?? ""))).toBe(true);
   });
@@ -299,7 +313,7 @@ describe("safety: unsupported claims, injection and approval bypass", () => {
       summary: "s", items: [{ day: 1, topic: "t", angle: "a", objective: "o", audience_problem: "p",
         pillars: { company_page: "security-culture", founder_profile: "founder-lessons" }, finding_ids: [], claim_ids: [], publish_immediately: true }] } }) }).strategy;
     const editor = await login("editor");
-    const r = await call(editor, "POST", "/api/agent/workflows", { goal: "Injected strategy test" });
+    const r = await runWorkflow(editor, { goal: "Injected strategy test" });
     (specialists as { strategy: Specialists["strategy"] }).strategy = original;
     expect(r.status).toBe(500);
     const list = (await call(editor, "GET", "/api/agent/workflows")).body as Array<{ goal: string; status: string }>;
@@ -385,7 +399,7 @@ describe("content pillars (P2-01: single source, owner-edited)", () => {
     expect((await call(editor, "GET", "/api/brain")).body.accounts.find((a: { id: string }) => a.id === company).pillars)
       .toEqual(["awareness-habits", "incident-readiness"]);
 
-    const wf = await call(editor, "POST", "/api/agent/workflows", { goal: "Password manager adoption week", start_date: "2027-01-04" });
+    const wf = await runWorkflow(editor, { goal: "Password manager adoption week", start_date: "2027-01-04" });
     expect(wf.status).toBe(201);
     const items = wf.body.result.strategy.items as Array<{ pillars: { company_page: string } }>;
     expect(items.length).toBeGreaterThan(0);
@@ -414,7 +428,7 @@ describe("missing knowledge", () => {
   it("a workflow for an organization with an empty Brand Brain reports gaps and marks them UNKNOWN", async () => {
     const b = await login("adminB");
     writerInputs.length = 0;
-    const r = await call(b, "POST", "/api/agent/workflows", { goal: "Introduce Other Co on LinkedIn" });
+    const r = await runWorkflow(b, { goal: "Introduce Other Co on LinkedIn" });
     expect(r.status).toBe(201);
     expect(r.body.result.brain.missing_sections).toContain("product");
     expect(r.body.result.warnings.join(" ")).toMatch(/Brand Brain is missing/);

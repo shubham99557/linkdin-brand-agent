@@ -334,6 +334,25 @@ memberships, billing, customer onboarding and per-tenant apps to Phase 10. No in
 `ai-social-media-team`. Root `plan.md` is the single execution plan; ADRs remain the architectural record.
 Supersedes the phase numbering in `docs/implementation-roadmap.md` (kept for history).
 
+## ADR-028 — Durable agent jobs with database-minted job sessions (P4-01)
+**Decision.** Branding Agent workflows run as durable jobs (`lbe.agent_jobs`), not inside HTTP requests. The API
+enqueues (`job_enqueue`, editor+), and a runner (`lbe_worker`) claims a job with `FOR UPDATE SKIP LOCKED` and a
+lease, heartbeats progress, and finishes it. At claim time the database mints a **job session** for the
+requesting user. Only its hash is stored. It expires with the lease and is revoked at finish or interruption.
+`require_user` accepts job sessions, so every role and organization rule applies unchanged, and the
+orchestrator still runs as `lbe_agent`. `whoami` refuses them, so a job session can never sign in to the
+dashboard or API. No browser session is ever stored or handed to a runner.
+
+**Consequences.**
+- A runner that dies leaves an expired lease. The job becomes `interrupted` and the workflow `failed`. It is
+  **not** re-run automatically, because that could duplicate drafts; checkpointed resume is P4-02.
+- Cancellation: a queued job is cancelled at once; a running job stops at the next step boundary, and work
+  already saved is kept.
+- A limit of 5 queued or running jobs per organization.
+- "Sign out everywhere" and disabling a user also end that user's running jobs, by design.
+- Accepted risk: `lbe_worker` can act as a job's requester for the life of the lease. It is limited to the
+  requester's own permissions, and the agent role still cannot approve or publish.
+
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried
 automatically, with exponential backoff (30 s × 2ⁿ, max 1 h, max 5 attempts). Timeouts, 5xx, thrown errors,

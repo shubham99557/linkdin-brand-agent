@@ -57,7 +57,22 @@ if (process.argv.includes("--with-synthetic-brain")) {
 const outboxBefore = (await editor.call<unknown[]>("GET", "/outbox")).length;
 
 console.log(`\nGoal: ${GOAL}\n`);
-const { workflow_id, result: r } = await editor.call("POST", "/agent/workflows", { goal: GOAL, days: 7 });
+// The workflow runs as a durable background job (P4-01): queue it, then follow its progress.
+const { job_id } = await editor.call<{ job_id: string }>("POST", "/agent/workflows", { goal: GOAL, days: 7 });
+let job: { status: string; workflow_id: string | null; error: string | null; progress: { stage?: string; done?: number; total?: number } };
+let lastStage = "";
+const waitUntil = Date.now() + 10 * 60_000;
+for (;;) {
+  if (Date.now() > waitUntil) { console.error("Still waiting after 10 minutes — is the server running with LBE_RUN_AGENT_JOBS=true?"); process.exit(1); }
+  job = await editor.call("GET", `/agent/jobs/${job_id}`);
+  const stage = `${job.status}/${job.progress.stage ?? ""}${job.progress.total ? ` ${job.progress.done}/${job.progress.total}` : ""}`;
+  if (stage !== lastStage) { console.log(`  job ${job.status}: ${job.progress.stage ?? "waiting"}${job.progress.total ? ` (${job.progress.done ?? 0}/${job.progress.total})` : ""}`); lastStage = stage; }
+  if (!["queued", "running"].includes(job.status)) break;
+  await new Promise((r) => setTimeout(r, 1000));
+}
+if (job.status !== "succeeded") { console.error(`Agent job ${job.status}: ${job.error ?? ""}`); process.exit(1); }
+const workflow_id = job.workflow_id!;
+const r = (await editor.call<{ result: any }>("GET", `/agent/workflows/${workflow_id}`)).result;
 
 console.log(`Brand Brain: ${r.brain.organization} · missing sections: ${r.brain.missing_sections.join(", ") || "none"} · voices: company=${r.brain.voice_sources.company_page}, founder=${r.brain.voice_sources.founder_profile}`);
 console.log(`\nRESEARCH (${r.research.provider}): ${r.research.accepted} kept, ${r.research.usable_as_evidence} usable as evidence, ${r.research.stale} stale, ${r.research.flagged} flagged, ${r.research.rejected.length} rejected`);

@@ -12,12 +12,13 @@ const executable = async (role: string) => (await t.db.query<{ proname: string }
 
 const AGENT = ["brain_load", "brain_propose", "create_content", "learning_inputs", "record_agent_run", "research_record",
   "set_agent_metadata", "set_draft_output", "strategy_save", "submit_for_review", "whoami", "workflow_create", "workflow_finish", "workflow_get"];
-const WORKER = ["claim_outbox", "complete_outbox", "expire_credentials", "expire_stale_dispatches", "is_stopped", "worker_auto_stop",
+const WORKER = ["claim_outbox", "complete_outbox", "expire_credentials", "expire_stale_dispatches", "is_stopped",
+  "job_claim", "job_finish", "job_heartbeat", "job_recover_expired", "worker_auto_stop",
   "worker_get_credential", "worker_mark_credential"];
 const API = ["admin_add_user", "admin_end_sessions", "admin_list_users", "admin_reset_password", "admin_set_approver",
   "admin_update_user", "begin_oauth", "brain_decide_proposal", "change_password", "brain_list_proposals", "brain_load", "brain_propose", "brain_retire_entry",
   "brain_upsert_entry", "cancel_publication", "consume_oauth_state", "create_claim", "create_content", "decide_content",
-  "enqueue_publication", "is_stopped", "learning_inputs", "login", "logout", "logout_all", "reconcile_publication", "record_agent_run",
+  "enqueue_publication", "is_stopped", "job_cancel", "job_enqueue", "job_get", "job_list", "learning_inputs", "login", "logout", "logout_all", "reconcile_publication", "record_agent_run",
   "release_publication", "research_list", "research_record", "research_review", "research_to_claim", "revoke_linkedin_credential",
   "set_agent_metadata", "set_claim_status", "set_draft_output", "set_account_pillars", "set_live_publishing", "set_stop", "store_linkedin_credential",
   "strategy_save", "submit_for_review", "update_content", "whoami", "workflow_create", "workflow_finish", "workflow_get",
@@ -34,7 +35,7 @@ describe("function execute privileges match the reviewed allowlists", () => {
   });
   it("operator-only functions are not granted to any application role", async () => {
     for (const fn of ["platform_set_stop", "purge_expired_sessions", "admin_create_user", "brain_write_entry", "require_user", "subject_org",
-      "session_user_touch", "session_idle_timeout", "admin_target", "revoke_user_sessions", "require_user_core"]) {
+      "session_user_touch", "session_idle_timeout", "admin_target", "revoke_user_sessions", "require_user_core", "session_resolve", "job_json"]) {
       for (const role of ["lbe_api", "lbe_worker", "lbe_agent"]) {
         const [r] = await t.db.query<{ ok: boolean }>(`select bool_or(has_function_privilege($1, p.oid, 'execute')) as ok
           from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'lbe' and p.proname = $2`, [role, fn]);
@@ -58,7 +59,7 @@ describe("SECURITY DEFINER hygiene", () => {
     const rows = await t.db.query<{ proname: string }>(
       `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'lbe' and p.prosecdef and array_to_string(p.proconfig, ',') like '%public%' order by 1`);
-    expect(rows.map((r) => r.proname)).toEqual(["admin_create_user", "admin_reset_password", "begin_oauth", "change_password", "login"]);
+    expect(rows.map((r) => r.proname)).toEqual(["admin_create_user", "admin_reset_password", "begin_oauth", "change_password", "job_claim", "login"]);
   });
   it("no application role can create objects in the public schema (search_path hijack)", async () => {
     for (const role of ["lbe_api", "lbe_worker", "lbe_agent"]) {
@@ -82,7 +83,7 @@ describe("table privileges", () => {
   it("Brand Brain, research and workflow tables are not directly readable by any application role", async () => {
     const rows = await t.db.query(`select grantee, table_name from information_schema.role_table_grants
       where table_schema = 'lbe' and grantee in ('lbe_api', 'lbe_worker', 'lbe_agent')
-        and table_name in ('brand_entries', 'brand_proposals', 'research_findings', 'agent_workflows', 'content_strategies', 'organizations', 'sessions', 'oauth_states')`);
+        and table_name in ('brand_entries', 'brand_proposals', 'research_findings', 'agent_workflows', 'content_strategies', 'organizations', 'sessions', 'oauth_states', 'agent_jobs')`);
     expect(rows).toEqual([]);
   });
 });

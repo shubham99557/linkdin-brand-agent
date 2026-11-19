@@ -27,6 +27,9 @@ const EnvSchema = z.object({
   LBE_RUN_WORKER: bool.default(true),
   LBE_WORKER_INTERVAL_MS: z.coerce.number().int().min(1000).default(15000),
   LBE_WORKER_ID: z.string().regex(/^[a-z0-9_-]{1,40}$/).default("local-worker"),
+  // Durable agent jobs (P4-01): the in-process runner that executes queued Branding Agent workflows.
+  LBE_RUN_AGENT_JOBS: bool.default(true),
+  LBE_AGENT_JOB_INTERVAL_MS: z.coerce.number().int().min(500).default(2000),
   LBE_INTERNAL_JOB_TOKEN: z.string().optional(),
   // ---- Phase 2: live LinkedIn (all optional; live publishing is OFF unless explicitly enabled) ----
   LBE_LIVE_PUBLISHING: z.enum(["on", "off"]).default("off"),

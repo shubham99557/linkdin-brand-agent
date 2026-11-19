@@ -10,6 +10,8 @@ import { LinkedInProvider, MockLinkedInProvider } from "@lbe/publishing";
 import { createApp } from "../../services/api/src/app.ts";
 import { migrate, openDb } from "../../services/api/src/db.ts";
 import { dbMockStore, dbTokenSource } from "../../services/api/src/jobs/publisher.ts";
+import { startAgentRunner } from "../../services/api/src/jobs/agent-runner.ts";
+import { mockSpecialists } from "@lbe/agents";
 import { seed } from "../../services/api/src/seed.ts";
 import { TEST_PASSWORDS } from "../helpers/db.ts";
 import { startFakeLinkedIn } from "../helpers/fake-linkedin.ts";
@@ -41,6 +43,9 @@ const app = createApp({
   workerId: "e2e",
   log: () => undefined,
 });
+// Agent jobs run in the background, as in the real server (fast interval for tests).
+startAgentRunner({ db, specialists: mockSpecialists(), writer: new MockDrafter(), voiceDir: path.join(root, "brand", "voice"),
+  workerId: "e2e-agent", intervalMs: 300 });
 // Lets tests assert what the fake LinkedIn received.
 app.get("/__fake/posts", (c) => c.json(fake.posts));
 const dist = path.relative(process.cwd(), path.join(root, "apps", "web", "dist"));

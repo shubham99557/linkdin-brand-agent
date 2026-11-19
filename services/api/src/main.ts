@@ -6,6 +6,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { redactForLog } from "@lbe/security";
 import { createApp } from "./app.ts";
 import { loadConfig, REPO_ROOT } from "./config.ts";
+import { startAgentRunner } from "./jobs/agent-runner.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 import { buildDrafter, buildLinkedIn, buildProvider, buildRegistry, buildSpecialists, openConfiguredDb, VOICE_DIR, WEB_DIST } from "./runtime.ts";
 
@@ -51,6 +52,13 @@ if (cfg.LBE_RUN_WORKER) {
   }, cfg.LBE_WORKER_INTERVAL_MS);
 }
 
+if (cfg.LBE_RUN_AGENT_JOBS) {
+  startAgentRunner({
+    db, specialists, writer: drafter, voiceDir: VOICE_DIR, workerId: `${cfg.LBE_WORKER_ID}-agent`, intervalMs: cfg.LBE_AGENT_JOB_INTERVAL_MS,
+    log: (msg, extra) => console.log(JSON.stringify({ at: new Date().toISOString(), msg, ...extra })),
+  });
+}
+
 serve({
   fetch: app.fetch, hostname: cfg.LBE_HOST, port: cfg.LBE_PORT,
   ...(tls ? {
@@ -63,4 +71,5 @@ serve({
   console.log(`  drafter: ${drafter.provider} (${drafter.model}) | agents: ${specialists.research.provider} | mock publishing: on | LIVE LinkedIn publishing: ${cfg.liveEnabled ? "ON (staging)" : "off"}`);
   console.log(`  LinkedIn apps configured: ${linkedin ? Object.keys(linkedin.apps).filter((k) => linkedin.apps[k as "founder_app"]).join(", ") : "none"}`);
   console.log(`  in-process publisher worker: ${cfg.LBE_RUN_WORKER ? `every ${cfg.LBE_WORKER_INTERVAL_MS}ms` : "off"}`);
+  console.log(`  agent job runner: ${cfg.LBE_RUN_AGENT_JOBS ? `every ${cfg.LBE_AGENT_JOB_INTERVAL_MS}ms` : "off (queued Branding Agent jobs will wait)"}`);
 });

@@ -22,6 +22,8 @@ const password = randomBytes(18).toString("base64url");
 const logs: string[] = [];
 const pg = new EmbeddedPostgres({
   databaseDir: path.join(dir, "data"), port, user: "postgres", password, authMethod: "scram-sha-256", persistent: false,
+  // UTF-8 like production PostgreSQL/Supabase (the Windows default would be WIN1252).
+  initdbFlags: ["--encoding=UTF8", "--locale=C"],
   postgresFlags: ["-c", "listen_addresses=127.0.0.1", "-c", "max_connections=50"],
   onLog: (m) => logs.push(String(m)), onError: (e) => logs.push(`ERR ${String(e)}`),
 });

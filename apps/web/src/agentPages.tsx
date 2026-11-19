@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, fmt, type Me } from "./api.ts";
 import { Badge, ErrorText, useLoad } from "./components.tsx";
 
@@ -278,10 +278,10 @@ export function AgentPage({ me }: { me: Me }) {
             <button className="primary" disabled={busy || goal.trim().length < 3} data-testid="run-agent" onClick={async () => {
               setBusy(true); setActionError(null); setMsg(null);
               try {
-                const r = await api<{ workflow_id: string }>("/agent/workflows", { method: "POST", body: { goal, start_date: start, days: 7, post_count: posts } });
-                go(`/agent/${r.workflow_id}`);
+                const r = await api<{ job_id: string }>("/agent/workflows", { method: "POST", body: { goal, start_date: start, days: 7, post_count: posts } });
+                go(`/agent/job/${r.job_id}`);
               } catch (e) { setActionError((e as Error).message); reload(); } finally { setBusy(false); }
-            }}>{busy ? "Working…" : "Run the Branding Agent"}</button>
+            }}>{busy ? "Queuing…" : "Run the Branding Agent"}</button>
             <button disabled={busy} onClick={async () => {
               setActionError(null); setMsg(null);
               try {
@@ -292,6 +292,7 @@ export function AgentPage({ me }: { me: Me }) {
           </div>
         </div>
       )}
+      <ActiveJobs />
       <div className="panel table-wrap">
         <h3 style={{ marginTop: 0 }}>Agent activity</h3>
         <table><thead><tr><th>Goal</th><th>Status</th><th>Drafts</th><th>Started</th></tr></thead>
@@ -302,6 +303,83 @@ export function AgentPage({ me }: { me: Me }) {
           ))}</tbody></table>
         {list?.length === 0 && <p className="muted">No agent runs yet.</p>}
       </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ Durable agent jobs (P4-01)
+interface Job {
+  id: string; goal: string; status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
+  workflow_id: string | null; progress: { stage?: string; done?: number | null; total?: number | null; estimated_usd?: number };
+  cancel_requested: boolean; error: string | null; requested_by_name: string; created_at: string; started_at: string | null; finished_at: string | null;
+}
+const STAGE_TEXT: Record<string, string> = {
+  starting: "Starting…", started: "Loading the Brand Brain…", research: "Researching sources…", strategy: "Planning the content…",
+  drafting: "Writing drafts…", finishing: "Checking and saving…",
+};
+const ACTIVE = new Set(["queued", "running"]);
+
+function ActiveJobs() {
+  const [jobs, , reload] = useLoad<Job[]>("/agent/jobs");
+  const active = (jobs ?? []).filter((j) => ACTIVE.has(j.status));
+  useEffect(() => {
+    if (active.length === 0) return;
+    const t = setInterval(reload, 2000);
+    return () => clearInterval(t);
+  }, [active.length, reload]);
+  if (active.length === 0) return null;
+  return (
+    <div className="panel" data-testid="active-jobs">
+      <h3 style={{ marginTop: 0 }}>In progress</h3>
+      {active.map((j) => (
+        <div key={j.id} className="row"><a href={`#/agent/job/${j.id}`}>{j.goal}</a><Badge value={j.status === "running" ? "dispatching" : "queued"} />
+          <span className="small muted">{j.status === "running" ? STAGE_TEXT[j.progress.stage ?? ""] ?? j.progress.stage : "waiting to start"}</span></div>
+      ))}
+    </div>
+  );
+}
+
+export function JobPage({ id }: { id: string }) {
+  const [job, error, reload] = useLoad<Job>(`/agent/jobs/${id}`);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const active = !!job && ACTIVE.has(job.status);
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(reload, 1500);
+    return () => clearInterval(t);
+  }, [active, reload]);
+  useEffect(() => {
+    if (job?.status === "succeeded" && job.workflow_id) go(`/agent/${job.workflow_id}`);   // done → show the results
+  }, [job?.status, job?.workflow_id]);
+  if (error) return <ErrorText error={error} />;
+  if (!job) return <p className="muted">Loading…</p>;
+  const p = job.progress;
+  const pct = p.total ? Math.round(((p.done ?? 0) / p.total) * 100) : null;
+  return (
+    <div style={{ maxWidth: 760 }}>
+      <h2>Branding Agent</h2>
+      <div className="panel" data-testid="job-status">
+        <div className="row"><strong>{job.goal}</strong><span style={{ flex: 1 }} /><Badge value={job.status === "running" ? "dispatching" : job.status === "succeeded" ? "succeeded" : job.status === "queued" ? "queued" : "failed"} />
+          <span className="small">{job.status}</span></div>
+        {job.status === "queued" && <p>Waiting to start…</p>}
+        {job.status === "running" && <>
+          <p>{job.cancel_requested ? "Stopping after the current step…" : STAGE_TEXT[p.stage ?? ""] ?? p.stage}
+            {p.stage === "drafting" && p.total ? ` (${p.done ?? 0} of ${p.total})` : ""}</p>
+          {pct !== null && <div className="progress" aria-label="progress"><div style={{ width: `${pct}%` }} /></div>}
+          <p className="small muted">You can leave this page — the agent keeps working in the background. Estimated model cost so far: ${(p.estimated_usd ?? 0).toFixed(2)}.</p>
+        </>}
+        {job.status === "cancelled" && <p>Cancelled. Drafts created before cancelling were kept in the review queue.</p>}
+        {(job.status === "failed" || job.status === "interrupted") && <p className="error">{job.error ?? "The job did not finish."}</p>}
+        {job.workflow_id && !active && job.status !== "succeeded" && <p><a href={`#/agent/${job.workflow_id}`}>See what was produced</a></p>}
+        <ErrorText error={actionError} />
+        {active && !job.cancel_requested && (
+          <button className="danger" data-testid="cancel-job" onClick={async () => {
+            setActionError(null);
+            try { await api(`/agent/jobs/${job.id}/cancel`, { method: "POST" }); reload(); } catch (e) { setActionError((e as Error).message); }
+          }}>Cancel</button>
+        )}
+      </div>
+      <p><a href="#/agent">← Agent workspace</a></p>
     </div>
   );
 }

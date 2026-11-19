@@ -8,7 +8,7 @@ import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
 import {
-  buildBrandContext, ingestSourceMaterial, mockSpecialists, runBrandWorkflow, runLearningReview, voiceFor,
+  buildBrandContext, ingestSourceMaterial, mockSpecialists, runLearningReview, voiceFor,
   type AgentDeps, type BrandBrain, type Specialists,
 } from "@lbe/agents";
 import { BRAIN_SECTIONS, CAPABILITIES, CLAIM_CATEGORIES, findUnsupportedStatements, ONBOARDING_STEPS, SECTION_META, type Role, type VerifiedClaim } from "@lbe/domain";
@@ -599,9 +599,16 @@ export function createApp(deps: AppDeps) {
       days: z.number().int().min(1).max(31).optional(),
       post_count: z.number().int().min(3).max(5).optional(),
     }));
-    const r = await runBrandWorkflow(agentDeps(c.get("session")), { goal: b.goal, startDate: b.start_date, days: b.days, postCount: b.post_count });
-    return c.json({ workflow_id: r.workflowId, result: r.result }, 201);
+    // Durable job (P4-01): queued here, executed by the agent runner; poll GET /agent/jobs/:id for progress.
+    const jobId = await one<string>("select lbe.job_enqueue($1, 'brand_workflow', $2::jsonb)", [c.get("session"),
+      JSON.stringify({ goal: b.goal, start_date: b.start_date, days: b.days, post_count: b.post_count })]);
+    return c.json({ job_id: jobId, status: "queued" }, 202);
   });
+
+  api.get("/agent/jobs", async (c) => c.json(await one("select lbe.job_list($1)", [c.get("session")])));
+  api.get("/agent/jobs/:id", async (c) => c.json(await one("select lbe.job_get($1, $2)", [c.get("session"), param(c, "id")])));
+  api.post("/agent/jobs/:id/cancel", async (c) =>
+    c.json({ result: await one<string>("select lbe.job_cancel($1, $2)", [c.get("session"), param(c, "id")]) }));
 
   api.get("/agent/workflows/:id", async (c) =>
     c.json(await one("select lbe.workflow_get($1, $2)", [c.get("session"), param(c, "id")])));

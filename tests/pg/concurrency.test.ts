@@ -205,4 +205,28 @@ suite("PostgreSQL concurrency", () => {
     const [row] = await db.query<{ status: string }>("select status from lbe.publication_outbox where id = $1", [ob!.id]);
     expect(row!.status).toBe("pending");
   });
+
+  it("agent jobs (P4-01): concurrent runners claim each job exactly once, one job session each", async () => {
+    const jobs = [];
+    for (let i = 0; i < 4; i++) {
+      jobs.push(await api<string>("select lbe.job_enqueue($1, 'brand_workflow', $2::jsonb)", [sessions.editor, JSON.stringify({ goal: `race goal ${i}` })]));
+    }
+    const claims = await Promise.all(Array.from({ length: 10 }, (_, i) =>
+      db.tx("lbe_worker", async (q) => (await q.query<{ r: { id: string } | null }>("select lbe.job_claim($1, 60) as r", [`runner-${i}`]))[0]!.r)));
+    const ids = claims.filter((c): c is { id: string } => !!c).map((c) => c.id);
+    expect(ids.length).toBe(jobs.length);
+    expect(new Set(ids).size).toBe(jobs.length);
+    const [s] = await db.query<{ n: number }>("select count(*)::int as n from lbe.sessions where kind = 'agent_job' and job_id = any($1::uuid[])", [jobs]);
+    expect(s!.n).toBe(jobs.length);
+    // Lease recovery racing a heartbeat: the job ends up either still running (heartbeat won) or interrupted, never both.
+    const victim = jobs[0]!;
+    const owner = (await db.query<{ lease_owner: string }>("select lease_owner from lbe.agent_jobs where id = $1", [victim]))[0]!.lease_owner;
+    await db.query("update lbe.agent_jobs set lease_expires_at = now() - interval '1 second' where id = $1", [victim]);
+    await settle([
+      db.tx("lbe_worker", (q) => q.query("select lbe.job_recover_expired()")),
+      db.tx("lbe_worker", (q) => q.query("select lbe.job_heartbeat($1, $2, '{}'::jsonb, null, 60)", [owner, victim])),
+    ]);
+    const [v] = await db.query<{ status: string }>("select status from lbe.agent_jobs where id = $1", [victim]);
+    expect(["running", "interrupted"]).toContain(v!.status);
+  });
 });
