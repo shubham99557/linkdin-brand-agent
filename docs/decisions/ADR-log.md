@@ -27,6 +27,11 @@ This log records corrections and Phase 1 decisions. Where an ADR conflicts with 
 | 019 | Organizations and memory isolation (partial tenancy) | Accepted | ADR-012 (partially superseded) |
 | 020 | Agent runtime: Messages API + deterministic coordinator | Accepted | target-architecture §2 |
 | 021 | `lbe_agent` database role and proposal-only memory write-back | Accepted | ADR-005 (extends) |
+| 022 | STOP levels: platform / organization / account | Accepted | ADR-005, earlier "global STOP" wording |
+| 023 | Tenant isolation verified on every route; remaining gaps | Accepted | ADR-019 (updates) |
+| 024 | Migration upgrade & rollback policy | Accepted | — |
+| 025 | Evidence integrity: contradictions and claim-to-source checks | Accepted | ADR-020 (extends) |
+| 026 | Evaluation policy: no automatic "ready", gated paid runs, hard budget | Accepted | — |
 
 ---
 
@@ -267,6 +272,58 @@ or decide Brand Brain entries. It also has no direct table reads.
 
 Prompt injection or a compromised specialist therefore cannot bypass the approval gates. The database refuses,
 and tests prove it.
+
+## ADR-022 — STOP levels: platform / organization / account
+**Context.** The audit found that the single "global" STOP flag was platform-wide. An editor in one organization
+could stop publishing for every organization, and another organization's admin could lift it.
+
+**Decision.** There are three levels, and the database checks all three when claiming and dispatching (fail closed):
+- **Platform** (`global` row): changed only by operators (`lbe.platform_set_stop`, no application grant) or by
+  automatic safety stops such as an API-version sunset.
+- **Organization** (`org:<id>`): the dashboard's "Stop all publishing". Any editor or approver in that organization
+  can stop it; only an admin of that organization can resume.
+- **Account** (`account:<id>`): only for accounts of the caller's organization.
+
+The API keys `global` and `organization` both mean "my organization".
+
+## ADR-023 — Tenant isolation verified on every route; remaining gaps
+**Decision and status.** All 48 API routes and every `SECURITY DEFINER` function were reviewed. Isolation is
+enforced in three ways:
+- organization filters in API read queries (accounts, claims, content, outbox, mock posts, audit, controls, voice);
+- organization checks inside every function that acts on an object ID;
+- definer-only access to memory tables.
+
+A privilege snapshot test (`tests/db/function-security.test.ts`) fails on any new grant.
+
+**Remaining gaps (accepted for Mode A, required before SaaS):**
+1. `lbe_api` has table-level SELECT across organizations. Isolation depends on every API query filtering
+   correctly. Add organization row-level security (a session-bound organization setting) as a second layer.
+2. Users belong to one organization; there is no membership table.
+3. The `default_org_id()` convenience default still exists.
+4. `agent_runs` has no organization column. It is only exposed through organization-checked content.
+5. The token-protected `/api/internal/publisher-tick` is platform-wide by design.
+6. The login rate limiter is in-memory and per process.
+
+## ADR-024 — Migration upgrade & rollback policy
+**Decision.** Migrations are forward-only, transactional per file, and checksummed. Rollback means a backup taken
+before the migration, or a forward fix. No down-migrations are maintained. Upgrade preservation and atomicity
+are covered by tests. Procedure: `docs/migrations-runbook.md`.
+
+## ADR-025 — Evidence integrity: contradictions and claim-to-source checks
+**Decision.**
+- Research output includes `conflicts`. Contradicted findings are flagged, set to low confidence, excluded from
+  evidence and reported.
+- A draft sentence that restates a research finding (topic similarity ≥ 0.5) without a verified-claim citation
+  is treated as unsupported, so it can't reach review.
+- Findings become claims only when a human creates a draft claim and an approver verifies it.
+
+## ADR-026 — Evaluation policy
+**Decision.**
+- Automated evaluation returns `NOT_READY` or `NEEDS_HUMAN_REVIEW`, never "ready"; human scoring decides.
+- Paid Claude runs require an API key, an explicit budget and an explicit authorization flag.
+- The workflow enforces a hard budget on estimated spend. Unknown models are priced as infinite, never free.
+- Web-search pricing is an unverified assumption until checked against Anthropic's pricing page.
+- Synthetic or placeholder knowledge is flagged in every workflow result and fails staging pre-flight.
 
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried

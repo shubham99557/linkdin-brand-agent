@@ -5,3 +5,4 @@ export * from "./mock-specialists.ts";
 export * from "./anthropic-specialists.ts";
 export * from "./orchestrator.ts";
 export * from "./cost.ts";
+export * from "./evaluate.ts";

@@ -7,6 +7,7 @@ and an **authorised founder profile** — with evidence-backed claims, human app
 > No real posts, messages or emails are sent. Not approved for production.
 
 - **Start here:** [docs/setup.md](docs/setup.md)
+- **Current release decision:** [docs/hardening-report.md](docs/hardening-report.md) · [evaluation plan](docs/evaluation-plan.md) · [brand onboarding checklist](docs/brand-onboarding-checklist.md)
 - **Branding Agent (Brand Brain + specialists):** [docs/brand-brain-architecture.md](docs/brand-brain-architecture.md) · [report](docs/agent-layer-report.md)
 - **What was built and tested:** [docs/phase-1-report.md](docs/phase-1-report.md)
 - **Architecture decisions:** [docs/decisions/ADR-log.md](docs/decisions/ADR-log.md)
