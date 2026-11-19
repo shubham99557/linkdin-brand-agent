@@ -124,14 +124,16 @@ export async function openDb(cfg: DbConfig): Promise<Db> {
 export const MIGRATIONS_DIR = path.resolve(import.meta.dirname, "../../../supabase/migrations");
 
 /** Apply pending migrations in filename order. Refuses to run if an applied file was modified. */
-export async function migrate(db: Db, dir = MIGRATIONS_DIR): Promise<string[]> {
+export async function migrate(db: Db, dir = MIGRATIONS_DIR, opts: { until?: string } = {}): Promise<string[]> {
   await db.query(`create table if not exists public.lbe_schema_migrations (
     version text primary key, checksum text not null, applied_at timestamptz not null default now())`);
   const applied = new Map(
     (await db.query<{ version: string; checksum: string }>("select version, checksum from public.lbe_schema_migrations"))
       .map((r) => [r.version, r.checksum]),
   );
-  const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
+  // `until` (inclusive) lets tests and operators stop at a given version, e.g. to rehearse an upgrade.
+  const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort()
+    .filter((f) => !opts.until || f <= opts.until);
   const ran: string[] = [];
   for (const file of files) {
     const sql = await readFile(path.join(dir, file), "utf8");

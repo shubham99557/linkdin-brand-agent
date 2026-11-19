@@ -44,7 +44,7 @@ export interface Claim {
   status: string; usable: boolean; created_by_name: string; verified_by_name: string | null; expires_at: string | null;
 }
 export interface ControlFlag {
-  key: string; stopped: boolean; reason: string | null; changed_at: string; changed_by_name: string | null; account_name: string | null;
+  key: string; scope: "platform" | "organization" | "account"; stopped: boolean; reason: string | null; changed_at: string; changed_by_name: string | null; account_name: string | null;
 }
 
 export const fmt = (iso: string | null | undefined) =>

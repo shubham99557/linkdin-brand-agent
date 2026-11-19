@@ -40,14 +40,16 @@ export function StopBar({ me, refreshKey }: { me: Me; refreshKey: number }) {
       ? `${a.display_name}: LinkedIn connection ${a.credential!.status} — reconnect`
       : `${a.display_name}: LinkedIn connection expires in ${daysUntil(a.credential!.expires_at)} day(s) — reconnect soon`);
   const liveAccounts = (accounts ?? []).filter((a) => a.publishing_mode === "live");
-  const global = flags?.find((f) => f.key === "global");
-  const stoppedAccounts = flags?.filter((f) => f.key !== "global" && f.stopped) ?? [];
+  // "Stop all publishing" = the caller's organization. The platform flag is operator-only (shown, not editable).
+  const global = flags?.find((f) => f.scope === "organization");
+  const platform = flags?.find((f) => f.scope === "platform");
+  const stoppedAccounts = flags?.filter((f) => f.scope === "account" && f.stopped) ?? [];
 
   const set = async (stopped: boolean) => {
     setBusy(true);
     setActionError(null);
     try {
-      await api("/controls", { method: "POST", body: { key: "global", stopped, reason: reason || (stopped ? "Stopped from dashboard" : "Resumed from dashboard") } });
+      await api("/controls", { method: "POST", body: { key: "organization", stopped, reason: reason || (stopped ? "Stopped from dashboard" : "Resumed from dashboard") } });
       setReason("");
       reload();
     } catch (e) {
@@ -66,6 +68,7 @@ export function StopBar({ me, refreshKey }: { me: Me; refreshKey: number }) {
     <>
     {health?.live_publishing && <div className="stopbar" data-testid="live-banner"><strong>LIVE LinkedIn publishing is enabled on this server.</strong> Released posts become public on LinkedIn.</div>}
     {credentialWarnings.map((w) => <div className="notice" key={w}>⚠ {w}</div>)}
+    {platform?.stopped && <div className="stopbar"><strong>⛔ Platform-wide STOP (operator):</strong> {platform.reason}. Nothing is sent for any organization until an operator lifts it.</div>}
     <div className={global.stopped ? "stopbar" : "panel"} data-testid="stop-bar">
       <div className="row">
         <strong>{global.stopped ? "⛔ ALL PUBLISHING STOPPED" : runningText}</strong>

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -170,7 +171,10 @@ export function createApp(deps: AppDeps) {
   const loginLimiter = new Map<string, { count: number; resetAt: number }>();
   app.post("/api/auth/login", async (c) => {
     const body = await json(c, z.object({ email: z.string().email().max(200), password: z.string().min(1).max(200) }));
-    const key = `${c.req.header("x-forwarded-for") ?? "local"}|${body.email.toLowerCase()}`;
+    // Key on the TCP peer address, never on client-supplied headers such as X-Forwarded-For (spoofable).
+    let peer = "local";
+    try { peer = getConnInfo(c).remote.address ?? "local"; } catch { /* not running under the Node server (tests) */ }
+    const key = `${peer}|${body.email.toLowerCase()}`;
     const now = Date.now();
     const entry = loginLimiter.get(key);
     if (entry && entry.resetAt > now && entry.count >= 10) return c.json({ error: "too many attempts — wait a minute" }, 429);
@@ -237,7 +241,8 @@ export function createApp(deps: AppDeps) {
   };
   api.get("/accounts/:id/voice", async (c) => {
     const id = param(c, "id");
-    const rows = await q<{ voice_profile: string }>("select voice_profile from lbe.social_accounts where id = $1", [id]);
+    const rows = await q<{ voice_profile: string }>("select voice_profile from lbe.social_accounts where id = $1 and organization_id = $2",
+      [id, c.get("user").organization_id]);
     if (!rows[0]) throw new HTTPException(404, { message: "not found" });
     return c.json({ profile: rows[0].voice_profile, markdown: await readVoice(rows[0].voice_profile) });
   });
@@ -344,7 +349,10 @@ export function createApp(deps: AppDeps) {
     const patch: Record<string, unknown> = { ...b };
     if (b.body !== undefined) {
       // A human edit re-runs the deterministic claim detector against the remaining citations.
-      const spans = (await q<{ quoted_span: string }>("select quoted_span from lbe.content_claims where content_id = $1", [id]))
+      const spans = (await q<{ quoted_span: string }>(
+        `select cc.quoted_span from lbe.content_claims cc join lbe.content_items ci on ci.id = cc.content_id
+           join lbe.social_accounts a on a.id = ci.account_id where cc.content_id = $1 and a.organization_id = $2`,
+        [id, c.get("user").organization_id]))
         .map((r) => r.quoted_span).filter((s) => b.body!.includes(s));
       patch.unsupported_statements = findUnsupportedStatements(b.body, spans).map((f) => f.sentence);
     }
@@ -359,8 +367,10 @@ export function createApp(deps: AppDeps) {
     const items = await q<{ account_id: string; pillar: string; brief: string; source_material: string | null; status: string;
                             kind: "company_page" | "founder_profile"; display_name: string; voice_profile: string; pillars: string[] }>(
       `select ci.account_id, ci.pillar, ci.brief, ci.source_material, ci.status, a.kind, a.display_name, a.voice_profile, a.pillars
-         from lbe.content_items ci join lbe.social_accounts a on a.id = ci.account_id where ci.id = $1`, [id]);
+         from lbe.content_items ci join lbe.social_accounts a on a.id = ci.account_id
+        where ci.id = $1 and a.organization_id = $2`, [id, c.get("user").organization_id]);
     const item = items[0];
+    // Checked BEFORE any AI call so another organization's brief never reaches a model.
     if (!item) throw new HTTPException(404, { message: "not found" });
     if (!["draft", "changes_requested", "failed"].includes(item.status)) {
       throw new HTTPException(409, { message: `cannot redraft content in status ${item.status}` });
@@ -459,11 +469,11 @@ export function createApp(deps: AppDeps) {
     return c.json({ ok: true });
   });
 
-  // Manual publisher run (admin) — convenient for the local demo.
+  // Manual publisher run (admin) — processes ONLY the admin's organization.
   api.post("/jobs/publisher-tick", async (c) => {
     if (c.get("user").role !== "admin") throw new HTTPException(403, { message: "admin only" });
     await one("select lbe.write_app_audit($1, 'app.publisher_tick_requested', 'job', 'publisher', '{}'::jsonb)", [c.get("session")]);
-    return c.json(await runPublisherTick(db, registry, { workerId: `${deps.workerId}-manual` }));
+    return c.json(await runPublisherTick(db, registry, { workerId: `${deps.workerId}-manual`, organizationId: c.get("user").organization_id }));
   });
 
   // "Publish now": manual release (required for live accounts — API Terms §3.1(26), owner decision P2-D1).
@@ -637,12 +647,13 @@ export function createApp(deps: AppDeps) {
   api.get("/outbox/:id/linkedin-candidates", async (c) => {
     const id = param(c, "id");
     if (c.get("user").role !== "admin") throw new HTTPException(403, { message: "admin only" });
-    if (!liveOn) throw new HTTPException(409, { message: "live publishing is switched off" });
     const rows = await q<{ provider: string; status: string; account_id: string; kind: string; body: string; author: string | null }>(
       `select o.provider, o.status, o.account_id, a.kind, o.package->>'body' as body, o.package#>>'{destination,linkedin_urn}' as author
-         from lbe.publication_outbox o join lbe.social_accounts a on a.id = o.account_id where o.id = $1`, [id]);
+         from lbe.publication_outbox o join lbe.social_accounts a on a.id = o.account_id
+        where o.id = $1 and a.organization_id = $2`, [id, c.get("user").organization_id]);
     const r = rows[0];
     if (!r) throw new HTTPException(404, { message: "not found" });
+    if (!liveOn) throw new HTTPException(409, { message: "live publishing is switched off" });
     if (r.provider !== "linkedin" || r.status !== "needs_reconciliation") {
       throw new HTTPException(409, { message: "only live publications awaiting reconciliation can be checked" });
     }
@@ -655,15 +666,22 @@ export function createApp(deps: AppDeps) {
   });
 
   // STOP controls
-  api.get("/controls", async (c) => c.json(await q(
-    `select cf.key, cf.stopped, cf.reason, cf.changed_at, u.display_name as changed_by_name, a.display_name as account_name
-       from lbe.control_flags cf left join lbe.app_users u on u.id = cf.changed_by
-       left join lbe.social_accounts a on cf.key = 'account:' || a.id::text
-      order by cf.key = 'global' desc, cf.key`)));
+  // STOP controls. Scopes: platform (read-only here; operators only), organization (the caller's), accounts (the caller's).
+  api.get("/controls", async (c) => {
+    const org = c.get("user").organization_id;
+    return c.json(await q(
+      `select case when cf.key = 'global' then 'platform' when cf.key like 'org:%' then 'organization' else cf.key end as key,
+              case when cf.key = 'global' then 'platform' when cf.key like 'org:%' then 'organization' else 'account' end as scope,
+              cf.stopped, cf.reason, cf.changed_at, u.display_name as changed_by_name, a.display_name as account_name
+         from lbe.control_flags cf left join lbe.app_users u on u.id = cf.changed_by
+         left join lbe.social_accounts a on cf.key = 'account:' || a.id::text
+        where cf.key = 'global' or cf.key = 'org:' || $1::uuid::text or a.organization_id = $1::uuid
+        order by cf.key = 'global' desc, cf.key like 'org:%' desc, cf.key`, [org]));
+  });
 
   api.post("/controls", async (c) => {
     const b = await json(c, z.object({
-      key: z.string().regex(/^(global|account:[0-9a-f-]{36})$/),
+      key: z.string().regex(/^(global|organization|account:[0-9a-f-]{36})$/),
       stopped: z.boolean(),
       reason: z.string().min(1).max(500),
     }));
@@ -673,11 +691,18 @@ export function createApp(deps: AppDeps) {
 
   // Mock LinkedIn store & audit
   api.get("/mock/posts", async (c) => c.json(await q(
-    "select id, mock_post_urn, idempotency_key, author, commentary, visibility, received_at from lbe_mock.linkedin_posts order by id desc limit 200")));
+    `select m.id, m.mock_post_urn, m.idempotency_key, m.author, m.commentary, m.visibility, m.received_at
+       from lbe_mock.linkedin_posts m
+       join lbe.content_items ci on ci.id::text = split_part(m.idempotency_key, ':', 1)
+       join lbe.social_accounts a on a.id = ci.account_id
+      where a.organization_id = $1
+      order by m.id desc limit 200`, [c.get("user").organization_id])));
 
   api.get("/audit", async (c) => {
     const limit = Math.min(Number(c.req.query("limit") ?? 200) || 200, 1000);
-    return c.json(await q("select id, at, actor, action, subject_type, subject_id, details from lbe.audit_events order by id desc limit $1", [limit]));
+    return c.json(await q(
+      `select id, at, actor, action, subject_type, subject_id, details from lbe.audit_events
+        where organization_id = $1 order by id desc limit $2`, [c.get("user").organization_id, limit]));
   });
 
   app.route("/api", api);

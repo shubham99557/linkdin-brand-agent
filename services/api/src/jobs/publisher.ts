@@ -30,6 +30,8 @@ export interface PublisherOptions {
   leaseSeconds?: number;
   /** Provider calls taking longer than this are treated as ambiguous. */
   providerTimeoutMs?: number;
+  /** Restrict this pass to one organization (manual runs by an organization admin). */
+  organizationId?: string;
 }
 
 const withTimeout = async (p: Promise<PublishOutcome>, ms: number): Promise<PublishOutcome> => {
@@ -70,8 +72,8 @@ export async function runPublisherTick(
   if (names.length === 0) return s;
 
   const claimed = await w<OutboxRow>(
-    "select id, account_id, provider, package, idempotency_key from lbe.claim_outbox($1, $2, $3, $4)",
-    [worker, opts.batchSize ?? 5, leaseSeconds, names]);
+    "select id, account_id, provider, package, idempotency_key from lbe.claim_outbox($1, $2, $3, $4, $5)",
+    [worker, opts.batchSize ?? 5, leaseSeconds, names, opts.organizationId ?? null]);
   s.claimed = claimed.length;
 
   for (const row of claimed) {
