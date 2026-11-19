@@ -38,6 +38,36 @@ test("owner edits an account's content pillars in the Brand Brain; editors see b
   await expect(page.locator("#pillar option", { hasText: "hiring-stories" })).toHaveCount(1);   // new pillar is usable at once
 });
 
+test("Creative Studio: owner sets brand colours; agent drafts show rendered visual previews and a PDF", async ({ page }) => {
+  await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
+  await page.getByRole("link", { name: "Brand Brain" }).click();
+  const panel = page.getByTestId("visual-identity");
+  await expect(panel).toContainText("placeholder colours");
+  await panel.getByRole("button", { name: "Set brand colours" }).click();
+  await page.locator("#vi-background").fill("#0b1f3a");
+  await page.locator("#vi-accent").fill("#3fb4ff");
+  await page.getByTestId("save-visual-identity").click();
+  await expect(page.getByRole("status")).toContainText("Saved your visual identity");
+  await expect(panel).toContainText("approved");
+  // naturalWidth > 0 ⇒ the browser received and decoded a real image (the project's tsconfig has no DOM lib, hence the cast).
+  const loadedWidth = (img: unknown) => (img as { naturalWidth: number }).naturalWidth;
+  await expect.poll(() => page.getByTestId("visual-sample").evaluate(loadedWidth), { timeout: 20_000 }).toBeGreaterThan(0);
+
+  await page.getByRole("link", { name: "Agent workspace", exact: true }).click();
+  await page.getByLabel("Goal").fill("Visual preview test week on password hygiene");
+  await page.getByTestId("run-agent").click();
+  const preview = page.getByTestId("visual-preview").first();
+  await expect(preview).toBeVisible({ timeout: 30_000 });
+  const thumb = preview.locator("img").first();
+  await expect.poll(() => thumb.evaluate(loadedWidth), { timeout: 20_000 }).toBeGreaterThan(0);
+  const pdfLink = page.getByRole("link", { name: "Open the PDF carousel" }).first();
+  if (await pdfLink.count()) {
+    const href = await pdfLink.getAttribute("href");
+    const res = await page.request.get(href!);
+    expect(res.headers()["content-type"]).toBe("application/pdf");
+  }
+});
+
 test("guided setup: owner answers, skips (stays UNKNOWN), resumes, adds a draft claim and reviews", async ({ page }) => {
   await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
   await page.getByRole("link", { name: "Brand Brain" }).click();

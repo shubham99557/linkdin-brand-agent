@@ -3,7 +3,7 @@
 // owner-only endpoints as the Brand Brain page; nothing here bypasses approval rules.
 import { useEffect, useState } from "react";
 import { api, type Claim, type Me } from "./api.ts";
-import { PillarsPanel, type Brain, type Entry } from "./agentPages.tsx";
+import { isVisualEntry, PillarsPanel, type Brain, type Entry } from "./agentPages.tsx";
 import { ErrorText, useLoad } from "./components.tsx";
 
 const STEP_HELP: Record<string, string> = {
@@ -39,8 +39,9 @@ export function OnboardingWizard({ me, route }: { me: Me; route: string }) {
   const steps = brain.onboarding_steps;
   const meta = (s: string) => brain.sections.find((m) => m.section === s);
   const label = (s: string) => STEP_LABEL[s] ?? meta(s)?.label ?? s;
+  const textEntries = brain.entries.filter((e) => !isVisualEntry(e));     // colours/logo don't answer "Brand identity"
   const isDone = (s: string) => s === "pillars" ? brain.accounts.every((a) => a.pillars.length > 0)
-    : s === "claims" ? brain.claims.length > 0 : brain.entries.some((e) => e.section === s);
+    : s === "claims" ? brain.claims.length > 0 : textEntries.some((e) => e.section === s);
   const required = brain.sections.filter((m) => m.required);
   const requiredDone = required.length - brain.missing_sections.length;
   // Default: first step whose section is still missing (resume where you left off).
@@ -86,7 +87,7 @@ export function OnboardingWizard({ me, route }: { me: Me; route: string }) {
           <ClaimsStep categories={brain.claim_categories} verified={brain.claims.length} onSaved={saved} onNext={next} index={index} />
         ) : (
           <SectionStep key={step} section={step!} help={STEP_HELP[step!] ?? ""} meta={meta(step!)!}
-            entries={brain.entries.filter((e) => e.section === step)} onSaved={saved} onNext={next} index={index} />
+            entries={textEntries.filter((e) => e.section === step)} onSaved={saved} onNext={next} index={index} />
         )}
     </div>
   );

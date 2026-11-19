@@ -91,6 +91,30 @@ export function StopBar({ me, refreshKey }: { me: Me; refreshKey: number }) {
   );
 }
 
+/** Rendered preview of a draft's visual (P5-02): one thumbnail per slide, plus the PDF for carousels. */
+export function VisualPreview({ contentId, brief, version = 0 }: {
+  contentId: string; brief: { format: string; slides: unknown[] } | null | undefined; version?: number;
+}) {
+  if (!brief || brief.format === "text_only") return null;
+  const count = brief.format === "single_image" ? 1 : 1 + Math.min(brief.slides.length, 9);
+  return (
+    <div data-testid="visual-preview">
+      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        {Array.from({ length: count }, (_, i) => (
+          <a key={i} href={`/api/content/${contentId}/visual?slide=${i + 1}&v=${version}`} target="_blank" rel="noreferrer">
+            <img src={`/api/content/${contentId}/visual?slide=${i + 1}&v=${version}`} alt={`Visual slide ${i + 1}`} loading="lazy"
+              style={{ width: 120, height: brief.format === "single_image" ? 120 : 150, objectFit: "cover", borderRadius: 4, border: "1px solid var(--border)" }} />
+          </a>
+        ))}
+      </div>
+      {brief.format === "document_carousel" && (
+        <p className="small"><a href={`/api/content/${contentId}/visual?format=pdf&v=${version}`} target="_blank" rel="noreferrer">Open the PDF carousel</a></p>
+      )}
+      <p className="small muted">Preview only, in your saved brand colours (set them in Brand Brain → Visual identity). Visuals are not yet part of what gets approved and published (that comes next).</p>
+    </div>
+  );
+}
+
 /** "Publish now" for a pending outbox entry that needs manual release. Live jobs need an explicit confirmation. */
 export function ReleaseButton({ outboxId, provider, onDone }: { outboxId: string; provider: string; onDone: (msg: string) => void }) {
   const [confirm, setConfirm] = useState(false);

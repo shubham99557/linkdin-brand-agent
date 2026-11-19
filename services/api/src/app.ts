@@ -19,6 +19,10 @@ import {
 } from "@lbe/publishing";
 import { randomUUID } from "node:crypto";
 import { encryptToken, isTrustedOrigin, looksLikeSessionToken, redactForLog, ROLE_HINTS, safeTokenEqual, SESSION_COOKIE } from "@lbe/security";
+import {
+  briefToCarousel, identityBody, identityFromEntries, MAX_LOGO_BYTES, RenderInputError, renderCarousel, renderSlidePng, themeFor,
+  validateIdentity, VISUAL_IDENTITY_KEY, type VisualBrief,
+} from "@lbe/render";
 import { dbErrorStatus, type Db } from "./db.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 
@@ -587,6 +591,68 @@ export function createApp(deps: AppDeps) {
     const entry = await one<string | null>("select lbe.brain_decide_proposal($1, $2, $3, $4, $5, $6)",
       [c.get("session"), param(c, "id"), b.decision, b.note ?? null, b.title ?? null, b.body ?? null]);
     return c.json({ entry_id: entry });
+  });
+
+  // ---------------------------------------------------------------- Creative Studio (P5-02)
+  // Visual identity lives in the Brand Brain (identity/visual): owner-approved, versioned, admin-only (DB-enforced).
+  const loadVisual = async (session: string) => {
+    const brain = await one<BrandBrain>("select lbe.brain_load($1)", [session]);
+    const identity = identityFromEntries(brain.entries);
+    return { brain, identity, ...themeFor(identity, brain.organization.name) };
+  };
+  const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be #rrggbb");
+  const sendPng = (c: Context, png: Uint8Array, placeholder: boolean) => c.body(png as Uint8Array<ArrayBuffer>, 200, {
+    "content-type": "image/png", "x-placeholder-branding": String(placeholder) });
+
+  api.get("/brand/visual-identity", async (c) => {
+    const v = await loadVisual(c.get("session"));
+    return c.json({ identity: v.identity, placeholder: v.placeholder, effective: { ...v.theme, logoDataUri: undefined, has_logo: !!v.theme.logoDataUri } });
+  });
+
+  api.put("/brand/visual-identity", async (c) => {
+    const b = await json(c, z.object({
+      background: hex, foreground: hex, accent: hex,
+      logo_data_uri: z.string().max(Math.ceil(MAX_LOGO_BYTES * 4 / 3) + 64).nullable().optional(),
+    }));
+    const identity = { background: b.background, foreground: b.foreground, accent: b.accent, ...(b.logo_data_uri ? { logoDataUri: b.logo_data_uri } : {}) };
+    try { validateIdentity(identity, "Check"); } catch (e) {
+      if (e instanceof RenderInputError) throw new HTTPException(422, { message: e.message });
+      throw e;
+    }
+    const id = await one<string>("select lbe.brain_upsert_entry($1, $2, $3, $4, $5, $6::jsonb, 'owner', null)",
+      [c.get("session"), VISUAL_IDENTITY_KEY.section, VISUAL_IDENTITY_KEY.key, "Visual identity", identityBody(identity),
+       JSON.stringify({ kind: "visual_identity", background: identity.background, foreground: identity.foreground, accent: identity.accent,
+         ...(identity.logoDataUri ? { logo_data_uri: identity.logoDataUri } : {}) })]);
+    return c.json({ id }, 201);
+  });
+
+  // A sample slide in the current brand identity (for the Brand Brain page).
+  api.get("/brand/visual-identity/sample.png", async (c) => {
+    const v = await loadVisual(c.get("session"));
+    const input = briefToCarousel({ format: "single_image", headline: "Your post headline appears here",
+      slides: [{ title: "", text: "Body text in your brand colours." }] }, v.theme, { footer: v.brain.organization.name })!;
+    return sendPng(c, await renderSlidePng(input, 0), v.placeholder);
+  });
+
+  // Preview the visual for a draft from its visual brief: ?slide=N (PNG, 1-based) or ?format=pdf.
+  api.get("/content/:id/visual", async (c) => {
+    const id = param(c, "id");
+    const rows = await q<{ visual_brief: VisualBrief | null; display_name: string }>(
+      `select ci.visual_brief, a.display_name from lbe.content_items ci join lbe.social_accounts a on a.id = ci.account_id
+        where ci.id = $1 and a.organization_id = $2`, [id, c.get("user").organization_id]);
+    const row = rows[0];
+    if (!row) throw new HTTPException(404, { message: "not found" });
+    const v = await loadVisual(c.get("session"));
+    const input = row.visual_brief ? briefToCarousel(row.visual_brief, v.theme) : null;
+    if (!input) throw new HTTPException(404, { message: "this draft has no visual (text-only post or no visual brief)" });
+    if (c.req.query("format") === "pdf") {
+      const { pdf } = await renderCarousel(input, { title: input.slides[0]!.title });
+      return c.body(pdf as Uint8Array<ArrayBuffer>, 200, { "content-type": "application/pdf",
+        "content-disposition": `inline; filename="carousel-${id.slice(0, 8)}.pdf"`, "x-placeholder-branding": String(v.placeholder) });
+    }
+    const slide = Number(c.req.query("slide") ?? "1");
+    if (!Number.isInteger(slide) || slide < 1 || slide > input.slides.length) throw new HTTPException(404, { message: "no such slide" });
+    return sendPng(c, await renderSlidePng(input, slide - 1), v.placeholder);
   });
 
   // ---------------------------------------------------------------- Agent workspace

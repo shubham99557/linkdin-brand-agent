@@ -25,7 +25,8 @@ for (const org of orgs) {
 
   out.push(`## ${org.name}`, "", "| Section | Required | Entries | Quality | Approved by | Source |", "|---|---|---|---|---|---|");
   for (const meta of SECTION_META) {
-    const es = entries.filter((e) => e.section === meta.section);
+    // The visual identity (identity/visual: colours, logo) is reported separately and does not complete "Brand identity".
+    const es = entries.filter((e) => e.section === meta.section && !(e.section === "identity" && e.key === "visual"));
     if (es.length === 0) {
       out.push(`| ${meta.label} | ${meta.required ? "yes" : "no"} | 0 | **UNKNOWN (missing)** | — | — |`);
       if (meta.required) problems++;
@@ -37,6 +38,8 @@ for (const org of orgs) {
       out.push(`| ${meta.label} | ${meta.required ? "yes" : "no"} | ${e.key} v${e.version} | ${q === "OWNER_PROVIDED" ? "owner-provided" : `**${q}**`} | ${e.approver} | ${e.source}${e.source_ref ? ` (${e.source_ref})` : ""} |`);
     }
   }
+  const visual = entries.find((e) => e.section === "identity" && e.key === "visual");
+  out.push("", `Visual identity (colours/logo): ${visual ? `set (v${visual.version}, approved by ${visual.approver})` : "**not set — previews use placeholder branding**"}`);
   out.push("", "| Claim | Status | Quality | Evidence |", "|---|---|---|---|");
   for (const c of claims) {
     const synthetic = claimIsSynthetic(c);

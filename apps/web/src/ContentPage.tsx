@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmt, type Me } from "./api.ts";
-import { Badge, ErrorText, ReleaseButton, useLoad } from "./components.tsx";
+import { Badge, ErrorText, ReleaseButton, useLoad, VisualPreview } from "./components.tsx";
 
 interface Detail {
   item: {
@@ -8,6 +8,7 @@ interface Detail {
     brief: string; source_material: string | null; body: string; visibility: "PUBLIC" | "CONNECTIONS"; scheduled_for: string | null;
     media_ids: string[]; status: string; version: number; package: Record<string, unknown>; package_hash: string;
     unsupported_statements: string[]; provider_post_ref: string | null; published_at: string | null;
+    visual_brief: { format: string; headline: string; slides: Array<{ title: string; text: string }> } | null;
   };
   citations: Array<{ claim_id: string; quoted_span: string; statement: string; category: string; evidence_url: string | null;
     evidence_note: string | null; status: string; verified_by_name: string | null; verified_at: string | null }>;
@@ -125,6 +126,12 @@ export function ContentPage({ id, me, onChange }: { id: string; me: Me; onChange
                     Submit for review
                   </button>
                 )}
+              </div>
+            )}
+            {item.visual_brief && item.visual_brief.format !== "text_only" && (
+              <div style={{ marginTop: 12 }}>
+                <strong className="small">Visual ({item.visual_brief.format.replace(/_/g, " ")})</strong>
+                <VisualPreview contentId={id} brief={item.visual_brief} version={item.version} />
               </div>
             )}
             {item.unsupported_statements.length > 0 && (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, fmt, type Me } from "./api.ts";
-import { Badge, ErrorText, useLoad } from "./components.tsx";
+import { Badge, ErrorText, useLoad, VisualPreview } from "./components.tsx";
 
 // ------------------------------------------------------------------ types
 export interface SectionMeta { section: string; label: string; required: boolean; questions: string[]; listField?: { key: string; label: string } }
@@ -58,15 +58,85 @@ export function BrandBrainPage({ me }: { me: Me }) {
       </div>
 
       <ProposalsPanel isOwner={isOwner} onChange={reload} />
+      <VisualIdentityPanel isOwner={isOwner} onSaved={() => { setMsg("Saved your visual identity."); reload(); }} />
       <PillarsPanel accounts={brain.accounts} isOwner={isOwner}
         onSaved={(name) => { setMsg(`Saved content pillars for ${name}.`); reload(); }} />
       <IngestPanel onDone={(n) => { setMsg(`${n} proposal(s) created from your document — review them above.`); reload(); }} />
 
       {brain.sections.map((meta) => (
-        <SectionCard key={meta.section} meta={meta} entries={brain.entries.filter((e) => e.section === meta.section)}
+        <SectionCard key={meta.section} meta={meta} entries={brain.entries.filter((e) => e.section === meta.section && !isVisualEntry(e))}
           missing={brain.missing_sections.includes(meta.section)} isOwner={isOwner}
           onSaved={() => { setMsg(`Saved "${meta.label}".`); reload(); }} onError={setActionError} />
       ))}
+    </div>
+  );
+}
+
+/** The visual identity (colours/logo) is stored as Brand Brain entry identity/visual and edited in its own panel. */
+export const isVisualEntry = (e: { section: string; key: string }) => e.section === "identity" && e.key === "visual";
+
+interface VisualIdentityResponse {
+  identity: { background: string; foreground: string; accent: string; logoDataUri?: string } | null;
+  placeholder: boolean;
+  effective: { background: string; foreground: string; accent: string; has_logo: boolean };
+}
+
+function VisualIdentityPanel({ isOwner, onSaved }: { isOwner: boolean; onSaved: () => void }) {
+  const [data, error, reload] = useLoad<VisualIdentityResponse>("/brand/visual-identity");
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ background: "#1f2933", foreground: "#f5f7fa", accent: "#9aa5b1", logo: null as string | null });
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  if (error) return <ErrorText error={error} />;
+  if (!data) return null;
+  const start = () => {
+    const e = data.identity ?? data.effective;
+    setForm({ background: e.background, foreground: e.foreground, accent: e.accent, logo: data.identity?.logoDataUri ?? null });
+    setSaveError(null); setEditing(true);
+  };
+  return (
+    <div className="panel" data-testid="visual-identity">
+      <div className="row"><h3 style={{ margin: 0 }}>Visual identity</h3>
+        {data.placeholder ? <span className="badge warn">placeholder colours</span> : <span className="badge ok">approved</span>}
+        <span style={{ flex: 1 }} />
+        {isOwner && !editing && <button onClick={start}>{data.placeholder ? "Set brand colours" : "Edit"}</button>}</div>
+      <p className="small muted">Colours and logo used for post images and PDF carousels. Until you set them, previews use neutral placeholder colours.</p>
+      <div className="row" style={{ alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+        <img src={`/api/brand/visual-identity/sample.png?v=${version}`} alt="Sample image in the current brand colours" data-testid="visual-sample"
+          style={{ width: 220, height: 220, borderRadius: 6, border: "1px solid var(--border)" }} />
+        {editing && (
+          <div style={{ flex: 1, minWidth: 260 }}>
+            {(["background", "foreground", "accent"] as const).map((k) => (
+              <div key={k} className="row">
+                <label htmlFor={`vi-${k}`} style={{ width: 110 }}>{k === "foreground" ? "Text" : k[0]!.toUpperCase() + k.slice(1)}</label>
+                <input id={`vi-${k}`} type="color" style={{ width: 60 }} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+                <span className="small mono">{form[k]}</span>
+              </div>
+            ))}
+            <label htmlFor="vi-logo">Logo (PNG, JPEG or SVG, max 150 KB) — optional</label>
+            <input id="vi-logo" type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              if (f.size > 150 * 1024) { setSaveError("logo must be at most 150 KB"); return; }
+              const r = new FileReader();
+              r.onload = () => setForm((x) => ({ ...x, logo: String(r.result) }));
+              r.readAsDataURL(f);
+            }} />
+            {form.logo && <p className="small">Logo selected. <button onClick={() => setForm({ ...form, logo: null })}>Remove logo</button></p>}
+            <ErrorText error={saveError} />
+            <div className="row" style={{ marginTop: 8 }}>
+              <button className="primary" data-testid="save-visual-identity" onClick={async () => {
+                setSaveError(null);
+                try {
+                  await api("/brand/visual-identity", { method: "PUT", body: { background: form.background, foreground: form.foreground, accent: form.accent, logo_data_uri: form.logo } });
+                  setEditing(false); setVersion((v) => v + 1); reload(); onSaved();
+                } catch (err) { setSaveError((err as Error).message); }
+              }}>Approve & save</button>
+              <button onClick={() => setEditing(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -531,6 +601,7 @@ export function WorkflowPage({ id, me }: { id: string; me: Me }) {
                 <div className="preview" style={{ marginTop: 6 }}><div className="body">{d.body}</div></div>
                 {d.unsupported.length > 0 && <ul className="unsupported small">{d.unsupported.map((u) => <li key={u}>{u}</li>)}</ul>}
                 <p className="small">Claims cited: {d.citations.length}</p>
+                <VisualPreview contentId={d.id} brief={d.visual_brief} />
                 {d.visual_brief && (
                   <details className="small"><summary>Visual brief: {d.visual_brief.format.replace(/_/g, " ")} — “{d.visual_brief.headline}”</summary>
                     {d.visual_brief.slides.length > 0 && <ol>{d.visual_brief.slides.map((s, i) => <li key={i}>{s.text}</li>)}</ol>}

@@ -118,7 +118,8 @@ function slideTree(input: CarouselInput, index: number, w: number, h: number): N
       ...(theme.logoDataUri ? [el("img", { width: 64, height: 64, objectFit: "contain" }, undefined, { src: theme.logoDataUri, width: 64, height: 64 })] : []),
       el("div", { fontSize: 34, fontWeight: 700, color: theme.accent }, theme.brandName),
     ]),
-    el("div", { fontSize: 30, color: theme.foreground, opacity: 0.7 }, `${index + 1} / ${input.slides.length}`),
+    // Page counter only for multi-slide carousels ("1 / 1" on a single image is noise).
+    ...(input.slides.length > 1 ? [el("div", { fontSize: 30, color: theme.foreground, opacity: 0.7 }, `${index + 1} / ${input.slides.length}`)] : []),
   ]);
   const body = el("div", { display: "flex", flexDirection: "column", gap: 40, flexGrow: 1, justifyContent: cover ? "center" : "flex-start", paddingTop: cover ? 0 : 80 }, [
     el("div", { fontSize: cover ? 84 : 64, fontWeight: 700, lineHeight: 1.15, color: theme.foreground }, s.title),
