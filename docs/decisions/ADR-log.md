@@ -535,6 +535,50 @@ but each step is resumable and cheaper to retry.
 **Alternative without a dependency:** the owner copies text out of the PDF (or saves it as `.txt`) and uploads or
 pastes it. This works today.
 
+## ADR-033 — Pipelined drafting: faster, with the same results and budget decisions (P4-05)
+**Decision (2026-11-19).** Drafting is pipelined, not fully parallel.
+- **Writer calls stay one at a time and in plan order.** Each writer must see the openings of every earlier post
+  (P3-03, the originality check). Parallel writers would get different inputs and so different results.
+- **What overlaps:** each draft's visual brief, rendered visual and review submission run in the background while
+  the next writer call runs.
+- **How much:** at most 3 drafts are in progress at once (`parallelDrafts`, range 1–4; 1 means strictly one at a
+  time).
+
+**Budget.** Every budget decision ("start the next writer?", "run this visual brief?") comes out exactly as in a
+one-at-a-time run:
+- **When decisions are taken:** a visual brief's decision is taken as soon as its draft's text is written, before
+  the next writer starts.
+- **Reservations:** work still in flight carries a reservation of its worst-case cost (`worstCaseCallUsd`). That
+  is twice `max_tokens` at the dearer of the model and the fallback price, plus input bounded by its UTF-8 bytes
+  and a 20,000-token prompt allowance. `max_tokens` now comes from one shared constant in `cost.ts`.
+- **When work is left running:** only if even its worst case could not exhaust the budget. Otherwise the decision
+  waits for it.
+- **Effect:**
+  - mock runs reserve nothing and always overlap;
+  - near the limit, a paid run falls back to one at a time;
+  - unknown models reserve "infinite" and never overlap.
+
+**Safety.**
+- **Exit paths:** every exit (finished, budget reached, cancelled, failed) first waits for in-flight work. Nothing
+  is still writing when the workflow is marked finished or the job lease is released.
+- **Background errors:** a background error stops new work and fails the workflow, as before. The one difference
+  is that the next draft's writer may already have finished; that draft is saved and picked up by resume (P4-02).
+- **Database:** concurrent transactions are isolated. PGlite serializes them (proven by a test); PostgreSQL uses
+  one pooled connection per transaction.
+
+**Evidence.** `tests/integration/parallel-drafting.test.ts`:
+- 8 drafts identical to a one-at-a-time run, with identical writer inputs;
+- overlap observed, never two writers at once;
+- in a simulation with 80 ms writer and 80 ms visual brief calls: **1,648 ms → 1,003 ms**;
+- paid-like runs spend the same and make the same budget decisions, both near the limit and with headroom;
+- cancel and failure leave nothing running;
+- mutations caught: without the budget guard → fail, without waiting on exit → 4 fail.
+
+Also `tests/db/concurrent-tx.test.ts`.
+
+**Consequence.** `cost.by_step` lists steps in completion order, which can differ from one-at-a-time order. The
+totals are identical.
+
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried
 automatically, with exponential backoff (30 s × 2ⁿ, max 1 h, max 5 attempts). Timeouts, 5xx, thrown errors,

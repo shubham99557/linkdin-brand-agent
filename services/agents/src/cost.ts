@@ -51,6 +51,28 @@ export function estimateCostUsd(model: string, usage: Usage | undefined): number
     + ((usage.webSearchRequests ?? 0) * WEB_SEARCH_USD_PER_1K) / 1000;
 }
 
+/** `max_tokens` of every Claude specialist call (anthropic-specialists.ts uses this constant). */
+export const MAX_OUTPUT_TOKENS_PER_CALL = 16_000;
+/** Allowance for a specialist's fixed system prompt and output schema, far above their real size. */
+export const PROMPT_OVERHEAD_TOKENS = 20_000;
+/** Server-side fallback target with `fallbacks: "default"` (see PRICING). */
+const FALLBACK_MODEL = "claude-opus-4-8";
+
+/**
+ * P4-05: a guaranteed upper bound on what ONE specialist call can add to the budget, used to reserve money for
+ * calls that run in parallel. The model can't write more than `max_tokens`; a token is at least one byte, so input
+ * tokens ≤ UTF-8 bytes of the variable input plus the fixed prompt; a fallback can at most double the call, at the
+ * dearer of the two prices (the same rule estimateCostUsd applies). Unknown models → Infinity (never parallel).
+ */
+export function worstCaseCallUsd(model: string, provider: string, variableInputBytes: number): number {
+  if (provider === "mock") return 0;
+  const p = PRICING[model];
+  const fb = PRICING[FALLBACK_MODEL]!;
+  if (!p) return Number.POSITIVE_INFINITY;
+  const price = { input: Math.max(p.input, fb.input), output: Math.max(p.output, fb.output) };
+  return 2 * ((variableInputBytes + PROMPT_OVERHEAD_TOKENS) * price.input + MAX_OUTPUT_TOKENS_PER_CALL * price.output) / 1_000_000;
+}
+
 export class Budget {
   private spent = 0;
   readonly byStep: Array<{ step: string; model: string; usd: number }> = [];
@@ -67,4 +89,6 @@ export class Budget {
   }
   get spentUsd() { return Math.round(this.spent * 10000) / 10000; }
   get exhausted() { return this.maxUsd !== null && this.spent >= this.maxUsd; }
+  /** True when spending `extraUsd` more would still leave the budget unexhausted (always true without a budget). */
+  staysBelowWith(extraUsd: number): boolean { return this.maxUsd === null || this.spent + extraUsd < this.maxUsd; }
 }

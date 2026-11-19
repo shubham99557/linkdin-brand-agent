@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
+import { MAX_OUTPUT_TOKENS_PER_CALL } from "./cost.ts";
 import {
   CreativeOutputSchema, ExtractionOutputSchema, PerformanceOutputSchema, StrategyOutputSchema,
   type CreativeInput, type ExtractionInput, type PerformanceInput, type ResearchInput, type Specialist,
@@ -55,7 +56,7 @@ abstract class StructuredSpecialist<I> implements Specialist<I> {
     try {
       const response = await this.client.beta.messages.parse({
         model: this.model,
-        max_tokens: 16000,
+        max_tokens: MAX_OUTPUT_TOKENS_PER_CALL,
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
         system: this.system(input),
@@ -196,7 +197,7 @@ export class AnthropicResearchSpecialist implements Specialist<ResearchInput> {
       for (let turn = 0; turn < 4; turn++) {
         const response = await this.client.messages.create({
           model: this.model,
-          max_tokens: 16000,
+          max_tokens: MAX_OUTPUT_TOKENS_PER_CALL,
           system,
           messages,
           tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 6 }],

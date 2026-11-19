@@ -3,7 +3,7 @@ import type { VerifiedClaim } from "@lbe/domain";
 import { PROMPT_VERSION as DRAFT_PROMPT_VERSION, validateDraftOutput, type Drafter } from "@lbe/drafting";
 import { buildBrandContext, entriesFor, nonProductionKnowledge, prohibitedTerms, prohibitedTopics, voiceFor, type BrandBrain } from "./brain.ts";
 import type { Specialist, Specialists, SpecialistResult, StrategyItem } from "./schemas.ts";
-import { Budget } from "./cost.ts";
+import { Budget, worstCaseCallUsd } from "./cost.ts";
 import {
   checkBrandRules, findingRestatements, usableEvidence, validateCreative, validateExtraction, validatePerformance, validateResearch,
   validateStrategy, type ValidFinding,
@@ -46,6 +46,64 @@ export interface AgentDeps {
    * together. Returns attached=false with a note when it cannot (e.g. brand colours not set yet).
    */
   attachVisual?: (contentId: string, brief: Record<string, unknown>) => Promise<{ attached: boolean; note?: string }>;
+  /**
+   * P4-05: how many drafts may be in progress at once (1–4, default 3). Writer calls always run one at a time and in
+   * plan order; what overlaps is each draft's visual brief, rendering and review submission with the next writer
+   * call. 1 = strictly one draft at a time.
+   */
+  parallelDrafts?: number;
+}
+
+export const DEFAULT_PARALLEL_DRAFTS = 3;
+
+/**
+ * P4-05 Pipelined drafting with the same results as one-at-a-time drafting.
+ * - Writer calls stay strictly sequential and in plan order, so every writer sees exactly the openings of the
+ *   earlier posts (P3-03) that it would see in a one-at-a-time run.
+ * - Every budget decision ("start the next writer?", "run this visual brief?") must come out as in a one-at-a-time
+ *   run. Work still in flight carries a reservation of its worst-case cost (worstCaseCallUsd). Before a decision,
+ *   that work is left running only if even the worst case could not exhaust the budget; otherwise the decision
+ *   waits for it. Mock runs reserve nothing; unknown models reserve Infinity (= one at a time).
+ * - Every exit path (finished, budget, cancel, error) waits for in-flight work first, so nothing is still writing
+ *   when the workflow is marked finished or the job lease is released.
+ */
+class DraftPipeline {
+  private readonly inFlight = new Map<Promise<void>, number>();
+  private failure: { error: unknown } | null = null;
+  readonly maxParallel: number;
+  constructor(private readonly budget: Budget, maxParallel: number) {
+    this.maxParallel = Math.min(Math.max(Math.floor(maxParallel) || 1, 1), 4);
+  }
+
+  private reservedUsd(): number {
+    let sum = 0;
+    for (const r of this.inFlight.values()) sum += r;
+    return sum;
+  }
+
+  /** Before a budget decision: wait for in-flight work if its worst-case cost could change the decision. */
+  async settleIfBudgetCouldChange(): Promise<void> {
+    if (this.inFlight.size > 0 && !this.budget.staysBelowWith(this.reservedUsd())) await this.settleAll();
+  }
+
+  /** Run `task` now (one-at-a-time mode) or in the background once a slot is free. */
+  async run(reserveUsd: number, task: () => Promise<void>): Promise<void> {
+    if (this.maxParallel <= 1) return task();
+    while (this.inFlight.size >= this.maxParallel - 1) await Promise.race(this.inFlight.keys());
+    const p: Promise<void> = task()
+      .catch((error: unknown) => { this.failure ??= { error }; })
+      .finally(() => { this.inFlight.delete(p); });
+    this.inFlight.set(p, reserveUsd);
+  }
+
+  async settleAll(): Promise<void> {
+    while (this.inFlight.size > 0) await Promise.allSettled([...this.inFlight.keys()]);
+  }
+
+  /** A background task failed: stop starting new work (the caller settles in-flight work, then rethrows). */
+  throwIfFailed(): void {
+    if (this.failure) throw this.failure.error;
+  }
 }
 
 export interface StepTimeouts { research: number; strategy: number; draft: number; creative: number }
@@ -286,35 +344,60 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
       if (voices[k].source !== "brain") warnings.push(`${k} voice is not in the Brand Brain yet (using ${voices[k].source}).`);
     }
     const claimsById = new Map(brain.claims.map((c) => [c.id, c]));
-    const drafts: Array<Record<string, unknown>> = [];
     const totalDrafts = plan.items.length * accounts.length;
+    const identity = entriesFor(brain, "identity").map((e) => e.body).join("\n");
+    // Results stay in plan order (item, then account) whatever order background work finishes in.
+    const slots: Array<Record<string, unknown> | undefined> = [];
+    const openings: string[] = [];          // P3-03: openings of the posts written so far, in plan order
+    let completed = 0;
+    const pipeline = new DraftPipeline(budget, deps.parallelDrafts ?? DEFAULT_PARALLEL_DRAFTS);
 
-    outer: for (const [index, item] of plan.items.entries()) {
-      const group = planItemGroup(workflowId, index);
-      const itemFindings = evidence.filter((f) => item.finding_ids.includes(f.id));
-      const itemClaims: VerifiedClaim[] = item.claim_ids.map((id) => claimsById.get(id)!).map((c) => ({
-        id: c.id, statement: c.statement, category: c.category as VerifiedClaim["category"], evidence_url: c.evidence_url, evidence_note: c.evidence_note,
-      }));
-      for (const acct of accounts) {
-        const existing = saved?.drafts.find((d) => d.variant_group === group && d.account_kind === acct.kind);
-        if (existing && isSettled(existing)) {
-          drafts.push({ content_id: existing.id, account_kind: acct.kind, pillar: existing.pillar, topic: existing.topic ?? item.topic,
-            status: existing.status, body: existing.body, scheduled_for: existing.scheduled_for, variant_group: group,
-            citations: existing.citations ?? [], unsupported: existing.unsupported ?? [], visual_brief: existing.visual_brief, resumed: true });
-          continue;
+    try {
+      outer: for (const [index, item] of plan.items.entries()) {
+        const group = planItemGroup(workflowId, index);
+        const itemFindings = evidence.filter((f) => item.finding_ids.includes(f.id));
+        const itemClaims: VerifiedClaim[] = item.claim_ids.map((id) => claimsById.get(id)!).map((c) => ({
+          id: c.id, statement: c.statement, category: c.category as VerifiedClaim["category"], evidence_url: c.evidence_url, evidence_note: c.evidence_note,
+        }));
+        for (const acct of accounts) {
+          const existing = saved?.drafts.find((d) => d.variant_group === group && d.account_kind === acct.kind);
+          if (existing && isSettled(existing)) {
+            slots.push({ content_id: existing.id, account_kind: acct.kind, pillar: existing.pillar, topic: existing.topic ?? item.topic,
+              status: existing.status, body: existing.body, scheduled_for: existing.scheduled_for, variant_group: group,
+              citations: existing.citations ?? [], unsupported: existing.unsupported ?? [], visual_brief: existing.visual_brief, resumed: true });
+            openings.push(firstLine(existing.body));
+            completed++;
+            continue;
+          }
+          pipeline.throwIfFailed();
+          await pipeline.settleIfBudgetCouldChange();
+          if (budget.exhausted) {
+            warnings.push(`Budget of $${budget.maxUsd} reached ($${budget.spentUsd}); remaining drafts were not created.`);
+            break outer;
+          }
+          await checkpoint("drafting", { done: completed, total: totalDrafts });
+          const written = await writeDraft(deps, { workflowId, item, acct, group, startDate, brandContext, voice: voices[acct.kind].text,
+            itemFindings, allFindings: findings, itemClaims, terms, identity, budget, existing, limits,
+            // P3-03: the writer sees how earlier posts in this plan open, so it can open differently (originality check).
+            otherOpenings: openings.filter(Boolean) });
+          const slot = slots.push(undefined) - 1;
+          if (written.kind === "final") { slots[slot] = written.result; completed++; continue; }
+          openings.push(firstLine(written.draft.body));
+          // The visual-brief budget decision is taken now, before the next writer can spend anything — as in a
+          // one-at-a-time run — and its worst case is reserved while it runs in the background.
+          await pipeline.settleIfBudgetCouldChange();
+          const creativeAllowed = !budget.exhausted;
+          const creativeCall = creativeAllowed && !written.draft.p.existing?.visual_brief;
+          const reserve = creativeCall ? worstCaseCallUsd(deps.specialists.creative.model, deps.specialists.creative.provider,
+            Buffer.byteLength([written.draft.body, item.topic, identity, ...terms].join("\n"))) : 0;
+          await pipeline.run(reserve, async () => { slots[slot] = await finishDraft(deps, written.draft, creativeAllowed); completed++; });
         }
-        if (budget.exhausted) {
-          warnings.push(`Budget of $${budget.maxUsd} reached ($${budget.spentUsd}); remaining drafts were not created.`);
-          break outer;
-        }
-        await checkpoint("drafting", { done: drafts.length, total: totalDrafts });
-        drafts.push(await draftOne(deps, { workflowId, item, acct, group, startDate, brandContext, voice: voices[acct.kind].text,
-          itemFindings, allFindings: findings, itemClaims, terms, identity: entriesFor(brain, "identity").map((e) => e.body).join("\n"), budget,
-          existing, limits,
-          // P3-03: the writer sees how earlier posts in this plan open, so it can open differently (originality check).
-          otherOpenings: drafts.map((d) => firstLine(d.body)).filter(Boolean) }));
       }
+    } finally {
+      await pipeline.settleAll();          // never leave work running behind a finished, failed or cancelled workflow
     }
+    pipeline.throwIfFailed();
+    const drafts = slots as Array<Record<string, unknown>>;
 
     // 8. Report
     await checkpoint("finishing", { done: drafts.length, total: totalDrafts });
@@ -356,7 +439,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
   }
 }
 
-async function draftOne(deps: AgentDeps, p: {
+interface DraftParams {
   workflowId: string; item: StrategyItem; acct: BrandBrain["accounts"][number]; group: string; startDate: string;
   brandContext: string; voice: string; itemFindings: Array<ValidFinding & { id: string }>; itemClaims: VerifiedClaim[];
   allFindings: Array<ValidFinding & { id: string }>; terms: string[]; identity: string; budget: Budget;
@@ -364,7 +447,19 @@ async function draftOne(deps: AgentDeps, p: {
   existing?: SavedDraft;
   limits: StepTimeouts;
   otherOpenings?: string[];
-}): Promise<Record<string, unknown>> {
+}
+/** A draft whose text is written, checked and saved; the visual brief, rendering and review submission follow. */
+interface WrittenDraft {
+  p: DraftParams; contentId: string; pillar: string; scheduled: Date;
+  body: string; citations: Array<{ claim_id: string; quoted_span: string }>; unsupported: string[]; voiceWarnings: string[];
+}
+
+/**
+ * Writer phase (always one at a time, in plan order): create the draft, write its text, check and save it.
+ * Returns the final record directly when the writer failed (nothing more to do for that draft).
+ */
+async function writeDraft(deps: AgentDeps, p: DraftParams):
+  Promise<{ kind: "final"; result: Record<string, unknown> } | { kind: "written"; draft: WrittenDraft }> {
   const { one, recordRun } = helpers(deps);
   const pillar = p.existing?.pillar ?? p.item.pillars[p.acct.kind];
   const scheduled = new Date(`${p.startDate}T09:00:00Z`);
@@ -408,13 +503,13 @@ async function draftOne(deps: AgentDeps, p: {
     : written.kind === "refused" ? { kind: "refused", reason: written.reason } : { kind: "error", message: written.message };
   if (written.kind !== "ok") {
     await recordRun("draft_post", writerMeta, asSpecialist, started, { workflow_id: p.workflowId }, undefined, contentId);
-    return { content_id: contentId, account_kind: p.acct.kind, topic: p.item.topic, status: "draft", citations: [], unsupported: [],
-      error: written.kind === "refused" ? `writer declined: ${written.reason}` : written.message };
+    return { kind: "final", result: { content_id: contentId, account_kind: p.acct.kind, topic: p.item.topic, status: "draft", citations: [], unsupported: [],
+      error: written.kind === "refused" ? `writer declined: ${written.reason}` : written.message } };
   }
   const v = validateDraftOutput(written.raw, p.itemClaims);
   if (!v.ok) {
     await recordRun("draft_post", writerMeta, asSpecialist, started, { workflow_id: p.workflowId }, { error: v.error }, contentId, "invalid_output");
-    return { content_id: contentId, account_kind: p.acct.kind, topic: p.item.topic, status: "draft", citations: [], unsupported: [], error: v.error };
+    return { kind: "final", result: { content_id: contentId, account_kind: p.acct.kind, topic: p.item.topic, status: "draft", citations: [], unsupported: [], error: v.error } };
   }
   // Verify brand rules (prohibited terms block submission; voice issues are warnings)
   const rules = checkBrandRules(v.draft.body, { accountKind: p.acct.kind, prohibitedTerms: p.terms });
@@ -430,13 +525,22 @@ async function draftOne(deps: AgentDeps, p: {
     { body: v.draft.body, citations: v.draft.citations, unsupported, validation_notes: [...v.draft.validationNotes, ...rules.warnings],
       notes_for_reviewer: v.draft.notesForReviewer, hook_variants: v.draft.hookVariants }, contentId);
   }
+  return { kind: "written", draft: { p, contentId, pillar, scheduled, body, citations, unsupported, voiceWarnings } };
+}
 
+/**
+ * Finishing phase (may overlap with the next writer call): visual brief, rendered visual, submission for review.
+ * `creativeAllowed` is the budget decision, taken by the caller at the same point a one-at-a-time run would.
+ */
+async function finishDraft(deps: AgentDeps, w: WrittenDraft, creativeAllowed: boolean): Promise<Record<string, unknown>> {
+  const { one, recordRun } = helpers(deps);
+  const { p, contentId, pillar, scheduled, body, citations, unsupported, voiceWarnings } = w;
   // Creative Brief Specialist (skipped once the budget is reached, or when a resumed draft already has one)
   let visualBrief: Record<string, unknown> | null = p.existing?.visual_brief ?? null;
   const creativeWarnings: string[] = [];
   if (!visualBrief) {
   const cStarted = new Date().toISOString();
-  const creative: SpecialistResult = p.budget.exhausted
+  const creative: SpecialistResult = !creativeAllowed
     ? { kind: "error", message: "skipped: budget reached" }
     : await withStepTimeout("visual brief", p.limits.creative, (signal) => deps.specialists.creative.run({ body, accountKind: p.acct.kind,
         topic: p.item.topic, visualIdentity: p.identity, prohibitedTerms: p.terms }, { signal }),
