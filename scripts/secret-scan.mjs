@@ -16,8 +16,9 @@ const RULES = [
   ["LinkedIn session cookie", /li_at=[A-Za-z0-9_-]{20,}/],
   ["Bearer token literal", /Bearer [A-Za-z0-9._-]{40,}/],
   ["Postgres URL with password", /postgres(ql)?:\/\/[^:\s/]+:(?!<password>)[^@\s]{6,}@/],
-  ["Filled dev password in example", /^LBE_DEV_[A-Z]+_PASSWORD=\S+/m],
-  ["Filled API key in example", /^ANTHROPIC_API_KEY=\S+/m],
+  // `<placeholder>` values in documentation are allowed.
+  ["Filled dev password in example", /^LBE_DEV_[A-Z]+_PASSWORD=(?!<)\S+/m],
+  ["Filled API key in example", /^ANTHROPIC_API_KEY=(?!<)\S+/m],
 ];
 
 const findings = [];
