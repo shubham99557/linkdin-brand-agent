@@ -13,8 +13,8 @@
   - creates organization STOP flags.
 
 ## Upgrade procedure
-1. **Back up first.**
-   - PGlite: stop the server, then copy the data folder (`.data/pglite` or `.data/staging`) somewhere safe.
+1. **Back up first** (see *Backups* below).
+   - PGlite: stop the server, then `npm run db:backup` (development) or `npm run db:backup:staging`.
    - PostgreSQL / Supabase: `pg_dump --format=custom --file=backup-YYYYMMDD.dump <connection>`, or take a Supabase backup.
 2. Rehearse on a copy: point a configuration at the copied data and run `npm run db:migrate`.
 3. Run `npm run db:migrate` (or `npm run staging:init` for staging) and check the list it prints.
@@ -23,7 +23,19 @@
 ## Rollback policy
 - **Failed migration:** nothing to do. The transaction rolled back, and the database is still on the previous version.
 - **Bad migration that succeeded:** prefer a *forward fix*, meaning a new migration that corrects it. If data is at risk, restore
-  the backup from step 1. PGlite: replace the data folder. PostgreSQL: `pg_restore --clean --dbname=<db> backup.dump`.
+  the backup from step 1. PGlite: `npm run db:restore` into a new folder, then point `LBE_PGLITE_DIR` at it.
+  PostgreSQL: `pg_restore --clean --dbname=<db> backup.dump`.
+
+## Backups (embedded database — verified by `tests/db/backup-restore.test.ts`)
+- `npm run db:backup` / `npm run db:backup:staging` writes `backups/lbe-<env>-<timestamp>.tar.gz` and a `.json`
+  manifest (archive SHA-256, migration list, row count per table). It refuses while the server port is in use.
+- `npm run db:restore -- --manifest backups/<file>.json --target .data/<new-folder>` verifies the hash, refuses to
+  overwrite any non-empty folder, loads the archive, checks migrations and row counts against the manifest, and
+  clears all sessions and pending LinkedIn connections (everyone signs in again).
+- **Backups are sensitive:** business data, password hashes and *encrypted* LinkedIn tokens. `backups/` is
+  git-ignored. Copies kept off this machine must be encrypted. Restored LinkedIn credentials only work with the
+  same `LBE_TOKEN_ENC_KEY`; keep that key backed up separately (never alongside the backup).
+- Test a restore after every backup you intend to rely on (`--target .data/restore-check`, then delete the folder).
 - Down-migrations are intentionally not maintained. Business rules live in database functions, and hand-written
   reversals of replaced functions are error-prone. Backups plus forward fixes are the supported path.
 

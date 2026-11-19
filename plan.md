@@ -17,12 +17,13 @@
 |---|---|
 | Current phase | **Phase 1 — Security & engineering foundation** (Phase 0 DONE) |
 | Active task | — |
-| Next READY task | **P1-01** Database backup & tested restore |
-| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) |
+| Next READY tasks | **P1-02 sessions** · P2-01 pillars UI · P4-01 durable jobs · P3-01 pricing check · P5-00 render dependency review |
+| First safe milestone | **M1 Technical prototype hardened** — P1-01..05 + P2-01/02 need no external action |
+| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups |
 | Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · P0-07 off-machine code backup |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9) |
-| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 276 ✅ (9 PG skipped there) · `test:pg:embedded` 9/9 ✅ · Playwright 6 ✅ · secret scan ✅ · npm audit 0 ✅ |
-| Latest commit | `0989d12` (update after each task) |
+| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 281 ✅ (9 PG skipped there) · `test:pg:embedded` 9/9 ✅ · Playwright 6 ✅ · secret scan ✅ · npm audit 0 ✅ |
+| Latest commit | see `git log -1` (P1-01 commit follows `6429aaa`) |
 | Next milestone | **M1 Technical prototype hardened** → then **M2 AI intelligence evaluation** (needs OA-3, OA-6) |
 
 No completion percentage is reported (no agreed weighting method).
@@ -190,8 +191,8 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 ### Phase 1 — Security & engineering foundation
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
 |---|---|---|---|---|---|---|---|---|
-| P1-01 | **DB backup & tested restore** (`db:backup`, `db:restore`, PGlite + Postgres) | — | P0 | READY | C | scripts/, services/api/src/cli, docs/migrations-runbook.md | Backup of dev & staging; restore into new dir reproduces row counts & checksums; refuses to overwrite a running/live DB | `tests/db/backup-restore.test.ts`, manual run |
-| P1-02 | Session hardening: idle timeout, sign-out-everywhere, session list | — | P1 | READY | C | migration 0700, app.ts, web | Idle sessions rejected; revoke-all works; tests | `tests/db/sessions.test.ts` |
+| P1-01 | **DB backup & tested restore** (`db:backup`, `db:restore`; PGlite now, `pg_dump` documented for PostgreSQL URLs). **Evidence 2026-11-19:** `tests/db/backup-restore.test.ts` 5/5; staging backup + verified restore (6 migrations, 13 rows); refusals verified (server running, non-empty target, outside `.data/`) | — | P0 | DONE | C | scripts/, services/api/src/cli, docs/migrations-runbook.md | Backup of dev & staging; restore into new dir reproduces row counts & checksums; refuses to overwrite a running/live DB | `tests/db/backup-restore.test.ts`, manual run |
+| P1-02 | Session hardening: idle timeout, sign-out-everywhere | — | P1 | READY | C | migration 0700, app.ts, web | Idle sessions rejected; revoke-all works; tests | `tests/db/sessions.test.ts` |
 | P1-03 | Admin user management UI (create/disable users, approver assignment) — no emails | P1-02 | P1 | NOT_STARTED | C | migration, app.ts, web | Admin-only; audited; org-scoped; tests | integration test |
 | P1-04 | Structured error logging & request IDs (no secrets/PII in logs) | — | P2 | NOT_STARTED | C | app.ts | Every 5xx logged with request id; secret-leak test still passes | test |
 | P1-05 | Security review sign-off for internal MVP; list SaaS blockers | P1-01..04 | P1 | NOT_STARTED | C | docs/hardening-report.md | Findings table updated | doc |
@@ -221,7 +222,7 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 ### Phase 4 — Reliable orchestration
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
 |---|---|---|---|---|---|---|---|---|
-| P4-01 | Durable job table + runner (claim/lease like outbox, lbe_agent role) | P1-01 | P1 | READY | C | migration 07xx, services/agents, api | Jobs persisted; one runner claims; lease expiry → resumable | DB + PG concurrency tests |
+| P4-01 | Durable job table + runner (claim/lease like outbox, lbe_agent role) | — | P1 | READY | C | migration 07xx, services/agents, api | Jobs persisted; one runner claims; lease expiry → resumable | DB + PG concurrency tests |
 | P4-02 | Step checkpoints & safe partial results (resume after crash without duplicate drafts) | P4-01 | P1 | NOT_STARTED | C | orchestrator | Kill mid-run → resume → no duplicates | integration test |
 | P4-03 | Cancel, retry, timeouts per step; per-run cost on job | P4-01 | P1 | NOT_STARTED | C | orchestrator, api | Cancel stops further model calls | tests |
 | P4-04 | Dashboard progress view (polling) | P4-01 | P2 | NOT_STARTED | C | web | Progress & cost visible; e2e | Playwright |
@@ -230,8 +231,9 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 ### Phase 5 — Content production & Creative Studio
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
 |---|---|---|---|---|---|---|---|---|
-| P5-01 | Render service (Satori + resvg-js + pdfkit — selected in research; licence/security re-check) | — | P1 | NOT_STARTED | C | services/render | No network egress; data-URI assets; tests | unit tests |
-| P5-02 | Brand templates (single image, document carousel) from Brand Brain identity | P5-01, P2-08 | P1 | NOT_STARTED | C | templates | Rendered PNG/PDF previews | snapshot tests |
+| P5-00 | **Gate:** dependency review for Satori / resvg-js / pdfkit (licence, maintainers, native binaries, 14-day cooldown, install scripts) recorded in ADR dependency table | — | P1 | READY | C | ADR-log | Approved versions pinned or alternative chosen | ADR entry |
+| P5-01 | Render service (Satori + resvg-js + pdfkit — selected in research) | P5-00 | P1 | NOT_STARTED | C | services/render | No network egress; data-URI assets; tests | unit tests |
+| P5-02 | Brand templates (single image, document carousel) from Brand Brain identity (placeholder identity until P2-08) | P5-01 | P1 | NOT_STARTED | C | templates | Rendered PNG/PDF previews | snapshot tests |
 | P5-03 | Attach assets to drafts (media ids in package → approval covers visuals) | P5-02 | P1 | NOT_STARTED | C | migration, api | Editing visual invalidates approval | DB tests |
 | P5-04 | Draft revisions & history view | P4-02 | P2 | NOT_STARTED | C | web, api | Version diff visible | e2e |
 | P5-05 | Monthly planning & campaign objectives | P4-04 | P2 | NOT_STARTED | C | agents, web | Month plan without duplicates | tests |
@@ -362,4 +364,5 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 ## Change log
 | Date | Change | Commit |
 |---|---|---|
-| 2026-11-19 | Plan created from audit (P0-01…P0-06) | (this commit) |
+| 2026-11-19 | Plan created from audit (P0-01…P0-06) | `6429aaa` |
+| 2026-11-19 | Review: removed false deps (P4-01→P1-01, P5-02→P2-08), added P5-00 dependency gate, trimmed P1-02; P1-01 DONE | P1-01 commit |

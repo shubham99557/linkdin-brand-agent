@@ -17,8 +17,9 @@ secrets/
 # Evaluation output and Brand Brain snapshots (business information)
 eval-results/
 
-# Local data
+# Local data and database backups (business data, password hashes)
 .data/
+backups/
 *.db
 pgdata/
 supabase/.temp/
