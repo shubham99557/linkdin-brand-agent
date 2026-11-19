@@ -1,0 +1,10 @@
+{
+  "name": "@lbe/publishing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@lbe/domain": "0.1.0"
+  }
+}

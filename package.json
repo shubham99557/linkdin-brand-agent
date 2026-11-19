@@ -1,0 +1,43 @@
+{
+  "name": "linkdin-brand-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone LinkedIn brand engine — Phase 1 (mock publishing only)",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "setup:local": "node scripts/setup-local.mjs",
+    "db:migrate": "tsx services/api/src/cli/migrate.ts",
+    "db:seed": "tsx services/api/src/cli/seed.ts",
+    "user:create": "tsx services/api/src/cli/create-user.ts",
+    "dev:api": "tsx watch services/api/src/main.ts",
+    "dev:web": "npm run dev -w @lbe/web",
+    "worker": "tsx services/api/src/worker.ts",
+    "build:web": "npm run build -w @lbe/web",
+    "start": "tsx services/api/src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && npm run typecheck -w @lbe/web",
+    "test": "vitest run",
+    "test:db": "vitest run tests/db",
+    "test:pg": "vitest run tests/pg",
+    "test:e2e": "playwright test",
+    "security:secrets": "node scripts/secret-scan.mjs",
+    "security:audit": "npm audit --audit-level=high",
+    "check": "npm run typecheck && npm test && npm run security:secrets"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@types/node": "26.6.6",
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}
