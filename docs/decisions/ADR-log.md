@@ -344,8 +344,13 @@ orchestrator still runs as `lbe_agent`. `whoami` refuses them, so a job session 
 dashboard or API. No browser session is ever stored or handed to a runner.
 
 **Consequences.**
-- A runner that dies leaves an expired lease. The job becomes `interrupted` and the workflow `failed`. It is
-  **not** re-run automatically, because that could duplicate drafts; checkpointed resume is P4-02.
+- A runner that dies leaves an expired lease. **Updated by P4-02 (migration 1300).** Its job session is revoked
+  first, then the job is re-queued and **resumes the same workflow**. Saved findings and the saved plan are
+  reused. Each draft is identified by a deterministic id, `planItemGroup(workflow, index)`, so an existing draft
+  is continued rather than created again. A database unique index allows only one draft per (workflow, plan
+  item, account), which also stops a late write from a zombie runner. Estimated spend from earlier attempts
+  counts towards the budget. After 3 lost leases the job becomes `interrupted`, and the requester or an admin
+  can resume it.
 - Cancellation: a queued job is cancelled at once; a running job stops at the next step boundary, and work
   already saved is kept.
 - A limit of 5 queued or running jobs per organization.

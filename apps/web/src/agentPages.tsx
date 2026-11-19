@@ -314,7 +314,7 @@ interface Job {
   cancel_requested: boolean; error: string | null; requested_by_name: string; created_at: string; started_at: string | null; finished_at: string | null;
 }
 const STAGE_TEXT: Record<string, string> = {
-  starting: "Starting…", started: "Loading the Brand Brain…", research: "Researching sources…", strategy: "Planning the content…",
+  starting: "Starting…", resuming: "Resuming where it stopped…", started: "Loading the Brand Brain…", research: "Researching sources…", strategy: "Planning the content…",
   drafting: "Writing drafts…", finishing: "Checking and saving…",
 };
 const ACTIVE = new Set(["queued", "running"]);
@@ -372,6 +372,12 @@ export function JobPage({ id }: { id: string }) {
         {(job.status === "failed" || job.status === "interrupted") && <p className="error">{job.error ?? "The job did not finish."}</p>}
         {job.workflow_id && !active && job.status !== "succeeded" && <p><a href={`#/agent/${job.workflow_id}`}>See what was produced</a></p>}
         <ErrorText error={actionError} />
+        {job.status === "interrupted" && (
+          <button className="primary" data-testid="resume-job" onClick={async () => {
+            setActionError(null);
+            try { await api(`/agent/jobs/${job.id}/resume`, { method: "POST" }); reload(); } catch (e) { setActionError((e as Error).message); }
+          }}>Resume where it stopped</button>
+        )}
         {active && !job.cancel_requested && (
           <button className="danger" data-testid="cancel-job" onClick={async () => {
             setActionError(null);

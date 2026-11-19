@@ -101,18 +101,50 @@ describe("cancel", () => {
 });
 
 describe("interruption", () => {
-  it("an expired lease marks the job interrupted, revokes its session and fails the workflow — it is not re-run", async () => {
+  it("P4-02: an expired lease revokes the lost runner's session and re-queues the SAME workflow (up to 3 attempts), then marks it interrupted", async () => {
     const id = await enqueue(editor);
+    const expire = () => t.db.query("update lbe.agent_jobs set lease_expires_at = now() - interval '1 second' where id = $1", [id]);
     const c = (await claim("w1"))!;
     const wf = await t.db.tx("lbe_agent", async (q) => (await q.query<{ id: string }>("select lbe.workflow_create($1, 'interrupted goal', '{}'::jsonb) as id", [c.session]))[0]!.id);
-    await t.worker("select lbe.job_heartbeat('w1', $1, '{\"stage\":\"research\"}'::jsonb, $2, 60)", [id, wf]);
-    await t.db.query("update lbe.agent_jobs set lease_expires_at = now() - interval '1 second' where id = $1", [id]);
+    await t.worker("select lbe.job_heartbeat('w1', $1, '{\"stage\":\"research\",\"estimated_usd\":0.42}'::jsonb, $2, 60)", [id, wf]);
+    await expire();
     expect(Object.values(await w1<number>("select lbe.job_recover_expired() as n"))[0]).toBe(1);
+    await expectCode(t.db.tx("lbe_agent", (q) => q.query("select lbe.brain_load($1)", [c.session])), "LBE10");   // zombie cut off
+    expect(await job(id)).toMatchObject({ status: "queued", workflow_id: wf });
+    const c2 = (await claim("w2")) as unknown as { id: string; workflow_id: string; spent_usd: number };
+    expect(c2).toMatchObject({ id, workflow_id: wf });                              // resume the same workflow…
+    expect(Number(c2.spent_usd)).toBeCloseTo(0.42);                                 // …and count the earlier spend
+    await expire(); await t.worker("select lbe.job_recover_expired()");            // attempt 2 lost
+    await claim("w3");
+    await expire(); await t.worker("select lbe.job_recover_expired()");            // attempt 3 lost → give up
     expect(await job(id)).toMatchObject({ status: "interrupted", lease_owner: null, workflow_id: wf });
-    expect(await claim("w2")).toBeNull();                                          // not re-queued
+    expect(await claim("w4")).toBeNull();
     const [w] = await t.db.query<{ status: string }>("select status from lbe.agent_workflows where id = $1", [wf]);
     expect(w!.status).toBe("failed");
-    await expectCode(t.db.tx("lbe_agent", (q) => q.query("select lbe.brain_load($1)", [c.session])), "LBE10");
+    // Manual resume (requester or admin) re-queues it and reopens the workflow.
+    await expectCode(t.api("select lbe.job_resume($1, $2)", [await t.login("approver"), id]), "LBE11");
+    await t.api("select lbe.job_resume($1, $2)", [editor, id]);
+    expect(await job(id)).toMatchObject({ status: "queued", workflow_id: wf });
+    const [w2] = await t.db.query<{ status: string }>("select status from lbe.agent_workflows where id = $1", [wf]);
+    expect(w2!.status).toBe("running");
+    await expectCode(t.api("select lbe.job_resume($1, $2)", [editor, id]), "LBE01");                // only interrupted jobs
+    await drain();
+  });
+
+  it("P4-02: the database allows only one draft per (workflow, plan item, account)", async () => {
+    const id = await enqueue(editor);
+    const c = (await claim("w1"))!;
+    const agent = <T>(sql: string, p: unknown[]) => t.db.tx("lbe_agent", async (q) => Object.values((await q.query<Record<string, T>>(sql, p))[0]!)[0]!);
+    const wf = await agent<string>("select lbe.workflow_create($1, 'dup guard goal', '{}'::jsonb)", [c.session]);
+    const meta = JSON.stringify({ workflow_id: wf, variant_group: "11111111-2222-4333-8444-555555555555", created_via: "agent" });
+    const first = await agent<string>("select lbe.create_content($1, $2, 'threat-landscape', 'one', null, null)", [c.session, t.ids.accounts.company]);
+    await agent("select lbe.set_agent_metadata($1, $2, $3::jsonb)", [c.session, first, meta]);
+    const second = await agent<string>("select lbe.create_content($1, $2, 'threat-landscape', 'two', null, null)", [c.session, t.ids.accounts.company]);
+    await expectCode(agent("select lbe.set_agent_metadata($1, $2, $3::jsonb)", [c.session, second, meta]), "23505");
+    // The founder account may have its own draft for the same plan item.
+    const founder = await agent<string>("select lbe.create_content($1, $2, 'founder-lessons', 'f', null, null)", [c.session, t.ids.accounts.founder]);
+    await agent("select lbe.set_agent_metadata($1, $2, $3::jsonb)", [c.session, founder, meta]);
+    await t.worker("select lbe.job_finish('w1', $1, 'failed', 'test')", [id]);
   });
 
   it("heartbeat cannot attach another organization's workflow", async () => {

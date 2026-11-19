@@ -607,6 +607,10 @@ export function createApp(deps: AppDeps) {
 
   api.get("/agent/jobs", async (c) => c.json(await one("select lbe.job_list($1)", [c.get("session")])));
   api.get("/agent/jobs/:id", async (c) => c.json(await one("select lbe.job_get($1, $2)", [c.get("session"), param(c, "id")])));
+  api.post("/agent/jobs/:id/resume", async (c) => {
+    await q("select lbe.job_resume($1, $2)", [c.get("session"), param(c, "id")]);
+    return c.json({ ok: true, status: "queued" });
+  });
   api.post("/agent/jobs/:id/cancel", async (c) =>
     c.json({ result: await one<string>("select lbe.job_cancel($1, $2)", [c.get("session"), param(c, "id")]) }));
 

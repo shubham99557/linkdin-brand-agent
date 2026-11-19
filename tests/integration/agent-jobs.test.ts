@@ -93,6 +93,61 @@ describe("durable Branding Agent jobs", () => {
     expect((await tick()).job).toBeNull();                              // nothing left
   });
 
+  it("P4-02: a runner that hangs mid-run is replaced; the job resumes the same workflow with no duplicate drafts, and the zombie cannot write", async () => {
+    const editor = await login();
+    const q = await call(editor, "POST", "/api/agent/workflows", { goal: "Crash and resume test goal", start_date: "2027-06-07" });
+    const base = mockSpecialists();
+    const realWriter = new MockDrafter();
+    // Runner A: the 3rd draft hangs (simulated crash / frozen process) until we release it.
+    let callsA = 0;
+    let hung!: () => void;
+    let reachedHang!: () => void;
+    const hangReached = new Promise<void>((r) => { reachedHang = r; });
+    const writerA = { provider: "mock" as const, model: "mock-drafter-v1", draft: async (i: Parameters<MockDrafter["draft"]>[0]) => {
+      callsA++;
+      if (callsA === 3) { reachedHang(); await new Promise<void>((r) => { hung = r; }); }
+      return realWriter.draft(i);
+    } };
+    const tickA = runAgentJobTick({ db: t.db, specialists: base, writer: writerA, voiceDir: VOICE, workerId: "runner-A", heartbeatMs: 3_600_000 });
+    await hangReached;
+    const jobId = q.body.job_id as string;
+    const wfId = (await call(editor, "GET", `/api/agent/jobs/${jobId}`)).body.workflow_id as string;
+    const before = await t.db.query<{ id: string; body: string | null }>("select id, body from lbe.content_items where workflow_id = $1 order by created_at", [wfId]);
+    expect(before.length).toBe(3);                                       // 2 finished + the one being written
+    expect(before.filter((d) => d.body).length).toBe(2);
+    const inFlight = before.find((d) => !d.body)!.id;
+
+    // The lease runs out (runner A is "dead"); runner B recovers the job and resumes it.
+    await t.db.query("update lbe.agent_jobs set lease_expires_at = now() - interval '1 second' where id = $1", [jobId]);
+    let callsB = 0;
+    const writerB = { provider: "mock" as const, model: "mock-drafter-v1", draft: async (i: Parameters<MockDrafter["draft"]>[0]) => { callsB++; return realWriter.draft(i); } };
+    let researchCallsB = 0;
+    const specialistsB: Specialists = { ...base, research: { ...base.research, run: async (i) => { researchCallsB++; return base.research.run(i); } } };
+    const rB = await runAgentJobTick({ db: t.db, specialists: specialistsB, writer: writerB, voiceDir: VOICE, workerId: "runner-B" });
+    expect(rB.recovered).toBe(1);
+    expect(rB.job).toMatchObject({ id: jobId, status: "succeeded", workflowId: wfId });
+    expect(researchCallsB).toBe(0);                                      // saved research reused
+
+    const after = await t.db.query<{ id: string; variant_group: string; account_id: string; status: string }>(
+      "select id, variant_group, account_id, status from lbe.content_items where workflow_id = $1", [wfId]);
+    const job = (await call(editor, "GET", `/api/agent/jobs/${jobId}`)).body;
+    expect(after.length).toBe(job.progress.total);                       // exactly one draft per plan item and account
+    expect(new Set(after.map((d) => `${d.variant_group}:${d.account_id}`)).size).toBe(after.length);
+    expect(after.some((d) => d.id === inFlight)).toBe(true);             // the half-written draft was continued, not replaced
+    expect(callsB).toBe(after.length - 2);                               // only unfinished drafts were written again
+    const wf = (await call(editor, "GET", `/api/agent/workflows/${wfId}`)).body;
+    expect(wf.status).toBe("completed");
+    expect(wf.result.warnings.join(" ")).toMatch(/Resumed after an interruption/);
+
+    // Release the zombie: its session was revoked, so it cannot change anything.
+    hung();
+    const rA = await tickA;
+    expect(rA.job?.status).toBe("failed");
+    const final = await t.db.query("select id from lbe.content_items where workflow_id = $1", [wfId]);
+    expect(final.length).toBe(after.length);
+    expect((await call(editor, "GET", `/api/agent/jobs/${jobId}`)).body.status).toBe("succeeded");
+  });
+
   it("viewers cannot start jobs; the API never accepts a job session as a login", async () => {
     await t.db.query("select lbe.admin_create_user('viewer@lbe.test', 'Viewer', 'viewer', 'viewer-password-123')");
     const viewer = await login("viewer@lbe.test", "viewer-password-123");

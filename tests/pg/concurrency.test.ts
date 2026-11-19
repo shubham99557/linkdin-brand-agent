@@ -218,7 +218,8 @@ suite("PostgreSQL concurrency", () => {
     expect(new Set(ids).size).toBe(jobs.length);
     const [s] = await db.query<{ n: number }>("select count(*)::int as n from lbe.sessions where kind = 'agent_job' and job_id = any($1::uuid[])", [jobs]);
     expect(s!.n).toBe(jobs.length);
-    // Lease recovery racing a heartbeat: the job ends up either still running (heartbeat won) or interrupted, never both.
+    // Lease recovery racing a heartbeat: the job ends up either still running (heartbeat won) or re-queued for
+    // resume (P4-02) with the lost runner's session revoked — never both.
     const victim = jobs[0]!;
     const owner = (await db.query<{ lease_owner: string }>("select lease_owner from lbe.agent_jobs where id = $1", [victim]))[0]!.lease_owner;
     await db.query("update lbe.agent_jobs set lease_expires_at = now() - interval '1 second' where id = $1", [victim]);
@@ -227,6 +228,8 @@ suite("PostgreSQL concurrency", () => {
       db.tx("lbe_worker", (q) => q.query("select lbe.job_heartbeat($1, $2, '{}'::jsonb, null, 60)", [owner, victim])),
     ]);
     const [v] = await db.query<{ status: string }>("select status from lbe.agent_jobs where id = $1", [victim]);
-    expect(["running", "interrupted"]).toContain(v!.status);
+    expect(["running", "queued"]).toContain(v!.status);
+    const [live] = await db.query<{ n: number }>("select count(*)::int as n from lbe.sessions where job_id = $1 and revoked_at is null", [victim]);
+    expect(live!.n).toBe(v!.status === "running" ? 1 : 0);
   });
 });

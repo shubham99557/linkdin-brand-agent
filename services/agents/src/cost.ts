@@ -32,6 +32,10 @@ export class Budget {
     this.byStep.push({ step, model, usd: Math.round(usd * 10000) / 10000 });
     return usd;
   }
+  /** Spend already incurred by an earlier attempt of the same workflow (resume): counts towards the ceiling. */
+  addPrior(usd: number): void {
+    if (usd > 0) { this.spent += usd; this.byStep.push({ step: "earlier attempt", model: "-", usd: Math.round(usd * 10000) / 10000 }); }
+  }
   get spentUsd() { return Math.round(this.spent * 10000) / 10000; }
   get exhausted() { return this.maxUsd !== null && this.spent >= this.maxUsd; }
 }

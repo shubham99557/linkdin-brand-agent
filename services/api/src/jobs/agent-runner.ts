@@ -27,7 +27,12 @@ export interface AgentTickResult {
   job: null | { id: string; status: "succeeded" | "failed" | "cancelled"; workflowId: string | null; error?: string };
 }
 
-interface Claim { id: string; kind: "brand_workflow"; session: string; params: { goal: string; start_date?: string; days?: number; post_count?: number } }
+interface Claim {
+  id: string; kind: "brand_workflow"; session: string; params: { goal: string; start_date?: string; days?: number; post_count?: number };
+  /** Set when an earlier attempt already started this job's workflow → resume it (P4-02). */
+  workflow_id: string | null;
+  spent_usd: number;
+}
 
 export async function runAgentJobTick(deps: AgentRunnerDeps): Promise<AgentTickResult> {
   const worker = async <T>(sql: string, params: unknown[] = []) =>
@@ -37,8 +42,8 @@ export async function runAgentJobTick(deps: AgentRunnerDeps): Promise<AgentTickR
   const claim = await worker<Claim | null>("select lbe.job_claim($1, $2)", [deps.workerId, lease]);
   if (!claim) return { recovered, job: null };
 
-  let workflowId: string | null = null;
-  let lastProgress: Record<string, unknown> = { stage: "starting" };
+  let workflowId: string | null = claim.workflow_id;
+  let lastProgress: Record<string, unknown> = { stage: claim.workflow_id ? "resuming" : "starting" };
   let cancel = false;
   const beat = async () => {
     const r = await worker<{ ok: boolean; cancel: boolean }>("select lbe.job_heartbeat($1, $2, $3::jsonb, $4, $5)",
@@ -52,6 +57,7 @@ export async function runAgentJobTick(deps: AgentRunnerDeps): Promise<AgentTickR
   try {
     await runBrandWorkflow({
       db: deps.db, session: claim.session, specialists: deps.specialists, writer: deps.writer, budgetUsd: deps.budgetUsd,
+      resumeWorkflowId: claim.workflow_id ?? undefined, priorSpentUsd: Number(claim.spent_usd) || 0,
       readVoiceFile: async (profile) => readFile(path.join(deps.voiceDir, `${profile}.md`), "utf8").catch(() => null),
       onProgress: async (p: WorkflowProgress) => {
         workflowId = p.workflowId;

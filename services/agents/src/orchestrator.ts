@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { VerifiedClaim } from "@lbe/domain";
 import { PROMPT_VERSION as DRAFT_PROMPT_VERSION, validateDraftOutput, type Drafter } from "@lbe/drafting";
 import { buildBrandContext, entriesFor, nonProductionKnowledge, prohibitedTerms, prohibitedTopics, voiceFor, type BrandBrain } from "./brain.ts";
@@ -35,6 +35,32 @@ export interface AgentDeps {
    * workflow before the next model call; work already saved (drafts, findings) is kept.
    */
   onProgress?: (p: WorkflowProgress) => Promise<void | "cancel">;
+  /** Resume this existing workflow (P4-02): reuse saved research, strategy and drafts; never duplicate a draft. */
+  resumeWorkflowId?: string;
+  /** Estimated spend of earlier attempts (counts towards budgetUsd on resume). */
+  priorSpentUsd?: number;
+}
+
+/**
+ * Stable id for "plan item i of workflow w" (stored as content_items.variant_group). A resumed run derives the
+ * same id, finds the draft it already made, and continues it; the database allows only one draft per
+ * (workflow, plan item, account).
+ */
+export function planItemGroup(workflowId: string, index: number): string {
+  const h = createHash("sha256").update(`${workflowId}:plan-item:${index}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
+interface SavedDraft {
+  id: string; status: string; account_kind: Kind; pillar: string; topic: string | null; body: string | null; scheduled_for: string | null;
+  variant_group: string | null; unsupported: string[] | null; visual_brief: Record<string, unknown> | null;
+  citations: Array<{ claim_id: string; quoted_span: string }>;
+}
+interface Checkpoint {
+  strategy: { summary: string; items: StrategyItem[] } | null;
+  findings: Array<{ id: string; statement: string; source_url: string; source_title: string | null; publisher: string | null;
+    published_at: string | null; confidence: "high" | "medium" | "low"; stale: boolean; flags: string[] }>;
+  drafts: SavedDraft[];
 }
 
 export interface WorkflowProgress {
@@ -60,6 +86,9 @@ export interface WorkflowInput {
 
 const KINDS = ["company_page", "founder_profile"] as const;
 type Kind = (typeof KINDS)[number];
+
+/** Drafts already decided by the pipeline (submitted for review, or held with blocking issues) — not touched again. */
+const isSettled = (d: SavedDraft) => !!d.body && (d.status !== "draft" || (d.unsupported ?? []).length > 0);
 
 function helpers(deps: AgentDeps) {
   const q = <R>(sql: string, params: unknown[] = []) => deps.db.tx("lbe_agent", (t) => t.query<R>(sql, params));
@@ -94,10 +123,12 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
   const postCount = Math.min(Math.max(input.postCount ?? 4, 3), 5);
   const startDate = input.startDate ?? isoDate(new Date(now.getTime() + 86_400_000));
   const goal = input.goal.trim();
-  const workflowId = await one<string>("select lbe.workflow_create($1, $2, $3::jsonb)",
+  const resuming = !!deps.resumeWorkflowId;
+  const workflowId = deps.resumeWorkflowId ?? await one<string>("select lbe.workflow_create($1, $2, $3::jsonb)",
     [deps.session, goal, JSON.stringify({ startDate, days, postCount, region: input.region ?? "UK", audience: input.audience ?? null })]);
   const warnings: string[] = [];
   const budget = new Budget(deps.budgetUsd ?? null);
+  budget.addPrior(deps.priorSpentUsd ?? 0);
   const checkpoint = async (stage: WorkflowProgress["stage"], extra: Partial<WorkflowProgress> = {}) => {
     if (!deps.onProgress) return;
     if ((await deps.onProgress({ stage, workflowId, estimatedUsd: budget.spentUsd, ...extra })) === "cancel") throw new WorkflowCancelledError();
@@ -119,19 +150,33 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     const accounts = KINDS.map((k) => brain.accounts.find((a) => a.kind === k)).filter((a): a is BrandBrain["accounts"][number] => !!a);
     if (accounts.length === 0) throw new Error("no social accounts configured for this organization");
 
-    // 2. Research
+    // Resume (P4-02): load what earlier attempts already saved for this workflow.
+    const saved: Checkpoint | null = resuming
+      ? await one<Checkpoint>("select lbe.workflow_get($1, $2)", [deps.session, workflowId])
+      : null;
+    if (saved) {
+      warnings.push(`Resumed after an interruption: reused ${saved.findings.length} saved finding(s), ${saved.strategy ? "the saved plan" : "no plan"} and ${saved.drafts.length} saved draft(s); nothing was duplicated.`);
+    }
+
+    // 2. Research (skipped on resume once findings or a plan were saved)
     await checkpoint("research");
-    const researchStarted = new Date().toISOString();
-    const research = await deps.specialists.research.run({
-      goal, region: input.region ?? "UK", audience: input.audience ?? (entriesFor(brain, "icp")[0]?.body.slice(0, 500) ?? "UNKNOWN"),
-      brandSummary: entriesFor(brain, "identity").map((e) => e.body).join(" ").slice(0, 1000) || "UNKNOWN", maxFindings: 8,
-    });
-    budget.add("research", deps.specialists.research.model, research.kind === "ok" ? research.usage : undefined, deps.specialists.research.provider);
     let findings: Array<ValidFinding & { id: string }> = [];
     let rejectedSources: Array<{ source_url: string; reason: string }> = [];
     let gaps: string[] = [];
     let contradictions: Array<{ source_urls: string[]; description: string }> = [];
-    if (research.kind === "ok") {
+    const reuseResearch = !!saved && (saved.findings.length > 0 || !!saved.strategy);
+    if (reuseResearch) {
+      findings = saved!.findings.map((f) => ({ ...f, source_title: f.source_title ?? "", relevance: "", flags: f.flags ?? [] }));
+    }
+    const researchStarted = new Date().toISOString();
+    const research: SpecialistResult = reuseResearch ? { kind: "ok", raw: null } : await deps.specialists.research.run({
+      goal, region: input.region ?? "UK", audience: input.audience ?? (entriesFor(brain, "icp")[0]?.body.slice(0, 500) ?? "UNKNOWN"),
+      brandSummary: entriesFor(brain, "identity").map((e) => e.body).join(" ").slice(0, 1000) || "UNKNOWN", maxFindings: 8,
+    });
+    if (!reuseResearch) budget.add("research", deps.specialists.research.model, research.kind === "ok" ? research.usage : undefined, deps.specialists.research.provider);
+    if (reuseResearch) {
+      // already recorded by the earlier attempt
+    } else if (research.kind === "ok") {
       const v = validateResearch(research.raw, { allowedUrls: research.allowedUrls, now });
       if (v.ok) {
         rejectedSources = v.rejected;
@@ -154,7 +199,14 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     }
     const evidence = findings.filter(usableEvidence);
 
-    // 3. Strategy
+    // 3. Strategy (reused on resume once saved)
+    let plan: { summary: string; items: StrategyItem[]; dropped: unknown[] };
+    if (saved?.strategy) {
+      plan = { summary: saved.strategy.summary, items: saved.strategy.items, dropped: [] };
+    } else {
+      plan = await planStrategy();
+    }
+    async function planStrategy(): Promise<{ summary: string; items: StrategyItem[]; dropped: unknown[] }> {
     if (budget.exhausted) throw new Error(`budget of $${budget.maxUsd} reached after research ($${budget.spentUsd}) — strategy not started`);
     await checkpoint("strategy");
     const recentTopics = brain.recent_topics.map((t) => t.topic);
@@ -184,6 +236,8 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     await one("select lbe.strategy_save($1, $2, $3, $4::jsonb)", [deps.session, workflowId, sv.strategy.summary, JSON.stringify(sv.strategy.items)]);
     await recordRun("strategy", deps.specialists.strategy, strategyRaw, strategyStarted, { workflow_id: workflowId },
       { items: sv.strategy.items.length, dropped: sv.dropped });
+    return { summary: sv.strategy.summary, items: sv.strategy.items, dropped: sv.dropped };
+    }
 
     // 4–7. Draft each item in both voices, verify, brief visuals, submit clean drafts for review
     const voices: Record<Kind, { text: string; source: "brain" | "file" | "missing" }> = {} as never;
@@ -197,22 +251,30 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     }
     const claimsById = new Map(brain.claims.map((c) => [c.id, c]));
     const drafts: Array<Record<string, unknown>> = [];
-    const totalDrafts = sv.strategy.items.length * accounts.length;
+    const totalDrafts = plan.items.length * accounts.length;
 
-    outer: for (const item of sv.strategy.items) {
-      const group = randomUUID();
+    outer: for (const [index, item] of plan.items.entries()) {
+      const group = planItemGroup(workflowId, index);
       const itemFindings = evidence.filter((f) => item.finding_ids.includes(f.id));
       const itemClaims: VerifiedClaim[] = item.claim_ids.map((id) => claimsById.get(id)!).map((c) => ({
         id: c.id, statement: c.statement, category: c.category as VerifiedClaim["category"], evidence_url: c.evidence_url, evidence_note: c.evidence_note,
       }));
       for (const acct of accounts) {
+        const existing = saved?.drafts.find((d) => d.variant_group === group && d.account_kind === acct.kind);
+        if (existing && isSettled(existing)) {
+          drafts.push({ content_id: existing.id, account_kind: acct.kind, pillar: existing.pillar, topic: existing.topic ?? item.topic,
+            status: existing.status, body: existing.body, scheduled_for: existing.scheduled_for, variant_group: group,
+            citations: existing.citations ?? [], unsupported: existing.unsupported ?? [], visual_brief: existing.visual_brief, resumed: true });
+          continue;
+        }
         if (budget.exhausted) {
           warnings.push(`Budget of $${budget.maxUsd} reached ($${budget.spentUsd}); remaining drafts were not created.`);
           break outer;
         }
         await checkpoint("drafting", { done: drafts.length, total: totalDrafts });
         drafts.push(await draftOne(deps, { workflowId, item, acct, group, startDate, brandContext, voice: voices[acct.kind].text,
-          itemFindings, allFindings: findings, itemClaims, terms, identity: entriesFor(brain, "identity").map((e) => e.body).join("\n"), budget }));
+          itemFindings, allFindings: findings, itemClaims, terms, identity: entriesFor(brain, "identity").map((e) => e.body).join("\n"), budget,
+          existing }));
       }
     }
 
@@ -232,7 +294,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
         summary: findings.map((f) => ({ id: f.id, statement: f.statement, source_url: f.source_url, confidence: f.confidence,
           stale: f.stale, flags: f.flags, retrieved_at: now.toISOString() })),
       },
-      strategy: { summary: sv.strategy.summary, items: sv.strategy.items, dropped: sv.dropped },
+      strategy: { summary: plan.summary, items: plan.items, dropped: plan.dropped },
       drafts,
       claims_report: {
         verified_claims_used: [...used.entries()].map(([id, count]) => ({ claim_id: id, statement: claimsById.get(id)?.statement, count })),
@@ -259,9 +321,11 @@ async function draftOne(deps: AgentDeps, p: {
   workflowId: string; item: StrategyItem; acct: BrandBrain["accounts"][number]; group: string; startDate: string;
   brandContext: string; voice: string; itemFindings: Array<ValidFinding & { id: string }>; itemClaims: VerifiedClaim[];
   allFindings: Array<ValidFinding & { id: string }>; terms: string[]; identity: string; budget: Budget;
+  /** Resume: the draft an earlier attempt already created for this plan item and account (not yet settled). */
+  existing?: SavedDraft;
 }): Promise<Record<string, unknown>> {
   const { one, recordRun } = helpers(deps);
-  const pillar = p.item.pillars[p.acct.kind];
+  const pillar = p.existing?.pillar ?? p.item.pillars[p.acct.kind];
   const scheduled = new Date(`${p.startDate}T09:00:00Z`);
   scheduled.setUTCDate(scheduled.getUTCDate() + p.item.day - 1);
   const brief = [p.item.angle, "", `Topic: ${p.item.topic}`, `Objective: ${p.item.objective}`, `Audience problem: ${p.item.audience_problem}`,
@@ -269,11 +333,26 @@ async function draftOne(deps: AgentDeps, p: {
   const sourceMaterial = p.itemFindings.length
     ? p.itemFindings.map((f) => `- ${f.statement} (source: ${f.source_url}; confidence ${f.confidence})`).join("\n")
     : null;
-  const contentId = await one<string>("select lbe.create_content($1, $2, $3, $4, $5, $6)",
-    [deps.session, p.acct.id, pillar, brief, sourceMaterial, scheduled.toISOString()]);
-  await one("select lbe.set_agent_metadata($1, $2, $3::jsonb)", [deps.session, contentId,
-    JSON.stringify({ topic: p.item.topic, workflow_id: p.workflowId, variant_group: p.group, created_via: "agent" })]);
+  // Create the draft and link it to its plan item in ONE transaction (no orphan drafts after a crash). The
+  // database refuses a second draft for the same (workflow, plan item, account).
+  const contentId = p.existing?.id ?? await deps.db.tx("lbe_agent", async (t) => {
+    const id = Object.values((await t.query<Record<string, string>>("select lbe.create_content($1, $2, $3, $4, $5, $6)",
+      [deps.session, p.acct.id, pillar, brief, sourceMaterial, scheduled.toISOString()]))[0]!)[0]!;
+    await t.query("select lbe.set_agent_metadata($1, $2, $3::jsonb)", [deps.session, id,
+      JSON.stringify({ topic: p.item.topic, workflow_id: p.workflowId, variant_group: p.group, created_via: "agent" })]);
+    return id;
+  });
 
+  let body: string;
+  let citations: Array<{ claim_id: string; quoted_span: string }>;
+  let unsupported: string[];
+  let voiceWarnings: string[] = [];
+  if (p.existing?.body) {
+    // Resume: the writer already finished (and its output was checked and saved); continue from the creative step.
+    body = p.existing.body;
+    citations = p.existing.citations ?? [];
+    unsupported = p.existing.unsupported ?? [];
+  } else {
   // Writer (LinkedIn Writing Specialist = the existing drafter, now with Brand Brain context)
   const started = new Date().toISOString();
   const written = await deps.writer.draft({
@@ -298,24 +377,29 @@ async function draftOne(deps: AgentDeps, p: {
   const rules = checkBrandRules(v.draft.body, { accountKind: p.acct.kind, prohibitedTerms: p.terms });
   // Claim-to-source verification: restating research without a verified claim blocks review.
   const restated = findingRestatements(v.draft.body, v.draft.citations.map((c) => c.quoted_span), p.allFindings);
-  const unsupported = [...v.draft.unsupported, ...rules.blocking, ...restated];
+  unsupported = [...v.draft.unsupported, ...rules.blocking, ...restated];
+  body = v.draft.body;
+  citations = v.draft.citations;
+  voiceWarnings = rules.warnings;
   await one("select lbe.set_draft_output($1, $2, $3, $4::jsonb, $5::jsonb)",
     [deps.session, contentId, v.draft.body, JSON.stringify(v.draft.citations), JSON.stringify(unsupported)]);
   await recordRun("draft_post", writerMeta, asSpecialist, started, { workflow_id: p.workflowId, claim_ids: p.itemClaims.map((c) => c.id) },
     { body: v.draft.body, citations: v.draft.citations, unsupported, validation_notes: [...v.draft.validationNotes, ...rules.warnings],
       notes_for_reviewer: v.draft.notesForReviewer, hook_variants: v.draft.hookVariants }, contentId);
+  }
 
-  // Creative Brief Specialist (skipped once the budget is reached)
+  // Creative Brief Specialist (skipped once the budget is reached, or when a resumed draft already has one)
+  let visualBrief: Record<string, unknown> | null = p.existing?.visual_brief ?? null;
+  const creativeWarnings: string[] = [];
+  if (!visualBrief) {
   const cStarted = new Date().toISOString();
   const creative: SpecialistResult = p.budget.exhausted
     ? { kind: "error", message: "skipped: budget reached" }
-    : await deps.specialists.creative.run({ body: v.draft.body, accountKind: p.acct.kind, topic: p.item.topic,
+    : await deps.specialists.creative.run({ body, accountKind: p.acct.kind, topic: p.item.topic,
         visualIdentity: p.identity, prohibitedTerms: p.terms });
   p.budget.add(`creative:${p.acct.kind}`, deps.specialists.creative.model, creative.kind === "ok" ? creative.usage : undefined, deps.specialists.creative.provider);
-  let visualBrief: Record<string, unknown> | null = null;
-  const creativeWarnings: string[] = [];
   if (creative.kind === "ok") {
-    const cv = validateCreative(creative.raw, { body: v.draft.body, prohibitedTerms: p.terms });
+    const cv = validateCreative(creative.raw, { body, prohibitedTerms: p.terms });
     if (cv.ok) {
       visualBrief = { ...cv.brief, warnings: cv.warnings };
       creativeWarnings.push(...cv.warnings);
@@ -325,6 +409,7 @@ async function draftOne(deps: AgentDeps, p: {
   } else {
     await recordRun("creative_brief", deps.specialists.creative, creative, cStarted, { workflow_id: p.workflowId }, undefined, contentId);
   }
+  }
 
   // Submit for HUMAN review only if nothing blocks it. The agent never approves.
   let status = "draft";
@@ -333,10 +418,11 @@ async function draftOne(deps: AgentDeps, p: {
     status = "in_review";
   }
   return {
-    content_id: contentId, account_kind: p.acct.kind, pillar, topic: p.item.topic, status, body: v.draft.body,
+    content_id: contentId, account_kind: p.acct.kind, pillar, topic: p.item.topic, status, body,
     scheduled_for: scheduled.toISOString(), variant_group: p.group,
-    citations: v.draft.citations, unsupported, voice_warnings: rules.warnings, visual_brief: visualBrief,
+    citations, unsupported, voice_warnings: voiceWarnings, visual_brief: visualBrief,
     visual_warnings: creativeWarnings, findings_used: p.itemFindings.map((f) => f.source_url),
+    ...(p.existing ? { resumed: true } : {}),
   };
 }
 
