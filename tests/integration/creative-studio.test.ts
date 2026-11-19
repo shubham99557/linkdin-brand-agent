@@ -2,13 +2,16 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { mockSpecialists } from "@lbe/agents";
 import { MockDrafter } from "@lbe/drafting";
+import { runAgentJobTick } from "../../services/api/src/jobs/agent-runner.ts";
 import { MockLinkedInProvider } from "@lbe/publishing";
 import { createApp } from "../../services/api/src/app.ts";
 import { dbMockStore } from "../../services/api/src/jobs/publisher.ts";
 import { freshDb, TEST_PASSWORDS, type TestDb } from "../helpers/db.ts";
 
 const ORIGIN = "http://localhost:5173";
+const VOICE = path.resolve(import.meta.dirname, "../../brand/voice");
 let t: TestDb;
 let app: ReturnType<typeof createApp>;
 let carouselId: string;
@@ -33,6 +36,7 @@ beforeAll(async () => {
   const s = await t.login("editor");
   const mk = async (brief: unknown) => {
     const id = await t.api<string>("select lbe.create_content($1, $2, 'threat-landscape', 'visual test', null, null)", [s, t.ids.accounts.company]);
+    await t.api("select lbe.set_draft_output($1, $2, $3, '[]'::jsonb, '[]'::jsonb)", [s, id, "Report suspicious emails quickly and without blame."]);
     await t.db.tx("lbe_agent", (q) => q.query("select lbe.set_agent_metadata($1, $2, $3::jsonb)", [s, id, JSON.stringify({ visual_brief: brief })]));
     return id;
   };
@@ -62,6 +66,20 @@ describe("draft visual previews", () => {
     const pdf = await req(editor, `/api/content/${carouselId}/visual?format=pdf`);
     expect(pdf.headers.get("content-type")).toBe("application/pdf");
     expect(Buffer.from(await pdf.arrayBuffer()).toString("latin1")).toContain("/Count 3");
+  }, 60_000);
+
+  it("P5-03: attaching is refused while brand colours are placeholders; agent runs then attach nothing (with a warning)", async () => {
+    const editor = await login("editor@lbe.test", TEST_PASSWORDS.editor);
+    const r = await req(editor, `/api/content/${carouselId}/visual/attach`, { method: "POST" });
+    expect(r.status).toBe(409);
+    expect((await r.json() as { error: string }).error).toMatch(/brand colours/);
+    const q = await req(editor, "/api/agent/workflows", { method: "POST", body: { goal: "Placeholder visuals test goal", start_date: "2027-08-02" } });
+    const jobId = (await q.json() as { job_id: string }).job_id;
+    const tick = await runAgentJobTick({ db: t.db, specialists: mockSpecialists(), writer: new MockDrafter(), voiceDir: VOICE, workerId: "cs-runner" });
+    expect(tick.job).toMatchObject({ id: jobId, status: "succeeded" });
+    const wf = await (await req(editor, `/api/agent/workflows/${tick.job!.workflowId}`)).json() as { result: { drafts: Array<{ visual_attached?: boolean; visual_warnings: string[] }> } };
+    expect(wf.result.drafts.every((d) => d.visual_attached === false)).toBe(true);
+    expect(wf.result.drafts.some((d) => d.visual_warnings.some((w) => /brand colours are not set/.test(w)))).toBe(true);
   }, 60_000);
 
   it("text-only drafts have no visual; other organizations' drafts are 'not found'; sign-in required", async () => {
@@ -102,5 +120,52 @@ describe("visual identity (owner-controlled, in the Brand Brain)", () => {
     expect(visual.body).not.toContain("base64");
     const sample = await req(admin, "/api/brand/visual-identity/sample.png");
     expect(sample.headers.get("content-type")).toBe("image/png");
+  }, 60_000);
+});
+
+describe("P5-03: the visual is approved and published with the post", () => {
+  it("attach → stored exact bytes → the approver approves a package containing that media id; changing the visual afterwards needs a new approval", async () => {
+    const editor = await login("editor@lbe.test", TEST_PASSWORDS.editor);
+    const approver = await login("marketing@lbe.test", TEST_PASSWORDS.approver);
+    const attached = await req(editor, `/api/content/${carouselId}/visual/attach`, { method: "POST" });
+    expect(attached.status).toBe(201);
+    const { media_ids } = await attached.json() as { media_ids: string[] };
+    const list = await (await req(editor, `/api/content/${carouselId}/media`)).json() as Array<{ id: string; kind: string; attached: boolean; page_count: number; alt_text: string }>;
+    expect(list[0]).toMatchObject({ id: media_ids[0], kind: "application/pdf", attached: true, page_count: 3, alt_text: "A carousel" });
+    const file = await req(editor, `/api/media/${media_ids[0]}`);
+    expect(file.headers.get("content-type")).toBe("application/pdf");
+    const bytes = Buffer.from(await file.arrayBuffer());
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(file.headers.get("x-content-sha256"));
+
+    // submit → approve the exact package (incl. the media id)
+    expect((await req(editor, `/api/content/${carouselId}/submit`, { method: "POST" })).status).toBe(200);
+    const detail = await (await req(approver, `/api/content/${carouselId}`)).json() as { item: { package_hash: string; package: { media_ids: string[] } } };
+    expect(detail.item.package.media_ids).toEqual(media_ids);
+    expect((await req(approver, `/api/content/${carouselId}/decision`, { method: "POST", body: { decision: "approved", expected_package_hash: detail.item.package_hash } })).status).toBe(200);
+    // Re-attaching after approval resets to draft (visual changed → approval no longer matches)
+    const again = await (await req(editor, `/api/content/${carouselId}/visual/attach`, { method: "POST" })).json() as { status: string; media_ids: string[] };
+    expect(again.status).toBe("draft");
+    expect(again.media_ids).not.toEqual(media_ids);
+    const audit = await t.db.query<{ details: { status_before: string } }>("select details from lbe.audit_events where action = 'content.media_attached' order by id desc limit 1");
+    expect(audit[0]!.details.status_before).toBe("approved");
+  }, 60_000);
+
+  it("with real brand colours, the agent attaches each draft's visual BEFORE review", async () => {
+    const editor = await login("editor@lbe.test", TEST_PASSWORDS.editor);
+    const q = await req(editor, "/api/agent/workflows", { method: "POST", body: { goal: "Branded visuals test goal", start_date: "2027-08-09" } });
+    const jobId = (await q.json() as { job_id: string }).job_id;
+    const tick = await runAgentJobTick({ db: t.db, specialists: mockSpecialists(), writer: new MockDrafter(), voiceDir: VOICE, workerId: "cs-runner" });
+    expect(tick.job).toMatchObject({ id: jobId, status: "succeeded" });
+    const wf = await (await req(editor, `/api/agent/workflows/${tick.job!.workflowId}`)).json() as { drafts: Array<{ id: string; status: string; visual_brief: { format: string } | null }> };
+    const withVisual = wf.drafts.filter((d) => d.visual_brief && d.visual_brief.format !== "text_only");
+    expect(withVisual.length).toBeGreaterThan(0);
+    for (const d of withVisual) {
+      const media = await (await req(editor, `/api/content/${d.id}/media`)).json() as Array<{ attached: boolean }>;
+      expect(media.filter((m) => m.attached)).toHaveLength(1);
+      if (d.status === "in_review") {
+        const item = await (await req(editor, `/api/content/${d.id}`)).json() as { item: { package: { media_ids: string[] } } };
+        expect(item.item.package.media_ids).toHaveLength(1);           // the reviewer approves text + visual together
+      }
+    }
   }, 60_000);
 });

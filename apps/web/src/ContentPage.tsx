@@ -28,6 +28,49 @@ const toLocalInput = (iso: string | null) => {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 };
 
+interface MediaInfo { id: string; kind: string; sha256: string; byte_size: number; page_count: number | null; alt_text: string; attached: boolean; created_at: string }
+
+/** P5-03: the visual that is attached to the post — the exact file the approver approves and that gets published. */
+function AttachedVisual({ contentId, status, canEdit, hasBrief, version, onChange }: {
+  contentId: string; status: string; canEdit: boolean; hasBrief: boolean; version: number; onChange: () => void;
+}) {
+  const [media, , reload] = useLoad<MediaInfo[]>(`/content/${contentId}/media?v=${version}`);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const attached = media?.find((m) => m.attached);
+  const editable = canEdit && ["draft", "changes_requested", "in_review", "approved"].includes(status);
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true); setError(null);
+    try { await fn(); reload(); onChange(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  };
+  if (!attached && !hasBrief) return null;
+  return (
+    <div className="panel" style={{ marginTop: 12 }} data-testid="attached-visual">
+      <strong className="small">Visual {attached ? "— attached, part of what is approved and published" : "— not attached"}</strong>
+      {attached && (
+        <div className="row" style={{ alignItems: "flex-start", gap: 12, marginTop: 6 }}>
+          {attached.kind === "image/png"
+            ? <img src={`/api/media/${attached.id}`} alt={attached.alt_text} style={{ width: 200, borderRadius: 4, border: "1px solid var(--border)" }} />
+            : <a href={`/api/media/${attached.id}`} target="_blank" rel="noreferrer">Open the attached PDF carousel ({attached.page_count} pages)</a>}
+          <div className="small">
+            <div>Alt text: {attached.alt_text}</div>
+            <div className="muted">{Math.round(attached.byte_size / 1024)} KB · fingerprint {attached.sha256.slice(0, 12)}…</div>
+          </div>
+        </div>
+      )}
+      {editable && hasBrief && (
+        <div className="row" style={{ marginTop: 8 }}>
+          <button disabled={busy} data-testid="attach-visual" onClick={() => run(() => api(`/content/${contentId}/visual/attach`, { method: "POST" }))}>
+            {attached ? "Replace with a fresh render" : "Attach visual"}</button>
+          {attached && <button disabled={busy} onClick={() => run(() => api(`/content/${contentId}/visual`, { method: "DELETE" }))}>Remove visual</button>}
+          {["in_review", "approved"].includes(status) && <span className="small muted">Changing the visual sends the post back to draft for a new approval.</span>}
+        </div>
+      )}
+      <ErrorText error={error} />
+    </div>
+  );
+}
+
 export function ContentPage({ id, me, onChange }: { id: string; me: Me; onChange: () => void }) {
   const [d, loadError, reload] = useLoad<Detail>(`/content/${id}`);
   const [body, setBody] = useState("");
@@ -128,11 +171,13 @@ export function ContentPage({ id, me, onChange }: { id: string; me: Me; onChange
                 )}
               </div>
             )}
+            <AttachedVisual contentId={id} status={item.status} canEdit={me.hints.canEdit} hasBrief={!!item.visual_brief && item.visual_brief.format !== "text_only"}
+              version={item.version} onChange={() => { reload(); onChange(); }} />
             {item.visual_brief && item.visual_brief.format !== "text_only" && (
-              <div style={{ marginTop: 12 }}>
-                <strong className="small">Visual ({item.visual_brief.format.replace(/_/g, " ")})</strong>
+              <details style={{ marginTop: 8 }}>
+                <summary className="small">Live preview from the visual brief ({item.visual_brief.format.replace(/_/g, " ")}) — not attached</summary>
                 <VisualPreview contentId={id} brief={item.visual_brief} version={item.version} />
-              </div>
+              </details>
             )}
             {item.unsupported_statements.length > 0 && (
               <div className="notice">

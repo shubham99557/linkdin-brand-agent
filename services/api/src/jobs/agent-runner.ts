@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { runBrandWorkflow, WorkflowCancelledError, type Specialists, type StepTimeouts, type WorkflowProgress } from "@lbe/agents";
 import type { Drafter } from "@lbe/drafting";
+import { identityFromEntries, renderVisualAsset, themeFor, type RenderTheme, type VisualBrief } from "@lbe/render";
 import { redactForLog } from "@lbe/security";
 import type { Db } from "../db.ts";
 
@@ -69,6 +70,7 @@ export async function runAgentJobTick(deps: AgentRunnerDeps): Promise<AgentTickR
         return cancel ? "cancel" : undefined;
       },
       stepTimeoutsMs: deps.stepTimeoutsMs,
+      attachVisual: visualAttacher(deps.db, claim.session),
     }, { goal: claim.params.goal, startDate: claim.params.start_date, days: claim.params.days, postCount: claim.params.post_count });
     finalUsd = (out.result.cost as { estimated_usd?: number } | undefined)?.estimated_usd;
   } catch (err) {
@@ -88,6 +90,26 @@ export async function runAgentJobTick(deps: AgentRunnerDeps): Promise<AgentTickR
   }
   deps.log?.("agent_job", { job_id: claim.id, status, workflow_id: workflowId });
   return { recovered, job: { id: claim.id, status, workflowId, ...(error ? { error } : {}) } };
+}
+
+/**
+ * P5-03: attaches the draft's rendered visual as the requesting user (job session, lbe_agent role). Only with
+ * the owner's real brand colours — placeholder-branded visuals are never attached for approval.
+ */
+export function visualAttacher(db: Db, session: string) {
+  let theme: Promise<{ theme: RenderTheme; placeholder: boolean }> | undefined;
+  const agentOne = async <T>(sql: string, params: unknown[]) =>
+    db.tx("lbe_agent", async (q) => Object.values((await q.query<Record<string, unknown>>(sql, params))[0] ?? {})[0] as T);
+  return async (contentId: string, brief: Record<string, unknown>) => {
+    theme ??= agentOne<{ organization: { name: string }; entries: Array<{ section: string; key: string; structured: Record<string, unknown> }> }>(
+      "select lbe.brain_load($1)", [session]).then((b) => themeFor(identityFromEntries(b.entries), b.organization.name));
+    const t = await theme;
+    if (t.placeholder) return { attached: false, note: "Visual not attached: brand colours are not set yet (Brand Brain → Visual identity). Attach it from the draft once they are." };
+    const asset = await renderVisualAsset(brief as unknown as VisualBrief, t.theme);
+    if (!asset) return { attached: false };
+    await agentOne("select lbe.attach_media($1, $2, $3::jsonb)", [session, contentId, JSON.stringify(asset)]);
+    return { attached: true };
+  };
 }
 
 /** Run ticks on an interval in this process (skips while a job is still running). Returns a stop function. */

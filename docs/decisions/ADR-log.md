@@ -35,6 +35,7 @@ This log records corrections and Phase 1 decisions. Where an ADR conflicts with 
 | 027 | Internal-first (Customer Zero), SaaS later; plan.md is the execution plan | Accepted (owner) | implementation-roadmap phase numbering |
 | 028 | Durable agent jobs with job sessions; resume, retry, step time limits | Accepted | ADR-020 (extends) |
 | 029 | Render dependencies: satori, resvg-wasm, pdfkit, Inter (P5-00 gate) | Accepted | selective-reuse-plan "resvg-js" → resvg-wasm |
+| 030 | Visuals are part of the approved publication package | Accepted | ADR-005 (extends) |
 
 ---
 
@@ -426,6 +427,24 @@ Draft text is always a text node, so markup in drafts can never become an image.
 **PDF approach.** Each slide is rendered to PNG (Satori → SVG → resvg) and placed one per page with pdfkit.
 The text in the PDF is not selectable. Accessibility comes from the post's alt text and description
 (P5-06). A vector SVG-to-PDF path can be revisited later.
+
+## ADR-030 — Visuals are part of the approved publication package (P5-03)
+**Decision.**
+- A post carries at most one visual: a PNG for a single image, or a PDF for a document carousel.
+- The visual is stored in `lbe.media_assets`. The database computes the bytes' SHA-256 and checks the file
+  signature. Rows are immutable, even for the database owner.
+- The asset id goes into `media_ids` and therefore into the publication package. The existing hash-bound
+  approval covers it, so attaching, replacing or removing a visual sends the post back to draft for a new approval.
+- `media_ids` may only reference assets of the same post. A trigger closes the old free-text gap.
+- Placeholder-branded visuals are never attached. The API refuses with 409, and the agent skips with a warning.
+- With real brand colours, the agent attaches the visual **before** submitting for review, so the reviewer
+  approves text and visual together.
+
+**Consequences.**
+- The live LinkedIn provider still rejects posts that have media until media upload exists (P6-04). A post with
+  a visual can be published to the mock provider only; for a live text-only post, remove the visual.
+- Assets accumulate (they are never deleted); a retention job comes with P9-06.
+- Bytes are stored in PostgreSQL. Moving them to object storage is a Phase 9/10 option.
 
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried

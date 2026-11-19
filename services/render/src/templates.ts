@@ -1,6 +1,6 @@
 // Brand templates (P5-02): turn the agent's visual brief + the owner's visual identity into a renderable
 // carousel or single image. Pure functions — no I/O.
-import { RenderInputError, validateCarousel, type CarouselInput, type RenderTheme } from "./render.ts";
+import { RenderInputError, renderCarousel, renderSlidePng, validateCarousel, type CarouselInput, type RenderTheme } from "./render.ts";
 
 /** Owner-approved visual identity, stored in the Brand Brain (section "identity", key "visual"). */
 export interface VisualIdentity { background: string; foreground: string; accent: string; logoDataUri?: string }
@@ -57,6 +57,31 @@ const clip = (s: string, max: number) => {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
 };
+
+/** The file that is attached to a post and approved with it (P5-03): PDF for carousels, PNG for single images. */
+export interface VisualAsset {
+  kind: "image/png" | "application/pdf";
+  data_base64: string;
+  width: number;
+  height: number;
+  page_count: number;
+  alt_text: string;
+  title: string;
+}
+
+export async function renderVisualAsset(brief: VisualBrief & { alt_text?: string }, theme: RenderTheme): Promise<VisualAsset | null> {
+  const input = briefToCarousel(brief, theme);
+  if (!input) return null;
+  const width = input.width!, height = input.height!;
+  const title = input.slides[0]!.title;
+  const alt = clip(brief.alt_text || title, 1000);
+  if (brief.format === "single_image") {
+    const png = await renderSlidePng(input, 0);
+    return { kind: "image/png", data_base64: Buffer.from(png).toString("base64"), width, height, page_count: 1, alt_text: alt, title };
+  }
+  const { pdf } = await renderCarousel(input, { title });
+  return { kind: "application/pdf", data_base64: Buffer.from(pdf).toString("base64"), width, height, page_count: input.slides.length, alt_text: alt, title };
+}
 
 export const SIZES = { carousel: { width: 1080, height: 1350 }, single: { width: 1080, height: 1080 } } as const;
 

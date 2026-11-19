@@ -20,7 +20,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { encryptToken, isTrustedOrigin, looksLikeSessionToken, redactForLog, ROLE_HINTS, safeTokenEqual, SESSION_COOKIE } from "@lbe/security";
 import {
-  briefToCarousel, identityBody, identityFromEntries, MAX_LOGO_BYTES, RenderInputError, renderCarousel, renderSlidePng, themeFor,
+  briefToCarousel, identityBody, identityFromEntries, MAX_LOGO_BYTES, RenderInputError, renderCarousel, renderSlidePng, renderVisualAsset, themeFor,
   validateIdentity, VISUAL_IDENTITY_KEY, type VisualBrief,
 } from "@lbe/render";
 import { dbErrorStatus, type Db } from "./db.ts";
@@ -653,6 +653,37 @@ export function createApp(deps: AppDeps) {
     const slide = Number(c.req.query("slide") ?? "1");
     if (!Number.isInteger(slide) || slide < 1 || slide > input.slides.length) throw new HTTPException(404, { message: "no such slide" });
     return sendPng(c, await renderSlidePng(input, slide - 1), v.placeholder);
+  });
+
+  // P5-03: attach the rendered visual to the post — it then becomes part of the approved publication package.
+  api.post("/content/:id/visual/attach", async (c) => {
+    const id = param(c, "id");
+    const rows = await q<{ visual_brief: (VisualBrief & { alt_text?: string }) | null }>(
+      `select ci.visual_brief from lbe.content_items ci join lbe.social_accounts a on a.id = ci.account_id
+        where ci.id = $1 and a.organization_id = $2`, [id, c.get("user").organization_id]);
+    if (!rows[0]) throw new HTTPException(404, { message: "not found" });
+    const v = await loadVisual(c.get("session"));
+    if (v.placeholder) {
+      throw new HTTPException(409, { message: "set your brand colours (Brand Brain → Visual identity) before attaching visuals — placeholder colours are never approved" });
+    }
+    const asset = rows[0].visual_brief ? await renderVisualAsset(rows[0].visual_brief, v.theme) : null;
+    if (!asset) throw new HTTPException(409, { message: "this draft has no visual to attach (text-only post or no visual brief)" });
+    return c.json(await one("select lbe.attach_media($1, $2, $3::jsonb)", [c.get("session"), id, JSON.stringify(asset)]), 201);
+  });
+
+  api.delete("/content/:id/visual", async (c) =>
+    c.json(await one("select lbe.attach_media($1, $2, null)", [c.get("session"), param(c, "id")])));
+
+  api.get("/content/:id/media", async (c) =>
+    c.json(await one("select lbe.media_list($1, $2)", [c.get("session"), param(c, "id")])));
+
+  // The exact stored bytes (what was / will be approved and published).
+  api.get("/media/:id", async (c) => {
+    const rows = await q<{ kind: string; data: Uint8Array; sha256: string }>("select * from lbe.media_get($1, $2)", [c.get("session"), param(c, "id")]);
+    const m = rows[0];
+    if (!m) throw new HTTPException(404, { message: "not found" });
+    return c.body(m.data as Uint8Array<ArrayBuffer>, 200, { "content-type": m.kind, "x-content-sha256": m.sha256,
+      ...(m.kind === "application/pdf" ? { "content-disposition": "inline" } : {}) });
   });
 
   // ---------------------------------------------------------------- Agent workspace

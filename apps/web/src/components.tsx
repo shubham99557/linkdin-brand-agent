@@ -110,7 +110,7 @@ export function VisualPreview({ contentId, brief, version = 0 }: {
       {brief.format === "document_carousel" && (
         <p className="small"><a href={`/api/content/${contentId}/visual?format=pdf&v=${version}`} target="_blank" rel="noreferrer">Open the PDF carousel</a></p>
       )}
-      <p className="small muted">Preview only, in your saved brand colours (set them in Brand Brain → Visual identity). Visuals are not yet part of what gets approved and published (that comes next).</p>
+      <p className="small muted">Live preview in your current brand colours. Only an <strong>attached</strong> visual (shown on the post's review page) is approved and published.</p>
     </div>
   );
 }

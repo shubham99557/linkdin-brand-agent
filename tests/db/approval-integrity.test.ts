@@ -46,7 +46,7 @@ describe("approval binds to the immutable publication package", () => {
     ["body", { body: "[SYNTHETIC] ActTrident is a UK-registered cybersecurity company. Edited." }],
     ["visibility", { visibility: "CONNECTIONS" }],
     ["scheduled_for", { scheduled_for: "2030-01-01T09:00:00Z" }],
-    ["media_ids", { media_ids: ["media-1"] }],
+    // media_ids: covered in tests/db/media-assets.test.ts (only real attached visuals are accepted since P5-03)
   ] as const) {
     it(`editing ${field} after approval invalidates the approval`, async () => {
       const id = await contentInReview(t, editor);

@@ -66,6 +66,11 @@ test("Creative Studio: owner sets brand colours; agent drafts show rendered visu
     const res = await page.request.get(href!);
     expect(res.headers()["content-type"]).toBe("application/pdf");
   }
+  // P5-03: with real brand colours the agent attached the visual before review — the reviewer sees it as part of the approval.
+  await page.getByTestId("draft-pair").filter({ has: page.getByTestId("visual-preview") }).first()
+    .getByRole("link", { name: "Open for review →" }).first().click();
+  await expect(page.getByTestId("attached-visual")).toContainText("attached, part of what is approved and published");
+  await expect(page.getByTestId("attached-visual")).toContainText("fingerprint");
 });
 
 test("guided setup: owner answers, skips (stays UNKNOWN), resumes, adds a draft claim and reviews", async ({ page }) => {

@@ -41,6 +41,11 @@ export interface AgentDeps {
   priorSpentUsd?: number;
   /** Per-step time limits (ms). A step that runs over is aborted (the model request is cancelled) and handled as a failed step. */
   stepTimeoutsMs?: Partial<StepTimeouts>;
+  /**
+   * P5-03: render and attach the draft's visual BEFORE it is submitted, so the reviewer approves text and visual
+   * together. Returns attached=false with a note when it cannot (e.g. brand colours not set yet).
+   */
+  attachVisual?: (contentId: string, brief: Record<string, unknown>) => Promise<{ attached: boolean; note?: string }>;
 }
 
 export interface StepTimeouts { research: number; strategy: number; draft: number; creative: number }
@@ -443,6 +448,18 @@ async function draftOne(deps: AgentDeps, p: {
   }
   }
 
+  // Attach the rendered visual before review (P5-03), so the approval covers it. Failure never blocks the text.
+  let visualAttached = false;
+  if (visualBrief && visualBrief.format !== "text_only" && deps.attachVisual) {
+    try {
+      const r = await deps.attachVisual(contentId, visualBrief);
+      visualAttached = r.attached;
+      if (r.note) creativeWarnings.push(r.note);
+    } catch (err) {
+      creativeWarnings.push(`Visual could not be attached: ${(err as Error).message}`);
+    }
+  }
+
   // Submit for HUMAN review only if nothing blocks it. The agent never approves.
   let status = "draft";
   if (unsupported.length === 0) {
@@ -452,7 +469,7 @@ async function draftOne(deps: AgentDeps, p: {
   return {
     content_id: contentId, account_kind: p.acct.kind, pillar, topic: p.item.topic, status, body,
     scheduled_for: scheduled.toISOString(), variant_group: p.group,
-    citations, unsupported, voice_warnings: voiceWarnings, visual_brief: visualBrief,
+    citations, unsupported, voice_warnings: voiceWarnings, visual_brief: visualBrief, visual_attached: visualAttached,
     visual_warnings: creativeWarnings, findings_used: p.itemFindings.map((f) => f.source_url),
     ...(p.existing ? { resumed: true } : {}),
   };
