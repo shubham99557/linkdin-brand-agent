@@ -365,4 +365,5 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | Date | Change | Commit |
 |---|---|---|
 | 2026-11-19 | Plan created from audit (P0-01…P0-06) | `6429aaa` |
-| 2026-11-19 | Review: removed false deps (P4-01→P1-01, P5-02→P2-08), added P5-00 dependency gate, trimmed P1-02; P1-01 DONE | P1-01 commit |
+| 2026-11-19 | Review: removed false deps (P4-01→P1-01, P5-02→P2-08), added P5-00 dependency gate, trimmed P1-02; P1-01 DONE | `2ad93b5` |
+| 2026-11-19 | P1-02 DONE (migration 0700 session hardening); P1-03 scope extended (disable → revoke sessions) | `d095429` |
