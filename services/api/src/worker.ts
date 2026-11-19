@@ -1,5 +1,6 @@
 // Standalone publisher worker (use instead of LBE_RUN_WORKER=true when running the API separately
 // against PostgreSQL). With PGlite, run the worker in-process because PGlite allows one process only.
+import { redactForLog } from "@lbe/security";
 import { loadConfig } from "./config.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 import { buildLinkedIn, buildProvider, buildRegistry, openConfiguredDb } from "./runtime.ts";
@@ -24,7 +25,7 @@ if (once) {
 } else {
   console.log(`Publisher worker ${cfg.LBE_WORKER_ID} polling every ${cfg.LBE_WORKER_INTERVAL_MS}ms (providers: ${Object.keys(registry).join(", ")})`);
   for (;;) {
-    await tick().catch((e) => console.error(JSON.stringify({ msg: "publisher_tick_failed", error: (e as Error).message })));
+    await tick().catch((e) => console.error(JSON.stringify({ at: new Date().toISOString(), msg: "publisher_tick_failed", error: redactForLog(e) })));
     await new Promise((r) => setTimeout(r, cfg.LBE_WORKER_INTERVAL_MS));
   }
 }

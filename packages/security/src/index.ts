@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { Role } from "@lbe/domain";
 
 export * from "./token-crypto.ts";
+export * from "./redact.ts";
 
 export const SESSION_COOKIE = "lbe_session";
 

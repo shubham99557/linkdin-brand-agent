@@ -18,7 +18,10 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
   const data = text ? JSON.parse(text) : null;
   // Session ended (idle timeout, signed out elsewhere): tell the app so it can show the sign-in form.
   if (res.status === 401 && path !== "/auth/login" && path !== "/me") onSessionEnded?.();
-  if (!res.ok) throw new ApiError(res.status, (data && data.error) || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const ref = data?.request_id ? ` (reference ${String(data.request_id).slice(0, 8)})` : "";
+    throw new ApiError(res.status, `${(data && data.error) || `Request failed (${res.status})`}${ref}`);
+  }
   return data as T;
 }
 

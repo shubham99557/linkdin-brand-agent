@@ -3,6 +3,7 @@ import { createServer as createHttpsServer } from "node:https";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { redactForLog } from "@lbe/security";
 import { createApp } from "./app.ts";
 import { loadConfig, REPO_ROOT } from "./config.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
@@ -43,7 +44,7 @@ if (cfg.LBE_RUN_WORKER) {
         console.log(JSON.stringify({ at: new Date().toISOString(), msg: "publisher_tick", ...s }));
       }
     } catch (err) {
-      console.error(JSON.stringify({ msg: "publisher_tick_failed", error: (err as Error).message }));
+      console.error(JSON.stringify({ at: new Date().toISOString(), msg: "publisher_tick_failed", error: redactForLog(err) }));
     } finally {
       running = false;
     }

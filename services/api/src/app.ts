@@ -17,7 +17,8 @@ import {
   buildAuthorizeUrl, exchangeCode, fetchUserInfo, escapeLittleText,
   type LinkedInApp, type LinkedInProvider, type OAuthEndpoints, type ProviderRegistry, type PublishingProvider,
 } from "@lbe/publishing";
-import { encryptToken, isTrustedOrigin, looksLikeSessionToken, ROLE_HINTS, safeTokenEqual, SESSION_COOKIE } from "@lbe/security";
+import { randomUUID } from "node:crypto";
+import { encryptToken, isTrustedOrigin, looksLikeSessionToken, redactForLog, ROLE_HINTS, safeTokenEqual, SESSION_COOKIE } from "@lbe/security";
 import { dbErrorStatus, type Db } from "./db.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 
@@ -58,7 +59,7 @@ interface SessionUser {
   approver_for: string[];
 }
 
-type Env = { Variables: { user: SessionUser; session: string } };
+type Env = { Variables: { user: SessionUser; session: string; requestId: string } };
 
 const uuid = z.string().uuid();
 const isoOrNull = z.string().datetime({ offset: true }).nullable().optional();
@@ -104,6 +105,22 @@ export function createApp(deps: AppDeps) {
   };
 
   // ---------------------------------------------------------------- middleware
+  // Request ID + access log. The ID is always generated here (client-supplied IDs are ignored) and returned in
+  // X-Request-Id and in 5xx bodies so a user can quote it. Logged: method, route pattern (never the raw URL or
+  // query string — OAuth codes travel there), status, duration, user id. Never bodies, cookies or emails.
+  app.use("*", async (c, next) => {
+    const requestId = randomUUID();
+    c.set("requestId", requestId);
+    const started = performance.now();
+    await next();
+    c.header("X-Request-Id", requestId);
+    if (c.req.path.startsWith("/api/") && c.req.path !== "/api/health") {
+      log("request", {
+        request_id: requestId, method: c.req.method, route: c.req.routePath, status: c.res.status,
+        ms: Math.round(performance.now() - started), user_id: c.get("user")?.id ?? null,
+      });
+    }
+  });
   app.use("*", secureHeaders({
     contentSecurityPolicy: {
       defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"],
@@ -146,8 +163,12 @@ export function createApp(deps: AppDeps) {
     if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
     const mapped = dbErrorStatus(err);
     if (mapped) return c.json({ error: mapped.message }, mapped.status as 400);
-    log("unhandled_error", { path: c.req.path, error: (err as Error).message });
-    return c.json({ error: "internal error" }, 500);
+    const requestId = c.get("requestId");
+    log("unhandled_error", {
+      request_id: requestId, method: c.req.method, route: c.req.routePath,
+      error_type: (err as Error)?.name ?? typeof err, code: (err as { code?: string })?.code ?? null, error: redactForLog(err),
+    });
+    return c.json({ error: "internal error", request_id: requestId }, 500);
   });
 
   // ---------------------------------------------------------------- public
@@ -620,7 +641,7 @@ export function createApp(deps: AppDeps) {
       token = await exchangeCode({ code: b.code, clientId: app.clientId, clientSecret: app.clientSecret, redirectUri: cfg.redirectUri, ...cfg.oauth });
       if (st.app === "founder_app") subject = await fetchUserInfo({ accessToken: token.accessToken, ...cfg.oauth });
     } catch (err) {
-      log("oauth_failed", { account_id: st.account_id, error: (err as Error).message });
+      log("oauth_failed", { request_id: c.get("requestId"), account_id: st.account_id, error: redactForLog(err) });
       await one("select lbe.write_app_audit($1, 'app.oauth_failed', 'social_account', $2, '{}'::jsonb)", [session, st.account_id]);
       throw new HTTPException(502, { message: "LinkedIn did not complete the connection — try again" });
     }
