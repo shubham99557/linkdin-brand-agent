@@ -113,6 +113,17 @@ describe("approver assignment", () => {
     await expectCode(t.api("select lbe.admin_set_approver($1, $2, $3, true)", [admin, editor, t.ids.accounts.company]), "LBE02");
   });
 
+  it("an admin cannot make themselves approver of the founder profile (F-1); another admin can", async () => {
+    await expectCode(t.api("select lbe.admin_set_approver($1, $2, $3, true)", [admin, t.ids.users.admin, t.ids.accounts.founder]), "LBE11");
+    expect((await t.db.query("select 1 from lbe.account_approvers where user_id = $1 and account_id = $2",
+      [t.ids.users.admin, t.ids.accounts.founder])).length).toBe(0);
+    const other = await add("founder-helper-admin@lbe.test", "admin");
+    const s2 = (await loginAs("founder-helper-admin@lbe.test")).token!;
+    await t.api("select lbe.admin_set_approver($1, $2, $3, true)", [s2, t.ids.users.admin, t.ids.accounts.founder]);
+    await t.api("select lbe.admin_set_approver($1, $2, $3, false)", [admin, t.ids.users.admin, t.ids.accounts.founder]); // removing yourself is fine
+    await update(other, { disabled: true });
+  });
+
   it("cannot attach anyone to another organization's account", async () => {
     await expectCode(t.api("select lbe.admin_set_approver($1, $2, $3, true)", [admin, t.ids.users.approver, otherOrgAccount]), "LBE04");
   });

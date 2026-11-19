@@ -17,12 +17,12 @@
 |---|---|
 | Current phase | **Phase 1 — Security & engineering foundation** (Phase 0 DONE) |
 | Active task | — |
-| Next READY tasks | **P1-05 security sign-off (closes M1 Phase 1)** · P2-01 pillars UI · P4-01 durable jobs · P3-01 pricing check · P5-00 render dependency review |
+| Next READY tasks | **P1-06 password change** · P2-01 pillars UI · P4-01 durable jobs · P3-01 pricing check · P5-00 render dependency review |
 | First safe milestone | **M1 Technical prototype hardened** — P1-01..05 + P2-01/02 need no external action |
-| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging |
+| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off |
 | Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · P0-07 off-machine code backup |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9) |
-| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 312 ✅ (9 PG skipped there) · `test:pg:embedded` 9/9 ✅ · Playwright 8 ✅ · secret scan ✅ · npm audit 0 ✅ |
+| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 313 ✅ (9 PG skipped there) · `test:pg:embedded` 9/9 ✅ · Playwright 8 ✅ · secret scan ✅ · npm audit 0 ✅ |
 | Latest commit | see `git log -1` (P1-02 follows `2ad93b5`) |
 | Next milestone | **M1 Technical prototype hardened** → then **M2 AI intelligence evaluation** (needs OA-3, OA-6) |
 
@@ -195,7 +195,8 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 | P1-02 | Session hardening: idle timeout (60 min, DB-enforced in `require_user`/`whoami`), sign-out-everywhere (`lbe.logout_all`, `POST /api/auth/logout-all`, dashboard button + "session ended" notice). **Evidence 2026-11-19:** `tests/db/sessions.test.ts` 7/7 (mutation: removing idle check → 1 failure); api-flow +2; e2e +1 (7/7); privilege snapshot updated; PG concurrency 9/9 | — | P1 | DONE | C | migration 0700, app.ts, web | Idle sessions rejected; revoke-all works; tests | `tests/db/sessions.test.ts` |
 | P1-03 | Admin user management UI (create/disable users, role change, approver assignment, end user's sessions, temporary-password reset; disabling/reset revokes sessions; no self-demotion; org-scoped) — no emails. **Evidence 2026-11-19:** migration 0800; `tests/db/user-management.test.ts` 13/13 (mutations: removing org check → 1 failure, removing self-change rule → 1 failure); api-flow +1; e2e +1 (8/8); privilege snapshot updated; PG 9/9 | P1-02 | P1 | DONE | C | migration, app.ts, web | Admin-only; audited; org-scoped; tests | integration test |
 | P1-04 | Structured error logging & request IDs (no secrets/PII in logs): server-generated `X-Request-Id`; JSON access log (method, route pattern, status, ms, user id — never URL query, bodies, cookies, emails); 5xx → generic message + `request_id`; `redactForLog` on all error logs (API, OAuth, publisher). **Evidence 2026-11-19:** `tests/unit/redact.test.ts` 5/5, `tests/integration/logging.test.ts` 3/3 (mutation: logging the raw error → 1 failure); Vitest 312, e2e 8/8, PG 9/9 | — | P2 | DONE | C | app.ts | Every 5xx logged with request id; secret-leak test still passes | test |
-| P1-05 | Security review sign-off for internal MVP; list SaaS blockers | P1-01..04 | P1 | READY | C | docs/hardening-report.md | Findings table updated | doc |
+| P1-05 | Security review sign-off for internal MVP; list SaaS blockers. **Evidence 2026-11-19:** `docs/hardening-report.md` §2a — signed off for internal use; finding F-1 (admin self-assigning as founder approver) fixed in migration 0900 + test; F-2 → P1-06; launch blockers per milestone listed; Vitest 313, PG 9/9, e2e 8/8, audit 0 | P1-01..04 | P1 | DONE |
+| P1-06 | Self-service password change + "must change temporary password" on first sign-in (finding F-2) | P1-03 | P1 | READY | C | migration, app.ts, web | Old password required; sessions other than current ended; temp-password users forced to change before anything else; tests | DB + e2e tests | C | docs/hardening-report.md | Findings table updated | doc |
 
 ### Phase 2 — Real Brand Brain
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
@@ -368,4 +369,5 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-19 | Review: removed false deps (P4-01→P1-01, P5-02→P2-08), added P5-00 dependency gate, trimmed P1-02; P1-01 DONE | `2ad93b5` |
 | 2026-11-19 | P1-02 DONE (migration 0700 session hardening); P1-03 scope extended (disable → revoke sessions) | `d095429` |
 | 2026-11-19 | P1-03 DONE (migration 0800 user management + Users page) | `3e512ba` |
-| 2026-11-19 | P1-04 DONE (request IDs, access log, log redaction) | P1-04 commit |
+| 2026-11-19 | P1-04 DONE (request IDs, access log, log redaction) | `d0aa635` |
+| 2026-11-19 | P1-05 DONE (sign-off; F-1 fixed via migration 0900); P1-06 added from F-2 | P1-05 commit |

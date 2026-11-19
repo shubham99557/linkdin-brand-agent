@@ -54,17 +54,51 @@ are proven by tests. But three prerequisites are missing:
 - The agent role cannot read any table or reach approve, release, publish, resume, claim-verification or live functions.
 - Approvals and Brand Brain entries stay immutable.
 
-**Authentication review:**
-- Sessions are database-resolved: 256-bit tokens, only their hash stored, 12-hour absolute expiry, revoked on logout.
-- Expired sessions and disabled users are rejected (tested).
-- Lockout after 5 failures. This is a deliberate trade-off: someone could lock an account on purpose.
-- Remaining recommendations before multi-user production: SSO or MFA, an idle timeout, "sign out everywhere",
-  and a password-change flow (admin CLI only today).
+**Authentication review:** _(updated by P1-05, see §2a)_
+- Sessions are database-resolved: 256-bit tokens, only their hash stored, 12-hour absolute expiry, **60-minute
+  idle timeout**, revoked on logout; **sign out everywhere** for yourself, and admins can end another user's sessions.
+- Expired, idle and revoked sessions and disabled users are rejected (tested). Disabling a user or resetting their
+  password ends their sessions immediately.
+- Lockout after 5 failures. This is a deliberate trade-off: someone could lock an account on purpose. Admins can clear it with a password reset.
+- Remaining before multi-user production: SSO or MFA (P9-02), and self-service password change (P1-06).
 
 **Mutation checks:**
 - Removing the organization check from proposal decisions failed the cross-tenant test.
 - Removing the organization STOP failed 5 tests.
 - Removing manual release failed 5 tests.
+
+## 2a. Phase 1 foundation sign-off (P1-05, 2026-11-19)
+
+**Verdict: SIGNED OFF for internal ActTrident use (local/staging, mock publishing, owner-run LinkedIn pilot)** with
+P1-06 as the one follow-up before other staff get accounts. **Not** a sign-off for hosted production (Phase 9)
+or for SaaS (Phase 10). Scope reviewed: everything added in P1-01…P1-04 plus the authentication model.
+
+| Area | Added in | Status | Evidence |
+|---|---|---|---|
+| Database backup & verified restore | P1-01 | ✅ Closed (gap G1) | `tests/db/backup-restore` 5; staging backup + restore verified |
+| Idle timeout, sign out everywhere | P1-02 | ✅ Closed | `tests/db/sessions` 7; mutation → 1 failure |
+| Admin user management | P1-03 | ✅ Closed | `tests/db/user-management` 14; mutations (org check, self-change) → failures |
+| Request IDs, access log, log redaction | P1-04 | ✅ Closed | `tests/unit/redact` 5, `tests/integration/logging` 3; mutation → 1 failure |
+
+**Findings from this review**
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| F-1 | The new Users page let an admin make **themselves** approver of the founder profile, then approve and release posts in the founder's name (contradicts A-02) | High (impersonation) | **Fixed** — migration 0900 refuses self-assignment on founder profiles; another admin or the operator CLI must do it; test added |
+| F-2 | Users cannot change their own password, so admin-issued temporary passwords stay in use | Medium | **Open → P1-06** (self-service change + "must change temporary password") before staff other than the owner get accounts |
+| F-3 | An admin can reset another admin's password or promote anyone to admin | Accepted | Inherent to the admin role; every change is audited; keep the number of admins small |
+| F-4 | Backup archives contain business data, password hashes and encrypted LinkedIn tokens; restore trusts the archive the operator chooses (checksum proves integrity, not origin) | Accepted (internal) | Git-ignored `backups/`, documented; encrypt any off-machine copy; signed/encrypted backups at P9-04 |
+| F-5 | Access log records user ID and route per request (pseudonymous personal data); logs go to stdout with no retention policy | Low | Retention policy at P9-05/P9-06 |
+| F-6 | Login rate limiter is in-memory, per process | Low (internal) | Unchanged; revisit at P9 / ADR-023 gap 6 |
+| F-7 | Embedded PostgreSQL binary is not Authenticode-signed | Low (dev-only) | Hash recorded; never used at runtime |
+
+**Launch blockers by milestone**
+- **Before other staff use it:** P1-06.
+- **Before hosted internal production (M5):** P9-02 SSO/MFA, P9-03 secrets management and TLS, P9-04 automated
+  encrypted backups and a restore drill, P9-05 monitoring and log retention, an external review of the deployment.
+- **Before SaaS (M6):** ADR-023 gaps 1–6 (organization RLS as a second layer, memberships, remove
+  `default_org_id`, `agent_runs` organization column, platform-wide internal tick, shared rate limiter), per-tenant
+  LinkedIn apps and key separation, billing/metering, DPA, and an external multi-tenant penetration test.
 
 ## 3. PostgreSQL concurrency results
 _Updated 2026-11-19 after owner authorization of `embedded-postgres` and the Microsoft VC++ runtime._
@@ -126,6 +160,8 @@ integrity), ADR-026 (evaluation policy). New runbooks: `docs/migrations-runbook.
 5. Decide from the scores whether to tune prompts or proceed to the founder LinkedIn pilot (Stage 2.2).
 
 ## Test evidence (executed 2026-11-19)
+_After Phase 1 (P1-05): see the latest row in `plan.md` §J. The table below is the earlier hardening round._
+
 | Suite | Result |
 |---|---|
 | Vitest | **276 passed**, 0 failed, 9 skipped (PostgreSQL) — 19 files |
