@@ -33,6 +33,33 @@ test("sign out everywhere ends other browser sessions, which then see the sign-i
   await other.context().close();
 });
 
+test("admin adds a user, makes them an approver, then disables them; non-admins don't see Users", async ({ page }) => {
+  await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
+  await signOut(page);
+  await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
+  await page.getByRole("link", { name: "Users" }).click();
+  await page.getByLabel("Name").fill("E2E Reviewer");
+  await page.getByLabel("Email (used to sign in)").fill("e2e-reviewer@lbe.test");
+  await page.locator("#nu-role").selectOption("approver");
+  await page.getByLabel("Temporary password (12+ characters)").fill("e2e-temporary-password");
+  await page.getByRole("button", { name: "Add user" }).click();
+  await expect(page.getByRole("status")).toContainText("Added E2E Reviewer");
+  const card = page.getByTestId("user-e2e-reviewer@lbe.test");
+  const approves = card.getByRole("checkbox", { name: /^E2E Reviewer approves / }).first();
+  await approves.click();
+  await expect(page.getByRole("status")).toContainText("now approves");
+  await expect(approves).toBeChecked();
+  await card.getByRole("button", { name: "Disable" }).click();
+  await expect(page.getByRole("status")).toContainText("is disabled and signed out everywhere");
+  await expect(card.getByText("disabled", { exact: true })).toBeVisible();
+  await signOut(page);
+  await page.getByLabel("Email").fill("e2e-reviewer@lbe.test");
+  await page.getByLabel("Password").fill("e2e-temporary-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("alert")).toHaveText("invalid email or password");
+});
+
 test("full mock vertical slice through the dashboard", async ({ page }) => {
   // Editor: create, draft, submit
   await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);

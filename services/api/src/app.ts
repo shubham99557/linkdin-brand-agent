@@ -672,6 +672,38 @@ export function createApp(deps: AppDeps) {
     return c.json({ supported: true, candidates: posts.map((p) => ({ ...p, matches: p.commentary === expected || p.commentary === r.body })) });
   });
 
+  // User management (admin only; every rule is enforced in the database functions).
+  const password = z.string().min(12).max(200);
+  api.get("/users", async (c) => c.json(await one("select lbe.admin_list_users($1)", [c.get("session")])));
+  api.post("/users", async (c) => {
+    const b = await json(c, z.object({
+      email: z.string().email().max(200), display_name: z.string().min(1).max(120),
+      role: z.enum(["admin", "approver", "editor", "viewer"]), password,
+    }));
+    const id = await one<string>("select lbe.admin_add_user($1, $2, $3, $4, $5)", [c.get("session"), b.email, b.display_name, b.role, b.password]);
+    return c.json({ id }, 201);
+  });
+  api.patch("/users/:id", async (c) => {
+    const b = await json(c, z.object({
+      role: z.enum(["admin", "approver", "editor", "viewer"]).optional(), disabled: z.boolean().optional(),
+      display_name: z.string().min(1).max(120).optional(),
+    }));
+    return c.json(await one("select lbe.admin_update_user($1, $2, $3, $4, $5)",
+      [c.get("session"), param(c, "id"), b.role ?? null, b.disabled ?? null, b.display_name ?? null]));
+  });
+  api.put("/users/:id/approver/:account", async (c) => {
+    const b = await json(c, z.object({ approver: z.boolean() }));
+    await q("select lbe.admin_set_approver($1, $2, $3, $4)", [c.get("session"), param(c, "id"), param(c, "account"), b.approver]);
+    return c.json({ ok: true });
+  });
+  api.post("/users/:id/end-sessions", async (c) =>
+    c.json({ sessions_revoked: await one<number>("select lbe.admin_end_sessions($1, $2)", [c.get("session"), param(c, "id")]) }));
+  api.post("/users/:id/reset-password", async (c) => {
+    const b = await json(c, z.object({ password }));
+    await q("select lbe.admin_reset_password($1, $2, $3)", [c.get("session"), param(c, "id"), b.password]);
+    return c.json({ ok: true });
+  });
+
   // STOP controls
   // STOP controls. Scopes: platform (read-only here; operators only), organization (the caller's), accounts (the caller's).
   api.get("/controls", async (c) => {

@@ -120,6 +120,26 @@ describe("authentication & request hygiene", () => {
     expect((await call(cookie, "GET", "/api/me")).status).toBe(200);
   });
 
+  it("user management: admin only, validated, and password never echoed", async () => {
+    const editor = await login("editor");
+    expect((await call(editor, "GET", "/api/users")).status).toBe(403);
+    expect((await call(editor, "POST", "/api/users", { email: "x@lbe.test", display_name: "X", role: "admin", password: "x".repeat(12) })).status).toBe(403);
+    const admin = await login("admin");
+    const list = await call(admin, "GET", "/api/users");
+    expect(list.status).toBe(200);
+    expect(JSON.stringify(list.body)).not.toMatch(/password|token_hash/);
+    expect((await call(admin, "POST", "/api/users", { email: "api-user@lbe.test", display_name: "API User", role: "superuser", password: "x".repeat(12) })).status).toBe(422);
+    const created = await call(admin, "POST", "/api/users", { email: "api-user@lbe.test", display_name: "API User", role: "approver", password: "temporary-pass-123" });
+    expect(created.status).toBe(201);
+    expect(JSON.stringify(created.body)).not.toContain("temporary-pass-123");
+    expect((await call(admin, "POST", "/api/users", { email: "api-user@lbe.test", display_name: "Dup", role: "viewer", password: "temporary-pass-123" })).status).toBe(409);
+    const id = created.body.id as string;
+    expect((await call(admin, "PUT", `/api/users/${id}/approver/${t.ids.accounts.company}`, { approver: true })).status).toBe(200);
+    expect((await call(admin, "PATCH", `/api/users/${t.ids.users.admin}`, { role: "viewer" })).status).toBe(403);   // not yourself
+    const disabled = await call(admin, "PATCH", `/api/users/${id}`, { disabled: true });
+    expect(disabled.status).toBe(200);
+  });
+
   it("internal job endpoint requires the bearer token", async () => {
     const bad = await app.request("/api/internal/publisher-tick", { method: "POST", headers: { authorization: "Bearer nope" } });
     expect(bad.status).toBe(401);

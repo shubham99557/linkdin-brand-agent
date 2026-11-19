@@ -45,7 +45,9 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
   npm run staging:user -- --email <your email> --name "<your name>" --role admin --approver-for c736f20d-5186-4feb-9885-d11458df7f77
   Remove-Item Env:LBE_NEW_USER_PASSWORD
   ```
-  If the founder is someone else, create them too with `--role approver --approver-for c736f20d-5186-4feb-9885-d11458df7f77`.
+  Only this **first** admin needs the command line. Everyone else (e.g. a separate founder) you can add afterwards in
+  the dashboard under **Users** → *Add a user*, then tick "Approves posts for: Founder". Give temporary passwords in
+  person or by phone, not by email or chat.
 - **Confirm:** `npm run pilot:preflight` no longer shows the two user FAIL lines.
 - **Secret:** the password.
 - **Meanwhile:** independent engineering tasks (P1-xx, P4-xx).

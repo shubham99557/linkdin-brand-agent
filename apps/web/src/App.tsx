@@ -3,6 +3,7 @@ import { api, ApiError, setSessionEndedHandler, type Me } from "./api.ts";
 import { ErrorText, StopBar } from "./components.tsx";
 import { ContentPage } from "./ContentPage.tsx";
 import { AgentPage, BrandBrainPage, WorkflowPage } from "./agentPages.tsx";
+import { UsersPage } from "./UsersPage.tsx";
 import { AccountsPage, AuditPage, CalendarPage, CapabilitiesPage, ClaimsPage, MockPostsPage, NewContentPage, OAuthCompletePage, OutboxPage } from "./pages.tsx";
 
 function useHashRoute(): string {
@@ -90,6 +91,7 @@ export function App() {
   else if (route === "/mock") page = <MockPostsPage />;
   else if (route === "/audit") page = <AuditPage />;
   else if (route === "/capabilities") page = <CapabilitiesPage />;
+  else if (route === "/users") page = <UsersPage me={me} />;
   else page = <CalendarPage />;
 
   return (
@@ -97,7 +99,7 @@ export function App() {
       <nav className="side" aria-label="Main">
         <h1>LinkedIn Brand Engine</h1>
         <div className="sub">Phase 1 · mock publishing</div>
-        {NAV.map(([href, label]) => (
+        {[...NAV, ...(me.role === "admin" ? [["/users", "Users"] as [string, string]] : [])].map(([href, label]) => (
           <a key={href} href={`#${href}`} className={route === href ? "active" : ""}>{label}</a>
         ))}
         <div className="who">
