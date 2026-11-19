@@ -1,0 +1,35 @@
+# Dependencies & build output
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Local data
+.data/
+*.db
+pgdata/
+supabase/.temp/
+supabase/.branches/
+
+# Test artefacts
+test-results/
+playwright-report/
+tests/e2e/.auth/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log
