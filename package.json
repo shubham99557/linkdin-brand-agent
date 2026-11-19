@@ -22,6 +22,7 @@
     "dev:web": "npm run dev -w @lbe/web",
     "worker": "tsx services/api/src/worker.ts",
     "demo": "tsx scripts/demo-flow.ts",
+    "demo:agent": "tsx scripts/demo-agent.ts",
     "setup:staging": "node scripts/setup-staging.mjs",
     "staging:init": "node scripts/run-staging.mjs services/api/src/cli/staging-init.ts",
     "staging:user": "node scripts/run-staging.mjs services/api/src/cli/create-user.ts",

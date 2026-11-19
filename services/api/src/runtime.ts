@@ -1,4 +1,5 @@
 import path from "node:path";
+import { anthropicSpecialists, mockSpecialists, type Specialists } from "@lbe/agents";
 import { AnthropicDrafter, MockDrafter, type Drafter } from "@lbe/drafting";
 import { createProvider, LinkedInProvider, MockLinkedInProvider, type ProviderRegistry, type PublishingProvider } from "@lbe/publishing";
 import { parseTokenKey } from "@lbe/security";
@@ -18,6 +19,12 @@ export function buildDrafter(cfg: Config): Drafter {
     return new AnthropicDrafter({ apiKey: cfg.ANTHROPIC_API_KEY!, model: cfg.LBE_ANTHROPIC_MODEL, effort: cfg.LBE_ANTHROPIC_EFFORT });
   }
   return new MockDrafter();
+}
+
+export function buildSpecialists(cfg: Config): Specialists {
+  return cfg.LBE_AGENTS === "anthropic"
+    ? anthropicSpecialists({ apiKey: cfg.ANTHROPIC_API_KEY!, model: cfg.LBE_ANTHROPIC_MODEL, effort: cfg.LBE_ANTHROPIC_EFFORT })
+    : mockSpecialists();
 }
 
 export function buildProvider(cfg: Config, db: Db): PublishingProvider {

@@ -23,6 +23,10 @@ This log records corrections and Phase 1 decisions. Where an ADR conflicts with 
 | 015 | LinkedIn credentials: encryption and identity binding | Accepted | security-review §E |
 | 016 | OAuth callback hand-off through the dashboard | Accepted | — |
 | 017 | Founder endpoint and pilot environment (Stage 2.2) | Accepted | ADR-014, phase-2-plan §3.5 |
+| 018 | Brand Brain as versioned, owner-approved memory in PostgreSQL | Accepted | target-architecture "Brand OS" |
+| 019 | Organizations and memory isolation (partial tenancy) | Accepted | ADR-012 (partially superseded) |
+| 020 | Agent runtime: Messages API + deterministic coordinator | Accepted | target-architecture §2 |
+| 021 | `lbe_agent` database role and proposal-only memory write-back | Accepted | ADR-005 (extends) |
 
 ---
 
@@ -211,6 +215,58 @@ checked 2026-11-19 (page updated 2023-12-14), documents **only** `POST /v2/ugcPo
   publisher deliberately), and no synthetic users.
 - Tooling: `setup:staging`, `staging:init`, `staging:user`, `start:staging`; `pilot:preflight` (no LinkedIn
   calls); `pilot:verify` (read-only userinfo + introspection, explicit flag required).
+
+## ADR-018 — Brand Brain as versioned, owner-approved memory in PostgreSQL
+**Decision.**
+- Brand knowledge lives in `lbe.brand_entries`: 13 sections, keyed and versioned. Exactly one approved version
+  exists per key, approved text is immutable, and entries are never deleted.
+- Only an admin (owner) writes approved knowledge, either directly (onboarding) or by accepting a proposal.
+  The owner can edit a proposal before accepting it.
+- Missing required sections are reported, and prompts label them UNKNOWN.
+- The `brand/voice` files become an import source with a read-only fallback, avoiding two sources of truth.
+- No Claude Code memory is used, which keeps the Brand Brain portable to a SaaS runtime.
+
+## ADR-019 — Organizations and memory isolation (partial tenancy)
+**Decision.** An `organizations` table is added. `organization_id` is added to `app_users`, `social_accounts`
+and `claims`; existing rows go to the ActTrident organization.
+
+Memory isolation:
+- All Brand Brain, proposal, research and workflow access goes through `SECURITY DEFINER` functions that scope
+  to the caller's organization.
+- No application role has table privileges on these tables.
+- Objects belonging to another organization return *not found*.
+
+Write-path isolation:
+- Content creation, claim citation and claim status changes check the organization.
+- Approvers can only be attached to accounts in their own organization.
+
+The main API read views (accounts, claims, content, outbox) filter by organization.
+
+**Not yet done** (SaaS plan §7): organization-level row-level security on the remaining tables and views,
+multi-organization membership, and removing the default-org convenience.
+
+## ADR-020 — Agent runtime: Messages API + deterministic coordinator
+**Decision.** Specialists are single structured-output Messages API calls with no client tools. Research uses
+the server-side `web_search` tool, and its URLs are checked against the URLs the tool actually returned. A
+TypeScript coordinator sequences them.
+
+Not chosen:
+- The Claude Agent SDK, which brings filesystem and shell tools into a web service.
+- Claude Managed Agents, which is beta, keeps session history outside our database, and adds a second
+  control plane.
+
+LangGraph, CrewAI and n8n were not added. Claude Code is used for prototyping only (`.claude/agents`).
+Mock specialists are the default (`LBE_AGENTS=mock`); `anthropic` requires an API key and costs money.
+
+## ADR-021 — `lbe_agent` database role and proposal-only memory write-back
+**Decision.** Agent code runs as the `lbe_agent` role. It can read the Brand Brain, record research, workflows
+and strategies, create drafts, submit them for review, and **propose** knowledge changes.
+
+It has **no** grant to approve, enqueue, release, resume STOP, verify claims, enable live publishing, or write
+or decide Brand Brain entries. It also has no direct table reads.
+
+Prompt injection or a compromised specialist therefore cannot bypass the approval gates. The database refuses,
+and tests prove it.
 
 ## ADR-013 — Ambiguous publication results require reconciliation
 **Decision.** Only results that prove the provider did *not* create the post (e.g. 429) are retried

@@ -17,6 +17,8 @@ const EnvSchema = z.object({
   LBE_TLS_PFX: z.string().optional(),
   LBE_TLS_PFX_PASSPHRASE: z.string().optional(),
   LBE_DRAFTER: z.enum(["mock", "anthropic"]).default("mock"),
+  // Agent specialists (research, strategy, creative, performance, extraction). "anthropic" costs money and makes web searches.
+  LBE_AGENTS: z.enum(["mock", "anthropic"]).default("mock"),
   ANTHROPIC_API_KEY: z.string().optional(),
   LBE_ANTHROPIC_MODEL: z.string().default("claude-opus-5-5"),
   LBE_ANTHROPIC_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium"),
@@ -68,8 +70,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, loadDotEnv = tr
     throw new Error(`Invalid configuration: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
   }
   const cfg = parsed.data;
-  if (cfg.LBE_DRAFTER === "anthropic" && !cfg.ANTHROPIC_API_KEY) {
-    throw new Error("LBE_DRAFTER=anthropic requires ANTHROPIC_API_KEY (or set LBE_DRAFTER=mock).");
+  if ((cfg.LBE_DRAFTER === "anthropic" || cfg.LBE_AGENTS === "anthropic") && !cfg.ANTHROPIC_API_KEY) {
+    throw new Error("LBE_DRAFTER/LBE_AGENTS=anthropic requires ANTHROPIC_API_KEY (or use mock).");
   }
   if (cfg.LBE_INTERNAL_JOB_TOKEN !== undefined && cfg.LBE_INTERNAL_JOB_TOKEN.length < 32) {
     throw new Error("LBE_INTERNAL_JOB_TOKEN must be at least 32 characters when set.");

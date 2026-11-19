@@ -6,7 +6,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { createApp } from "./app.ts";
 import { loadConfig, REPO_ROOT } from "./config.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
-import { buildDrafter, buildLinkedIn, buildProvider, buildRegistry, openConfiguredDb, VOICE_DIR, WEB_DIST } from "./runtime.ts";
+import { buildDrafter, buildLinkedIn, buildProvider, buildRegistry, buildSpecialists, openConfiguredDb, VOICE_DIR, WEB_DIST } from "./runtime.ts";
 
 const cfg = loadConfig();
 const db = await openConfiguredDb(cfg);
@@ -15,8 +15,9 @@ const linkedin = buildLinkedIn(cfg, db);
 const registry = buildRegistry(provider, linkedin);
 const drafter = buildDrafter(cfg);
 const tls = !!cfg.LBE_TLS_PFX;
+const specialists = buildSpecialists(cfg);
 const app = createApp({
-  db, drafter, provider, linkedin,
+  db, drafter, provider, linkedin, specialists,
   appOrigins: cfg.appOrigins,
   cookieSecure: cfg.LBE_COOKIE_SECURE || tls,
   voiceDir: VOICE_DIR,
@@ -58,7 +59,7 @@ serve({
 }, (info) => {
   console.log(`LinkedIn Brand Engine API listening on ${tls ? "https" : "http"}://${info.address}:${info.port}`);
   console.log(`  database: ${cfg.LBE_DATABASE_URL === "pglite" ? `PGlite (${cfg.pgliteDir})` : "PostgreSQL"}`);
-  console.log(`  drafter: ${drafter.provider} (${drafter.model}) | mock publishing: on | LIVE LinkedIn publishing: ${cfg.liveEnabled ? "ON (staging)" : "off"}`);
+  console.log(`  drafter: ${drafter.provider} (${drafter.model}) | agents: ${specialists.research.provider} | mock publishing: on | LIVE LinkedIn publishing: ${cfg.liveEnabled ? "ON (staging)" : "off"}`);
   console.log(`  LinkedIn apps configured: ${linkedin ? Object.keys(linkedin.apps).filter((k) => linkedin.apps[k as "founder_app"]).join(", ") : "none"}`);
   console.log(`  in-process publisher worker: ${cfg.LBE_RUN_WORKER ? `every ${cfg.LBE_WORKER_INTERVAL_MS}ms` : "off"}`);
 });

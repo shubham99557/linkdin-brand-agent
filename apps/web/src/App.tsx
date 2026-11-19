@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError, type Me } from "./api.ts";
 import { ErrorText, StopBar } from "./components.tsx";
 import { ContentPage } from "./ContentPage.tsx";
+import { AgentPage, BrandBrainPage, WorkflowPage } from "./agentPages.tsx";
 import { AccountsPage, AuditPage, CalendarPage, CapabilitiesPage, ClaimsPage, MockPostsPage, NewContentPage, OAuthCompletePage, OutboxPage } from "./pages.tsx";
 
 function useHashRoute(): string {
@@ -17,6 +18,7 @@ function useHashRoute(): string {
 export const go = (path: string) => { window.location.hash = path; };
 
 const NAV: Array<[string, string]> = [
+  ["/agent", "Agent workspace"], ["/brain", "Brand Brain"],
   ["/", "Content calendar"], ["/new", "New post"], ["/claims", "Claims register"], ["/accounts", "Accounts & voices"],
   ["/outbox", "Publishing outbox"], ["/mock", "Mock LinkedIn"], ["/audit", "Audit log"], ["/capabilities", "LinkedIn capabilities"],
 ];
@@ -67,8 +69,12 @@ export function App() {
   if (!me) return <Login onLogin={loadMe} />;
 
   const contentMatch = route.match(/^\/content\/([0-9a-f-]{36})$/);
+  const workflowMatch = route.match(/^\/agent\/([0-9a-f-]{36})$/);
   let page;
   if (contentMatch) page = <ContentPage id={contentMatch[1]!} me={me} onChange={() => setRefreshKey((k) => k + 1)} />;
+  else if (workflowMatch) page = <WorkflowPage id={workflowMatch[1]!} me={me} />;
+  else if (route === "/agent") page = <AgentPage me={me} />;
+  else if (route === "/brain") page = <BrandBrainPage me={me} />;
   else if (route.startsWith("/oauth/complete")) page = <OAuthCompletePage query={route.split("?")[1] ?? ""} />;
   else if (route === "/new") page = <NewContentPage />;
   else if (route === "/claims") page = <ClaimsPage me={me} />;
