@@ -49,7 +49,7 @@ Nothing was sent to LinkedIn, no emails or DMs were sent, nothing was purchased,
 | **Total Vitest** | `npm test` | ✅ **122 passed**, 5 skipped |
 | PostgreSQL concurrency (5 tests) | `npm run test:pg` | ⛔ **Not executed** — skipped, Docker blocked |
 | Browser (Playwright, Chromium) | `npm run test:e2e` | ✅ **4 passed** |
-| Secret scan | `npm run security:secrets` | ✅ passed (86 files) |
+| Secret scan | `npm run security:secrets` | ✅ passed (89 files). One false positive (a `<your key>` placeholder in setup.md) was found and the rule fixed |
 | Dependency audit | `npm audit` | ✅ 0 vulnerabilities |
 | Mutation check | Removed DB STOP check | ✅ Suite failed as expected; file restored |
 | Live demo | `npm run demo` against `npm start` | ✅ Published to mock, 12 audit events |
