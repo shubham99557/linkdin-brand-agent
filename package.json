@@ -19,7 +19,7 @@
     "db:backup": "tsx services/api/src/cli/db-backup.ts",
     "db:backup:staging": "node scripts/run-staging.mjs services/api/src/cli/db-backup.ts",
     "db:restore": "tsx services/api/src/cli/db-restore.ts",
-    "db:seed":"tsx services/api/src/cli/seed.ts",
+    "db:seed": "tsx services/api/src/cli/seed.ts",
     "user:create": "tsx services/api/src/cli/create-user.ts",
     "dev:api": "tsx watch services/api/src/main.ts",
     "dev:web": "npm run dev -w @lbe/web",
@@ -51,9 +51,13 @@
     "check": "npm run typecheck && npm test && npm run security:secrets"
   },
   "overrides": {
-    "satori": { "fflate": "0.7.5" }
+    "satori": {
+      "fflate": "0.7.5"
+    },
+    "axe-core": "4.14.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.65.0",
     "@types/node": "26.6.6",
     "@types/pg": "8.23.1",

@@ -463,8 +463,15 @@ async function draftOne(deps: AgentDeps, p: {
   // Submit for HUMAN review only if nothing blocks it. The agent never approves.
   let status = "draft";
   if (unsupported.length === 0) {
-    await one("select lbe.submit_for_review($1, $2)", [deps.session, contentId]);
-    status = "in_review";
+    try {
+      await one("select lbe.submit_for_review($1, $2)", [deps.session, contentId]);
+      status = "in_review";
+    } catch (err) {
+      // A database rule refused review (e.g. the visual's alt text is too short). Keep the draft for a human to
+      // fix rather than failing the whole run; anything other than a rule refusal is still an error.
+      if ((err as { code?: string }).code !== "LBE02") throw err;
+      creativeWarnings.push(`Held as draft: ${(err as Error).message}`);
+    }
   }
   return {
     content_id: contentId, account_kind: p.acct.kind, pillar, topic: p.item.topic, status, body,

@@ -9,7 +9,7 @@ let approver: string;
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 const PDF = Buffer.from("%PDF-1.3\n%test\n").toString("base64");
 const asset = (over: Record<string, unknown> = {}) => JSON.stringify({ kind: "image/png", data_base64: PNG, width: 1, height: 1, page_count: 1,
-  alt_text: "A test visual", title: "T", ...over });
+  alt_text: "Navy slide with the headline Spot phishing fast", title: "T", ...over });
 
 beforeAll(async () => { t = await freshDb(); editor = await t.login("editor"); approver = await t.login("approver"); });
 afterAll(async () => t.db.close());

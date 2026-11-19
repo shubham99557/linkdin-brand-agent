@@ -29,6 +29,12 @@ Installed from npm and listed with exact versions in `package-lock.json`. Licenc
 | harfbuzzjs, @shuding/opentype.js and the other Satori dependencies | MIT / ISC / Apache-2.0 | |
 | Inter font (@fontsource/inter 5.3.0), © The Inter Project Authors | SIL Open Font License 1.1 | Embedded in rendered images and PDFs. Licence text: `node_modules/@fontsource/inter/LICENSE`, https://openfontlicense.org |
 
+### Test-only (not shipped)
+
+| Package | Licence | Notes |
+|---|---|---|
+| @axe-core/playwright 4.14.0, axe-core 4.14.0 (Deque Systems) | Mozilla Public License 2.0 | Accessibility checks in browser tests; unmodified |
+
 MPL-2.0 is a file-level copyleft. We do not modify Satori's or resvg's files. If we ever do, those modified
 files must be published under MPL-2.0. The OFL lets the font be embedded in documents; it may not be sold on
 its own.

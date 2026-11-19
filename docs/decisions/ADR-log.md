@@ -149,6 +149,7 @@ needed). Selected on 2026-11-19:
 | embedded-postgres (dev only, added 2026-11-19 with owner approval) | 18.6.0-beta.19 | MIT (bundles PostgreSQL binaries; `postgres.exe` unsigned — registry signature verified) |
 | Microsoft VC++ Redistributable x64 (system, owner-approved) | 14.52.37029.0 | Microsoft licence |
 | satori / @resvg/resvg-wasm / pdfkit / @fontsource/inter (approved 2026-11-19 for P5-01, see ADR-029) | 0.63.2 / 2.6.2 / 0.20.2 / 5.3.0 (+ fflate 0.7.5 override) | MPL-2.0 / MPL-2.0 / MIT / OFL-1.1 |
+| @axe-core/playwright (dev only, P5-06) | 4.14.0 (released 2026-10-15) with `axe-core` pinned to 4.14.0 (released 2026-10-05). axe-core 4.14.1 (2026-11-16) is inside the cooldown, so it is overridden. No install scripts; registry signatures verified | MPL-2.0 (unmodified) |
 
 Newer releases existed (e.g. vitest 5.1.1, @anthropic-ai/sdk 1.10.0) but were inside the cooldown window.
 
@@ -444,6 +445,12 @@ The text in the PDF is not selectable. Accessibility comes from the post's alt t
 - The live LinkedIn provider still rejects posts that have media until media upload exists (P6-04). A post with
   a visual can be published to the mock provider only; for a live text-only post, remove the visual.
 - Assets accumulate (they are never deleted); a retention job comes with P9-06.
+- **Alt text (P5-06, migration 1800).** The alt text is published with the image, so it is approved with it.
+  - Editing it attaches a new immutable copy with the same bytes and the new description, which sends the
+    post back to draft.
+  - A post with a visual cannot enter review until its alt text is real: at least 15 characters and not the
+    generic placeholder. The database enforces this with `lbe.alt_text_problem`.
+  - An agent draft that fails this check is held as a draft with a note; the run itself does not fail.
 - Bytes are stored in PostgreSQL. Moving them to object storage is a Phase 9/10 option.
 
 ## ADR-013 — Ambiguous publication results require reconciliation

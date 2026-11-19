@@ -20,7 +20,7 @@ const API = ["admin_add_user", "admin_end_sessions", "admin_list_users", "admin_
   "brain_upsert_entry", "cancel_publication", "consume_oauth_state", "create_claim", "create_content", "decide_content",
   "enqueue_publication", "is_stopped", "job_cancel", "job_enqueue", "job_get", "job_list", "job_resume", "job_retry", "learning_inputs", "login", "media_get", "media_list", "logout", "logout_all", "reconcile_publication", "record_agent_run",
   "release_publication", "research_list", "research_record", "research_review", "research_to_claim", "revoke_linkedin_credential",
-  "set_agent_metadata", "set_claim_status", "set_draft_output", "set_account_pillars", "set_live_publishing", "set_stop", "store_linkedin_credential",
+  "set_agent_metadata", "set_claim_status", "set_draft_output", "set_account_pillars", "set_live_publishing", "set_media_alt_text", "set_stop", "store_linkedin_credential",
   "strategy_save", "submit_for_review", "update_content", "whoami", "workflow_create", "workflow_finish", "workflow_get",
   "workflow_list", "write_app_audit"];
 

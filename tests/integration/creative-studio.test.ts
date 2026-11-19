@@ -41,7 +41,7 @@ beforeAll(async () => {
     return id;
   };
   carouselId = await mk({ format: "document_carousel", headline: "Spot phishing fast", slides: [{ title: "Check sender", text: "Look closely." }, { title: "Pause", text: "Slow down." }],
-    visual_direction: "calm", alt_text: "A carousel", avoid: [] });
+    visual_direction: "calm", alt_text: "Three-slide carousel: Spot phishing fast, Check sender, Pause", avoid: [] });
   textOnlyId = await mk({ format: "text_only", headline: "x", slides: [], visual_direction: "", alt_text: "", avoid: [] });
   const [o] = await t.db.query<{ id: string }>("insert into lbe.organizations(name, slug) values ('Org V', 'org-v') returning id");
   const [a] = await t.db.query<{ id: string }>(
@@ -131,7 +131,8 @@ describe("P5-03: the visual is approved and published with the post", () => {
     expect(attached.status).toBe(201);
     const { media_ids } = await attached.json() as { media_ids: string[] };
     const list = await (await req(editor, `/api/content/${carouselId}/media`)).json() as Array<{ id: string; kind: string; attached: boolean; page_count: number; alt_text: string }>;
-    expect(list[0]).toMatchObject({ id: media_ids[0], kind: "application/pdf", attached: true, page_count: 3, alt_text: "A carousel" });
+    expect(list[0]).toMatchObject({ id: media_ids[0], kind: "application/pdf", attached: true, page_count: 3,
+      alt_text: "Three-slide carousel: Spot phishing fast, Check sender, Pause" });
     const file = await req(editor, `/api/media/${media_ids[0]}`);
     expect(file.headers.get("content-type")).toBe("application/pdf");
     const bytes = Buffer.from(await file.arrayBuffer());

@@ -30,6 +30,42 @@ const toLocalInput = (iso: string | null) => {
 
 interface MediaInfo { id: string; kind: string; sha256: string; byte_size: number; page_count: number | null; alt_text: string; attached: boolean; created_at: string }
 
+/** Same rule as lbe.alt_text_problem (the database enforces it; this only gives early feedback). */
+export function altTextProblem(alt: string): string | null {
+  const t = alt.trim();
+  if (!t) return "Add a description of what the visual shows (alt text).";
+  if (t === "Visual for this post") return "This is only a generic placeholder — describe what the visual shows.";
+  if (t.length < 15) return "Too short — describe what the visual shows (at least 15 characters).";
+  return null;
+}
+
+/** P5-06: the description screen-reader users hear. It is published with the image, so it is approved with it. */
+function AltTextEditor({ contentId, current, status, onSaved }: { contentId: string; current: string; status: string; onSaved: () => void }) {
+  const [alt, setAlt] = useState(current);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setAlt(current), [current]);
+  const problem = altTextProblem(alt);
+  const currentProblem = altTextProblem(current);
+  return (
+    <div>
+      <label htmlFor={`alt-${contentId}`}>Description of the visual (alt text) — read aloud by screen readers and published with the image</label>
+      <textarea id={`alt-${contentId}`} style={{ minHeight: 60 }} maxLength={1000} value={alt} onChange={(e) => setAlt(e.target.value)}
+        aria-describedby={`alt-help-${contentId}`} data-testid="alt-text" />
+      <div id={`alt-help-${contentId}`} className={problem ? "error" : "muted"} role={currentProblem ? "alert" : undefined}>
+        {problem ?? `${alt.trim().length} characters.`}{" "}
+        {["in_review", "approved"].includes(status) && alt.trim() !== current ? "Saving sends the post back to draft for a new approval." : ""}
+      </div>
+      <ErrorText error={error} />
+      <button disabled={busy || !!problem || alt.trim() === current} data-testid="save-alt-text" onClick={async () => {
+        setBusy(true); setError(null);
+        try { await api(`/content/${contentId}/visual/alt-text`, { method: "PUT", body: { alt_text: alt } }); onSaved(); }
+        catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+      }}>Save description</button>
+    </div>
+  );
+}
+
 /** P5-03: the visual that is attached to the post — the exact file the approver approves and that gets published. */
 function AttachedVisual({ contentId, status, canEdit, hasBrief, version, onChange }: {
   contentId: string; status: string; canEdit: boolean; hasBrief: boolean; version: number; onChange: () => void;
@@ -52,8 +88,10 @@ function AttachedVisual({ contentId, status, canEdit, hasBrief, version, onChang
           {attached.kind === "image/png"
             ? <img src={`/api/media/${attached.id}`} alt={attached.alt_text} style={{ width: 200, borderRadius: 4, border: "1px solid var(--border)" }} />
             : <a href={`/api/media/${attached.id}`} target="_blank" rel="noreferrer">Open the attached PDF carousel ({attached.page_count} pages)</a>}
-          <div className="small">
-            <div>Alt text: {attached.alt_text}</div>
+          <div className="small" style={{ flex: 1, minWidth: 240 }}>
+            {editable
+              ? <AltTextEditor contentId={contentId} current={attached.alt_text} status={status} onSaved={() => { reload(); onChange(); }} />
+              : <div>Description (alt text): {attached.alt_text}</div>}
             <div className="muted">{Math.round(attached.byte_size / 1024)} KB · fingerprint {attached.sha256.slice(0, 12)}…</div>
           </div>
         </div>

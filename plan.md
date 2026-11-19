@@ -17,12 +17,12 @@
 |---|---|
 | Current phase | **Phase 4 — Reliable orchestration** (Phases 0–1 DONE; Phase 2 engineering done, real content = owner OA-3; Phase 3 waits on OA-3/OA-6) |
 | Active task | — |
-| Next READY tasks | **P5-06 accessibility (alt text, keyboard)** · P5-04 draft revisions · P3-01 pricing check · P2-04 account names · P2-03 document upload · P4-05 safe parallel drafting (P3, optional) |
+| Next READY tasks | **P5-04 draft revisions & history** · P5-05 monthly planning · P3-01 pricing check · P2-04 account names · P2-03 document upload · P4-05 safe parallel drafting (P3, optional) |
 | First safe milestone | **M1 Technical prototype hardened — REACHED 2026-11-19** (P1-01..06, P2-01/02; gate §H met: all suites green, restore proven, no open critical/high) |
-| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate · P5-01 render service · P5-02 brand templates & previews · P5-03 visuals in approval |
+| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate · P5-01 render service · P5-02 brand templates & previews · P5-03 visuals in approval · P5-06 accessibility |
 | Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · P0-07 off-machine code backup |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9) |
-| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 376 ✅ (10 PG skipped there) · `test:pg:embedded` 10/10 ✅ · Playwright 12 ✅ · secret scan ✅ · npm audit 0 ✅ |
+| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 380 ✅ (10 PG skipped there) · `test:pg:embedded` 10/10 ✅ · Playwright 16 ✅ (incl. axe a11y) · secret scan ✅ · npm audit 0 ✅ |
 | Latest commit | see `git log -1` (P1-02 follows `2ad93b5`) |
 | Next milestone | **M2 AI intelligence evaluation** (blocked on OA-3 real Brand Brain + OA-6 paid-run authorization) ∥ **M3 Internal MVP** engineering (P4 durable jobs, P5 visuals) |
 
@@ -238,7 +238,7 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 | P5-03 | Attach assets to drafts (media ids in package → approval covers visuals) | P5-02 | P1 | DONE | C | migration 1700, api attach/remove/media, agent `attachVisual` hook, web AttachedVisual | Editing visual invalidates approval | **Evidence 2026-11-19:** ADR-030; `tests/db/media-assets` 7/7 (attach/replace/remove after approval → draft + enqueue refused; immutable even for owner; only same-post assets — mutation → failure; file-signature checks; org isolation; agent can attach not approve); integration +3 (placeholder → 409 & agent skips with warning; attach → exact bytes + sha header → approver's package contains media id; agent attaches before review); privilege snapshot caught PUBLIC-executable trigger functions → revoked; PL/pgSQL IF/CASE parse bug found & fixed; e2e 12/12; Vitest 376; PG 10/10 |
 | P5-04 | Draft revisions & history view | P4-02 | P2 | READY | C | web, api | Version diff visible | e2e |
 | P5-05 | Monthly planning & campaign objectives | P4-04 | P2 | READY | C | agents, web | Month plan without duplicates | tests |
-| P5-06 | Accessibility (alt text required for visuals — editable by the reviewer; keyboard nav check; axe would be a new dev dependency → review first) | P5-03 | P2 | READY | C | web | axe checks pass | Playwright |
+| P5-06 | Accessibility (alt text required for visuals — editable by the reviewer; keyboard nav check; axe would be a new dev dependency → review first) | P5-03 | P2 | DONE | C | migration 1800, web, tests/e2e/a11y.spec.ts | axe checks pass | **Evidence 2026-11-19:** `alt_text_problem` blocks review without real alt text; `set_media_alt_text` → new immutable copy → re-approval; `tests/db/alt-text` 4/4; reviewer alt-text editor; agent drafts failing a DB rule are held, not failed; skip link + focus outline; `@axe-core/playwright` 4.14.0 reviewed (axe-core pinned 4.14.0, cooldown); a11y e2e 4/4 — keyboard-only path, 0 serious/critical WCAG A/AA violations on sign-in + 8 pages (mutation: image without alt → image-alt critical); Vitest 380, e2e 16/16 ×2, PG 10/10 |
 
 ### Phase 6 — LinkedIn connection & safe publishing
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
@@ -383,4 +383,5 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-19 | P5-00 DONE (ADR-029: render dependencies approved; resvg-wasm instead of native resvg-js) | `36bc4f3` |
 | 2026-11-19 | P5-01 DONE (render service; structural no-network guarantee; layout bug found by visual check) | `981bc7a` |
 | 2026-11-19 | P5-02 DONE (brand templates, visual identity in Brand Brain, previews on drafts) | `7473d32` |
-| 2026-11-19 | P5-03 DONE (visuals stored immutably and approved with the post; ADR-030) | P5-03 commit |
+| 2026-11-19 | P5-03 DONE (visuals stored immutably and approved with the post; ADR-030) | `fe44d92` |
+| 2026-11-19 | P5-06 DONE (alt text required & approved with the visual; axe + keyboard tests; skip link, focus outline) | P5-06 commit |

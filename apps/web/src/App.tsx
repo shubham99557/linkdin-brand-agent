@@ -113,6 +113,10 @@ export function App() {
 
   return (
     <div className="shell">
+      {/* Keyboard users can jump past the navigation (a plain #anchor would clash with the hash router). */}
+      <a href="#main-content" className="skip-link" onClick={(e) => { e.preventDefault(); document.getElementById("main-content")?.focus(); }}>
+        Skip to main content
+      </a>
       <nav className="side" aria-label="Main">
         <h1>LinkedIn Brand Engine</h1>
         <div className="sub">Phase 1 · mock publishing</div>
@@ -130,7 +134,7 @@ export function App() {
           </div>
         </div>
       </nav>
-      <main>
+      <main id="main-content" tabIndex={-1}>
         <StopBar me={me} refreshKey={refreshKey} />
         {page}
       </main>
