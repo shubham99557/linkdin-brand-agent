@@ -38,10 +38,14 @@ try {
     return (r.rows[0] as { v: string }).v;
   })();
   console.log(`Temporary PostgreSQL started on 127.0.0.1:${port} — ${version}`);
+  // Connection URL for the temporary server (random per-run password, never stored).
+  const url = new URL(`postgres://127.0.0.1:${port}/postgres`);
+  url.username = "postgres";
+  url.password = password;
   code = await new Promise<number>((resolve) => {
     const child = spawn(process.execPath, [path.join(root, "node_modules", "vitest", "vitest.mjs"), "run", "tests/pg", "--reporter=verbose"], {
       cwd: root, stdio: "inherit",
-      env: { ...process.env, LBE_TEST_PG_URL: `postgres://postgres:${encodeURIComponent(password)}@127.0.0.1:${port}/postgres` },
+      env: { ...process.env, LBE_TEST_PG_URL: url.toString() },
     });
     child.on("exit", (c) => resolve(c ?? 1));
   });
