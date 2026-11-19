@@ -17,7 +17,7 @@
 |---|---|
 | Current phase | **Phase 4 — Reliable orchestration** (Phases 0–1 DONE; Phase 2 engineering done, real content = owner OA-3; Phase 3 waits on OA-3/OA-6) |
 | Active task | — |
-| Next READY tasks | **P5-05 monthly planning** · P3-01 pricing check · P3-01 pricing check · P2-04 account names · P2-03 document upload · P4-05 safe parallel drafting (P3, optional) |
+| Next READY tasks | **P5-05 monthly planning** · P3-01 pricing check · P2-04 account names · P2-03 document upload · P4-05 safe parallel drafting (P3, optional) |
 | First safe milestone | **M1 Technical prototype hardened — REACHED 2026-11-19** (P1-01..06, P2-01/02; gate §H met: all suites green, restore proven, no open critical/high) |
 | Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate · P5-01 render service · P5-02 brand templates & previews · P5-03 visuals in approval · P5-06 accessibility · P5-04 history |
 | Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · P0-07 off-machine code backup |
