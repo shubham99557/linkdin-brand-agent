@@ -11,7 +11,7 @@ import {
   buildBrandContext, ingestSourceMaterial, mockSpecialists, runBrandWorkflow, runLearningReview, voiceFor,
   type AgentDeps, type BrandBrain, type Specialists,
 } from "@lbe/agents";
-import { BRAIN_SECTIONS, CAPABILITIES, CLAIM_CATEGORIES, findUnsupportedStatements, SECTION_META, type Role, type VerifiedClaim } from "@lbe/domain";
+import { BRAIN_SECTIONS, CAPABILITIES, CLAIM_CATEGORIES, findUnsupportedStatements, ONBOARDING_STEPS, SECTION_META, type Role, type VerifiedClaim } from "@lbe/domain";
 import { validateDraftOutput, PROMPT_VERSION, type Drafter } from "@lbe/drafting";
 import {
   buildAuthorizeUrl, exchangeCode, fetchUserInfo, escapeLittleText,
@@ -536,7 +536,7 @@ export function createApp(deps: AppDeps) {
 
   api.get("/brain", async (c) => {
     const brain = await one<BrandBrain>("select lbe.brain_load($1)", [c.get("session")]);
-    return c.json({ ...brain, sections: SECTION_META });
+    return c.json({ ...brain, sections: SECTION_META, onboarding_steps: ONBOARDING_STEPS, claim_categories: CLAIM_CATEGORIES });
   });
 
   api.post("/brain/entries", async (c) => {

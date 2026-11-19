@@ -38,6 +38,40 @@ test("owner edits an account's content pillars in the Brand Brain; editors see b
   await expect(page.locator("#pillar option", { hasText: "hiring-stories" })).toHaveCount(1);   // new pillar is usable at once
 });
 
+test("guided setup: owner answers, skips (stays UNKNOWN), resumes, adds a draft claim and reviews", async ({ page }) => {
+  await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
+  await page.getByRole("link", { name: "Brand Brain" }).click();
+  await page.getByTestId("start-onboarding").click();
+  // Starts at the first missing step (the e2e database begins with an empty Brand Brain).
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 1 of 14: Brand identity");
+  await expect(page.getByText("stays UNKNOWN", { exact: false }).first()).toBeVisible();
+  await page.locator("#wiz-identity").fill("[SYNTHETIC] ActTrident helps UK organisations run practical security programmes.");
+  await page.getByTestId("wizard-save").click();
+  await expect(page.getByRole("status")).toContainText('Saved "Brand identity"');
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 14: Positioning");
+  // Skip positioning: it stays missing.
+  await page.getByRole("button", { name: "Skip for now (stays UNKNOWN)" }).click();
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 3 of 14: Ideal customer profiles");
+  // Leave and come back: resumes at the first missing step (positioning), not at step 1.
+  await page.getByRole("link", { name: "Brand Brain" }).click();
+  await page.getByTestId("start-onboarding").click();
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 14: Positioning");
+  // Jump to the claims step and add a draft claim.
+  await page.getByRole("link", { name: "Proof (claims)" }).click();
+  await page.locator("#wiz-claim").fill("[SYNTHETIC] ActTrident is registered in England and Wales.");
+  await page.locator("#wiz-claim-note").fill("Companies House record");
+  await page.getByRole("button", { name: "Add claim (draft)" }).click();
+  await expect(page.getByRole("status")).toContainText("An approver must verify it");
+  await page.getByTestId("wizard-next").click();
+  await expect(page.getByTestId("wizard-review")).toContainText("Still UNKNOWN");
+  await expect(page.getByTestId("wizard-review")).toContainText("Positioning");
+  await signOut(page);
+  // Editors cannot use the wizard.
+  await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await page.goto("/#/brain/onboarding");
+  await expect(page.getByText("Only the owner (admin) can complete the Brand Brain")).toBeVisible();
+});
+
 test("owner onboards a Brand Brain section; editor runs the Branding Agent; drafts land in review", async ({ page }) => {
   // Owner: guided onboarding for one section
   await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);

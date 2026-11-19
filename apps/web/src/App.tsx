@@ -5,6 +5,7 @@ import { ContentPage } from "./ContentPage.tsx";
 import { AgentPage, BrandBrainPage, WorkflowPage } from "./agentPages.tsx";
 import { UsersPage } from "./UsersPage.tsx";
 import { PasswordPage } from "./PasswordPage.tsx";
+import { OnboardingWizard } from "./OnboardingWizard.tsx";
 import { AccountsPage, AuditPage, CalendarPage, CapabilitiesPage, ClaimsPage, MockPostsPage, NewContentPage, OAuthCompletePage, OutboxPage } from "./pages.tsx";
 
 function useHashRoute(): string {
@@ -95,6 +96,7 @@ export function App() {
   else if (workflowMatch) page = <WorkflowPage id={workflowMatch[1]!} me={me} />;
   else if (route === "/agent") page = <AgentPage me={me} />;
   else if (route === "/brain") page = <BrandBrainPage me={me} />;
+  else if (route.startsWith("/brain/onboarding")) page = <OnboardingWizard me={me} route={route} />;
   else if (route.startsWith("/oauth/complete")) page = <OAuthCompletePage query={route.split("?")[1] ?? ""} />;
   else if (route === "/new") page = <NewContentPage />;
   else if (route === "/claims") page = <ClaimsPage me={me} />;

@@ -3,10 +3,11 @@ import { api, fmt, type Me } from "./api.ts";
 import { Badge, ErrorText, useLoad } from "./components.tsx";
 
 // ------------------------------------------------------------------ types
-interface SectionMeta { section: string; label: string; required: boolean; questions: string[]; listField?: { key: string; label: string } }
-interface Entry { id: string; section: string; key: string; title: string; body: string; structured: Record<string, unknown>; version: number; source: string; source_ref: string | null; approved_at: string }
-interface Brain {
+export interface SectionMeta { section: string; label: string; required: boolean; questions: string[]; listField?: { key: string; label: string } }
+export interface Entry { id: string; section: string; key: string; title: string; body: string; structured: Record<string, unknown>; version: number; source: string; source_ref: string | null; approved_at: string }
+export interface Brain {
   organization: { name: string }; entries: Entry[]; missing_sections: string[]; sections: SectionMeta[]; pending_proposals: number;
+  onboarding_steps: string[]; claim_categories: string[];
   accounts: Array<{ id: string; kind: string; display_name: string; pillars: string[] }>; claims: Array<{ id: string; statement: string }>;
 }
 interface Proposal {
@@ -46,6 +47,9 @@ export function BrandBrainPage({ me }: { me: Me }) {
         {brain.missing_sections.length > 0 && <p className="small">Missing: {brain.missing_sections.map((s) => brain.sections.find((m) => m.section === s)?.label ?? s).join(", ")}</p>}
         {isOwner && (
           <div className="row">
+            <a href="#/brain/onboarding" className="btn primary" data-testid="start-onboarding">
+              {brain.missing_sections.length > 0 ? "Start guided setup" : "Review guided setup"}
+            </a>
             <button onClick={() => act(() => api("/brain/import-voice-files", { method: "POST", body: {} }), "Imported the voice files into the Brand Brain.")}>
               Import brand/voice files
             </button>
@@ -70,7 +74,7 @@ export function BrandBrainPage({ me }: { me: Me }) {
 /** Turn "Threat landscape" into "threat-landscape" (the stored pillar id). */
 export const pillarSlug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 
-function PillarsPanel({ accounts, isOwner, onSaved }: {
+export function PillarsPanel({ accounts, isOwner, onSaved }: {
   accounts: Brain["accounts"]; isOwner: boolean; onSaved: (accountName: string) => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null);

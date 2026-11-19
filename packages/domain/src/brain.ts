@@ -52,3 +52,15 @@ export const SECTION_META: readonly SectionMeta[] = [
 ];
 
 export const REQUIRED_SECTIONS = SECTION_META.filter((s) => s.required).map((s) => s.section);
+
+/**
+ * Guided onboarding order (P2-02): who you are → who you serve → what you sell and say → how you sound → what
+ * to post about → what never to say → optional extras → proof (claims). `pillars` and `claims` are wizard-only
+ * steps backed by the account pillars and the claims register. `lessons` is filled by learning proposals.
+ */
+export type OnboardingStep = BrainSection | "pillars" | "claims";
+export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
+  "identity", "positioning", "icp", "audience_problems", "product", "messaging",
+  "voice_company", "voice_founder", "pillars", "pillars_goals", "prohibited",
+  "audience_language", "communication_rules", "claims",
+];

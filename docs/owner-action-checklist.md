@@ -57,8 +57,9 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 - **What:** fill in the 13 Brand Brain sections and 3–5 verified claims with evidence, in **staging**.
 - **Why:** AI quality can only be judged against real knowledge; agents never invent facts — missing items stay UNKNOWN.
 - **Where:** `npm run start:staging` → https://localhost:8443 → sign in → **Brand Brain**. Guide: `docs/brand-onboarding-checklist.md`.
-- **Steps:** follow the onboarding panel in order (company → offer → ICP → voices → pillars/goals → prohibited
-  topics → claims). Leave anything you're unsure about as UNKNOWN. Approve each entry.
+- **Steps:** click **Start guided setup** and answer one step at a time (14 steps, ending with claims). Use
+  *Skip for now* for anything you're unsure about — it stays UNKNOWN. You can stop and come back; it resumes at the
+  first unanswered step. Then ask an approver (or yourself, if you are one) to verify your claims in *Claims register*.
 - **Confirm:** `npm run brain:audit:staging` shows no required section UNKNOWN and no synthetic content.
 - **Secret:** none, but don't enter customer names or personal data.
 - **Meanwhile:** Claude improves the onboarding UI (P2-01, P2-02).

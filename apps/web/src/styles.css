@@ -33,7 +33,14 @@ h3 { margin: 18px 0 8px; font-size: 15px; }
 .small { font-size: 12px; }
 .mono { font-family: var(--mono); font-size: 12px; word-break: break-all; }
 button, .btn { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
-button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button.primary, .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+a.btn { display: inline-block; text-decoration: none; }
+.steps { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; padding: 0; list-style: none; }
+.steps a { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: var(--chip); color: var(--text); text-decoration: none; }
+.steps a.current { outline: 2px solid var(--accent); }
+.steps a.done { color: var(--ok); }
+.progress { height: 6px; background: var(--chip); border-radius: 999px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); }
 button.danger { background: var(--bad); color: #fff; border-color: var(--bad); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 input, select, textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; width: 100%; }

@@ -4,7 +4,10 @@ _2026-11-19. The staging Brand Brain is empty (correct) and the development Bran
 (see `npm run brain:audit`). No real ActTrident facts exist in the system yet. **Nothing below may be filled in
 by the agent or by an engineer on the owner's behalf.** Missing items stay UNKNOWN._
 
-How to enter: dashboard → **Brand Brain** → *Fill in* (owner/admin), or paste source material into
+How to enter (easiest): dashboard → **Brand Brain** → **Start guided setup** (owner/admin). It asks one topic at a
+time in this order — identity, positioning, customers, problems, product, messages, both voices, content pillars,
+campaign goals, never-say list, optional extras, then proof (claims) — shows progress, lets you skip anything
+(it stays UNKNOWN) and resumes where you left off. Alternatively use *Fill in* per section, or paste source material into
 *Add knowledge from a document* and accept the grounded proposals. Facts that need proof go into the **Claims
 register** with an evidence link, and an approver verifies them there.
 
