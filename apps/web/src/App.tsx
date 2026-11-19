@@ -4,6 +4,7 @@ import { ErrorText, StopBar } from "./components.tsx";
 import { ContentPage } from "./ContentPage.tsx";
 import { AgentPage, BrandBrainPage, WorkflowPage } from "./agentPages.tsx";
 import { UsersPage } from "./UsersPage.tsx";
+import { PasswordPage } from "./PasswordPage.tsx";
 import { AccountsPage, AuditPage, CalendarPage, CapabilitiesPage, ClaimsPage, MockPostsPage, NewContentPage, OAuthCompletePage, OutboxPage } from "./pages.tsx";
 
 function useHashRoute(): string {
@@ -75,6 +76,17 @@ export function App() {
 
   if (!checked) return null;
   if (!me) return <Login onLogin={loadMe} notice={notice} />;
+  // Temporary password: nothing else is available until the user picks their own (also enforced in the database).
+  if (me.must_change_password) {
+    return (
+      <div>
+        <PasswordPage forced onDone={loadMe} />
+        <p className="small" style={{ textAlign: "center" }}>
+          <button onClick={async () => { await api("/auth/logout", { method: "POST" }); setMe(null); }}>Sign out</button>
+        </p>
+      </div>
+    );
+  }
 
   const contentMatch = route.match(/^\/content\/([0-9a-f-]{36})$/);
   const workflowMatch = route.match(/^\/agent\/([0-9a-f-]{36})$/);
@@ -92,6 +104,7 @@ export function App() {
   else if (route === "/audit") page = <AuditPage />;
   else if (route === "/capabilities") page = <CapabilitiesPage />;
   else if (route === "/users") page = <UsersPage me={me} />;
+  else if (route === "/password") page = <PasswordPage forced={false} onDone={() => undefined} />;
   else page = <CalendarPage />;
 
   return (
@@ -103,7 +116,8 @@ export function App() {
           <a key={href} href={`#${href}`} className={route === href ? "active" : ""}>{label}</a>
         ))}
         <div className="who">
-          Signed in as <strong>{me.display_name}</strong><br />{me.email} · {me.role}
+          Signed in as <strong>{me.display_name}</strong><br />{me.email} · {me.role}<br />
+          <a href="#/password" className="small">Change password</a>
           <div style={{ marginTop: 8 }}>
             <button onClick={async () => { await api("/auth/logout", { method: "POST" }); setMe(null); }}>Sign out</button>{" "}
             <button title="Ends your sessions in every browser and device" onClick={async () => {

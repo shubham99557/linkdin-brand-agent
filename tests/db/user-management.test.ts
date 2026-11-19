@@ -25,6 +25,8 @@ const add = (email: string, role = "editor", name = "New Person") =>
 const update = (id: string, patch: { role?: string; disabled?: boolean; name?: string }, session = admin) =>
   t.api<{ sessions_revoked: number; approver_assignments_removed: number }>("select lbe.admin_update_user($1, $2, $3, $4, $5)",
     [session, id, patch.role ?? null, patch.disabled ?? null, patch.name ?? null]);
+/** Simulates the user having completed the forced password change (tested separately in password-change.test.ts). */
+const choseOwnPassword = (email: string) => t.db.query("update lbe.app_users set must_change_password = false where email = $1", [email]);
 const lastAudit = async (action: string) => (await t.db.query<{ actor: string; details: Record<string, unknown> }>(
   "select actor, details from lbe.audit_events where action = $1 order by id desc limit 1", [action]))[0];
 
@@ -87,6 +89,7 @@ describe("create, update, disable", () => {
 
   it("another admin may change an admin (the acting admin always remains, so the org is never left without one)", async () => {
     await add("second-admin@lbe.test", "admin");
+    await choseOwnPassword("second-admin@lbe.test");
     const s2 = (await loginAs("second-admin@lbe.test")).token!;
     await update(t.ids.users.admin, { role: "approver" }, s2);     // allowed: second admin remains
     await update(t.ids.users.admin, { role: "admin" }, s2);        // restore
@@ -118,6 +121,7 @@ describe("approver assignment", () => {
     expect((await t.db.query("select 1 from lbe.account_approvers where user_id = $1 and account_id = $2",
       [t.ids.users.admin, t.ids.accounts.founder])).length).toBe(0);
     const other = await add("founder-helper-admin@lbe.test", "admin");
+    await choseOwnPassword("founder-helper-admin@lbe.test");
     const s2 = (await loginAs("founder-helper-admin@lbe.test")).token!;
     await t.api("select lbe.admin_set_approver($1, $2, $3, true)", [s2, t.ids.users.admin, t.ids.accounts.founder]);
     await t.api("select lbe.admin_set_approver($1, $2, $3, false)", [admin, t.ids.users.admin, t.ids.accounts.founder]); // removing yourself is fine

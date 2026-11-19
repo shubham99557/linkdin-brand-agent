@@ -27,7 +27,7 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
 
 export type Role = "admin" | "approver" | "editor" | "viewer";
 export interface Me {
-  id: string; email: string; display_name: string; role: Role; approver_for: string[];
+  id: string; email: string; display_name: string; role: Role; approver_for: string[]; must_change_password: boolean;
   hints: { canEdit: boolean; canApprove: boolean; canStop: boolean; canResume: boolean; canReconcile: boolean };
 }
 export interface Credential {

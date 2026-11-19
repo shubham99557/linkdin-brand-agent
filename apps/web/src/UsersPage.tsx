@@ -26,7 +26,7 @@ function AddUser({ onDone }: { onDone: (msg: string) => void }) {
       e.preventDefault(); setError(null);
       try {
         await api("/users", { method: "POST", body: form });
-        onDone(`Added ${form.display_name}. Give them the temporary password in person or by phone — not by email or chat.`);
+        onDone(`Added ${form.display_name}. Give them the temporary password in person or by phone — not by email or chat. They must choose their own password when they first sign in.`);
         setForm({ email: "", display_name: "", role: "editor", password: "" });
       } catch (err) { setError((err as Error).message); }
     }}>
@@ -92,7 +92,7 @@ function UserCard({ u, accounts, onChange, onMessage }: {
         <form className="row" style={{ marginTop: 8 }} onSubmit={(e) => {
           e.preventDefault();
           void run(() => api(`/users/${u.id}/reset-password`, { method: "POST", body: { password: pw } }),
-            `Password reset for ${u.display_name}; they were signed out. Tell them the new password in person or by phone.`)
+            `Password reset for ${u.display_name}; they were signed out. Tell them the temporary password in person or by phone — they must change it when they sign in.`)
             .then((ok) => { if (ok) { setPw(""); setResetting(false); } });
         }}>
           <label htmlFor={`pw-${u.id}`} className="small">New temporary password</label>

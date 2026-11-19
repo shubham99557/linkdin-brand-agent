@@ -56,6 +56,7 @@ interface SessionUser {
   role: Role;
   organization_id: string;
   organization_name: string;
+  must_change_password: boolean;
   approver_for: string[];
 }
 
@@ -235,6 +236,15 @@ export function createApp(deps: AppDeps) {
     const revoked = await one<number>("select lbe.logout_all($1)", [c.get("session")]);
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     return c.json({ ok: true, sessions_revoked: revoked });
+  });
+
+  // Change your own password (also the forced first-sign-in change for admin-issued temporary passwords).
+  api.post("/auth/change-password", async (c) => {
+    const b = await json(c, z.object({ current_password: z.string().min(1).max(200), new_password: z.string().min(12).max(200) }));
+    const r = await one<{ ok: boolean; error?: string; other_sessions_ended?: number }>(
+      "select lbe.change_password($1, $2, $3)", [c.get("session"), b.current_password, b.new_password]);
+    if (!r.ok) return c.json({ error: r.error ?? "password not changed" }, 400);
+    return c.json(r);
   });
 
   api.get("/me", (c) => {

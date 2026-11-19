@@ -47,7 +47,8 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
   ```
   Only this **first** admin needs the command line. Everyone else (e.g. a separate founder) you can add afterwards in
   the dashboard under **Users** → *Add a user*, then tick "Approves posts for: Founder". Give temporary passwords in
-  person or by phone, not by email or chat.
+  person or by phone, not by email or chat. They'll be asked to choose their own password the first time they sign
+  in. You can change yours any time via *Change password* under your name.
 - **Confirm:** `npm run pilot:preflight` no longer shows the two user FAIL lines.
 - **Secret:** the password.
 - **Meanwhile:** independent engineering tasks (P1-xx, P4-xx).

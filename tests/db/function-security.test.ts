@@ -15,7 +15,7 @@ const AGENT = ["brain_load", "brain_propose", "create_content", "learning_inputs
 const WORKER = ["claim_outbox", "complete_outbox", "expire_credentials", "expire_stale_dispatches", "is_stopped", "worker_auto_stop",
   "worker_get_credential", "worker_mark_credential"];
 const API = ["admin_add_user", "admin_end_sessions", "admin_list_users", "admin_reset_password", "admin_set_approver",
-  "admin_update_user", "begin_oauth","brain_decide_proposal", "brain_list_proposals", "brain_load", "brain_propose", "brain_retire_entry",
+  "admin_update_user", "begin_oauth", "brain_decide_proposal", "change_password", "brain_list_proposals", "brain_load", "brain_propose", "brain_retire_entry",
   "brain_upsert_entry", "cancel_publication", "consume_oauth_state", "create_claim", "create_content", "decide_content",
   "enqueue_publication", "is_stopped", "learning_inputs", "login", "logout", "logout_all", "reconcile_publication", "record_agent_run",
   "release_publication", "research_list", "research_record", "research_review", "research_to_claim", "revoke_linkedin_credential",
@@ -34,7 +34,7 @@ describe("function execute privileges match the reviewed allowlists", () => {
   });
   it("operator-only functions are not granted to any application role", async () => {
     for (const fn of ["platform_set_stop", "purge_expired_sessions", "admin_create_user", "brain_write_entry", "require_user", "subject_org",
-      "session_user_touch", "session_idle_timeout", "admin_target", "revoke_user_sessions"]) {
+      "session_user_touch", "session_idle_timeout", "admin_target", "revoke_user_sessions", "require_user_core"]) {
       for (const role of ["lbe_api", "lbe_worker", "lbe_agent"]) {
         const [r] = await t.db.query<{ ok: boolean }>(`select bool_or(has_function_privilege($1, p.oid, 'execute')) as ok
           from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'lbe' and p.proname = $2`, [role, fn]);
@@ -58,7 +58,7 @@ describe("SECURITY DEFINER hygiene", () => {
     const rows = await t.db.query<{ proname: string }>(
       `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'lbe' and p.prosecdef and array_to_string(p.proconfig, ',') like '%public%' order by 1`);
-    expect(rows.map((r) => r.proname)).toEqual(["admin_create_user", "admin_reset_password", "begin_oauth", "login"]);
+    expect(rows.map((r) => r.proname)).toEqual(["admin_create_user", "admin_reset_password", "begin_oauth", "change_password", "login"]);
   });
   it("no application role can create objects in the public schema (search_path hijack)", async () => {
     for (const role of ["lbe_api", "lbe_worker", "lbe_agent"]) {

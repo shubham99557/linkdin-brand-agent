@@ -60,7 +60,8 @@ are proven by tests. But three prerequisites are missing:
 - Expired, idle and revoked sessions and disabled users are rejected (tested). Disabling a user or resetting their
   password ends their sessions immediately.
 - Lockout after 5 failures. This is a deliberate trade-off: someone could lock an account on purpose. Admins can clear it with a password reset.
-- Remaining before multi-user production: SSO or MFA (P9-02), and self-service password change (P1-06).
+- Self-service password change; admin-issued passwords are temporary and must be changed first (P1-06).
+- Remaining before multi-user production: SSO or MFA (P9-02).
 
 **Mutation checks:**
 - Removing the organization check from proposal decisions failed the cross-tenant test.
@@ -69,8 +70,8 @@ are proven by tests. But three prerequisites are missing:
 
 ## 2a. Phase 1 foundation sign-off (P1-05, 2026-11-19)
 
-**Verdict: SIGNED OFF for internal ActTrident use (local/staging, mock publishing, owner-run LinkedIn pilot)** with
-P1-06 as the one follow-up before other staff get accounts. **Not** a sign-off for hosted production (Phase 9)
+**Verdict: SIGNED OFF for internal ActTrident use (local/staging, mock publishing, owner-run LinkedIn pilot)**;
+the follow-up P1-06 is done, so other staff may be given accounts. **Not** a sign-off for hosted production (Phase 9)
 or for SaaS (Phase 10). Scope reviewed: everything added in P1-01…P1-04 plus the authentication model.
 
 | Area | Added in | Status | Evidence |
@@ -85,7 +86,7 @@ or for SaaS (Phase 10). Scope reviewed: everything added in P1-01…P1-04 plus t
 | # | Finding | Severity | Status |
 |---|---|---|---|
 | F-1 | The new Users page let an admin make **themselves** approver of the founder profile, then approve and release posts in the founder's name (contradicts A-02) | High (impersonation) | **Fixed** — migration 0900 refuses self-assignment on founder profiles; another admin or the operator CLI must do it; test added |
-| F-2 | Users cannot change their own password, so admin-issued temporary passwords stay in use | Medium | **Open → P1-06** (self-service change + "must change temporary password") before staff other than the owner get accounts |
+| F-2 | Users cannot change their own password, so admin-issued temporary passwords stay in use | Medium | **Fixed (P1-06)** — self-service change (current password required; other sessions end; 5 wrong attempts lock the account and end all sessions); admin-issued passwords must be changed before anything else (enforced in `require_user`) |
 | F-3 | An admin can reset another admin's password or promote anyone to admin | Accepted | Inherent to the admin role; every change is audited; keep the number of admins small |
 | F-4 | Backup archives contain business data, password hashes and encrypted LinkedIn tokens; restore trusts the archive the operator chooses (checksum proves integrity, not origin) | Accepted (internal) | Git-ignored `backups/`, documented; encrypt any off-machine copy; signed/encrypted backups at P9-04 |
 | F-5 | Access log records user ID and route per request (pseudonymous personal data); logs go to stdout with no retention policy | Low | Retention policy at P9-05/P9-06 |
@@ -93,7 +94,7 @@ or for SaaS (Phase 10). Scope reviewed: everything added in P1-01…P1-04 plus t
 | F-7 | Embedded PostgreSQL binary is not Authenticode-signed | Low (dev-only) | Hash recorded; never used at runtime |
 
 **Launch blockers by milestone**
-- **Before other staff use it:** P1-06.
+- **Before other staff use it:** ~~P1-06~~ done.
 - **Before hosted internal production (M5):** P9-02 SSO/MFA, P9-03 secrets management and TLS, P9-04 automated
   encrypted backups and a restore drill, P9-05 monitoring and log retention, an external review of the deployment.
 - **Before SaaS (M6):** ADR-023 gaps 1–6 (organization RLS as a second layer, memberships, remove

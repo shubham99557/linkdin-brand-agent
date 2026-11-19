@@ -60,6 +60,28 @@ test("admin adds a user, makes them an approver, then disables them; non-admins 
   await expect(page.getByRole("alert")).toHaveText("invalid email or password");
 });
 
+test("a user with a temporary password must choose their own before using the dashboard", async ({ page }) => {
+  await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
+  await page.getByRole("link", { name: "Users" }).click();
+  await page.getByLabel("Name").fill("E2E Newcomer");
+  await page.getByLabel("Email (used to sign in)").fill("e2e-newcomer@lbe.test");
+  await page.getByLabel("Temporary password (12+ characters)").fill("e2e-temp-password-1");
+  await page.getByRole("button", { name: "Add user" }).click();
+  await expect(page.getByRole("status")).toContainText("must choose their own password");
+  await signOut(page);
+  await page.getByLabel("Email").fill("e2e-newcomer@lbe.test");
+  await page.getByLabel("Password").fill("e2e-temp-password-1");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Choose your own password" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Content calendar" })).toHaveCount(0);
+  await page.getByLabel("Temporary password").fill("e2e-temp-password-1");
+  await page.getByLabel("New password", { exact: true }).fill("e2e-my-own-password-2");
+  await page.getByLabel("Repeat new password").fill("e2e-my-own-password-2");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.getByText("Signed in as")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Content calendar" })).toBeVisible();
+});
+
 test("full mock vertical slice through the dashboard", async ({ page }) => {
   // Editor: create, draft, submit
   await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);

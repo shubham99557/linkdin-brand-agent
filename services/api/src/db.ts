@@ -155,7 +155,7 @@ export async function migrate(db: Db, dir = MIGRATIONS_DIR, opts: { until?: stri
 export function dbErrorStatus(err: unknown): { status: number; message: string } | null {
   const e = err as { code?: string; message?: string };
   const map: Record<string, number> = {
-    LBE01: 409, LBE02: 422, LBE03: 423, LBE04: 404, LBE10: 401, LBE11: 403,
+    LBE01: 409, LBE02: 422, LBE03: 423, LBE04: 404, LBE10: 401, LBE11: 403, LBE12: 403,
     "23505": 409, "42501": 403,
   };
   if (e?.code && map[e.code]) {
