@@ -18,3 +18,17 @@
 
 Installed from npm and listed with exact versions in `package-lock.json`. Licences: MIT and Apache-2.0
 (see ADR-009). PGlite bundles PostgreSQL (PostgreSQL Licence).
+
+### Render service (`services/render`, ADR-029)
+
+| Package | Licence | Notes |
+|---|---|---|
+| satori 0.63.2 (Vercel) | Mozilla Public License 2.0 | Used unmodified as an npm dependency. Source: https://github.com/vercel/satori |
+| @resvg/resvg-wasm 2.6.2 | Mozilla Public License 2.0 | Used unmodified (WebAssembly build of resvg). Source: https://github.com/yisibl/resvg-js |
+| pdfkit 0.20.2 and its dependencies (fontkit, linebreak, png-js, @noble/*, fflate) | MIT | |
+| harfbuzzjs, @shuding/opentype.js and the other Satori dependencies | MIT / ISC / Apache-2.0 | |
+| Inter font (@fontsource/inter 5.3.0), © The Inter Project Authors | SIL Open Font License 1.1 | Embedded in rendered images and PDFs. Licence text: `node_modules/@fontsource/inter/LICENSE`, https://openfontlicense.org |
+
+MPL-2.0 is a file-level copyleft. We do not modify Satori's or resvg's files. If we ever do, those modified
+files must be published under MPL-2.0. The OFL lets the font be embedded in documents; it may not be sold on
+its own.

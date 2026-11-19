@@ -415,6 +415,14 @@ adequate for 1–10 slides.
    installing.
 5. **Deterministic output.** Embedded fonts only, no system fonts. Snapshot tests compare rendered output.
 
+**Implementation note (P5-01).** A probe found that, for a non-data image, Satori first does a **DNS lookup**
+(its own SSRF screening) and keeps its own reference to `fetch`. Spying on `fetch` therefore cannot prove "no
+network". The guarantee is structural, with two independent checks, each covered by a mutation-tested test:
+1. Input validation: the logo must be a `data:` URI, and an SVG logo may not contain external references.
+2. `assertNoExternalResources(tree)`, run on the final element tree immediately before Satori is called.
+
+Draft text is always a text node, so markup in drafts can never become an image.
+
 **PDF approach.** Each slide is rendered to PNG (Satori → SVG → resvg) and placed one per page with pdfkit.
 The text in the PDF is not selectable. Accessibility comes from the post's alt text and description
 (P5-06). A vector SVG-to-PDF path can be revisited later.

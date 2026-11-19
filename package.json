@@ -31,6 +31,7 @@
     "brain:export": "tsx services/api/src/cli/brain-export.ts",
     "brain:export:staging": "node scripts/run-staging.mjs services/api/src/cli/brain-export.ts",
     "eval:campaign": "tsx scripts/eval-campaign.ts",
+    "render:demo": "tsx scripts/render-demo.ts",
     "setup:staging": "node scripts/setup-staging.mjs",
     "staging:init": "node scripts/run-staging.mjs services/api/src/cli/staging-init.ts",
     "staging:user": "node scripts/run-staging.mjs services/api/src/cli/create-user.ts",
@@ -48,6 +49,9 @@
     "security:secrets": "node scripts/secret-scan.mjs",
     "security:audit": "npm audit --audit-level=high",
     "check": "npm run typecheck && npm test && npm run security:secrets"
+  },
+  "overrides": {
+    "satori": { "fflate": "0.7.5" }
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",
