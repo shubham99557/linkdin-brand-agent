@@ -155,4 +155,4 @@ LinkedIn settings. All three are independent.
 | P2-D5 | Create a separate company app and apply for Community Management (needs privacy policy URL, page super-admin) | Start early — review takes time |
 | P2-D6 | Use a LinkedIn test profile for the first live founder-path test | Yes |
 | P2-D7 | Token encryption key custody (local env file now; secret manager before any shared hosting) | Env now, secret manager later |
-| P2-D8 | Install WSL2 so the real-PostgreSQL concurrency tests can run before any live post | Yes, before Stage 2.2 |
+| P2-D8 | Install WSL2 so the real-PostgreSQL concurrency tests can run before any live post | **Satisfied 2026-11-19** via `embedded-postgres` (owner-approved): 9/9 pass with `npm run test:pg:embedded` |

@@ -142,6 +142,8 @@ needed). Selected on 2026-11-19:
 | react / react-dom | 19.3.1 | MIT |
 | vite / @vitejs/plugin-react | 8.3.6 / 6.2.1 | MIT |
 | Docker image postgres | 18.6-alpine3.23 | PostgreSQL |
+| embedded-postgres (dev only, added 2026-11-19 with owner approval) | 18.6.0-beta.19 | MIT (bundles PostgreSQL binaries; `postgres.exe` unsigned — registry signature verified) |
+| Microsoft VC++ Redistributable x64 (system, owner-approved) | 14.52.37029.0 | Microsoft licence |
 
 Newer releases existed (e.g. vitest 5.1.1, @anthropic-ai/sdk 1.10.0) but were inside the cooldown window.
 

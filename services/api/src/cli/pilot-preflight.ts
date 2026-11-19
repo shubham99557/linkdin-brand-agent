@@ -89,7 +89,7 @@ try {
 }
 
 // --- owner preconditions (cannot be checked automatically) ---------------------
-check("WARN", "P2-D8: real-PostgreSQL concurrency tests have not run (WSL2/Docker). Owner must run them or explicitly waive for the pilot.");
+check("WARN", "P2-D8: re-run `npm run test:pg:embedded` before the pilot (last recorded result: 9/9 passed on 2026-11-19).");
 check("WARN", "Owner must be present and approve each live post (runbook step G).");
 
 const order: Level[] = ["FAIL", "WARN", "PASS"];

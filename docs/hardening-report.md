@@ -10,7 +10,7 @@ now technically sound: security findings are fixed, tenant isolation is verified
 are proven by tests. But three prerequisites are missing:
 1. **No real Brand Brain knowledge.** Staging is empty, and development is 100% synthetic.
 2. **No authorized real-model run.** There is no key, budget or authorization, so content quality is unmeasured.
-3. **The real-PostgreSQL concurrency tests are not executed.** The local database server they need is blocked.
+3. ~~The real-PostgreSQL concurrency tests are not executed.~~ **Resolved: 9/9 pass on real PostgreSQL 18.6** (see §3).
 
 **Ready now:** completing the Brand Brain in staging, and the free mock evaluation pipeline.
 
@@ -67,14 +67,18 @@ are proven by tests. But three prerequisites are missing:
 - Removing manual release failed 5 tests.
 
 ## 3. PostgreSQL concurrency results
+_Updated 2026-11-19 after owner authorization of `embedded-postgres` and the Microsoft VC++ runtime._
+
 | | |
 |---|---|
-| Status | **NOT EXECUTED** — 9 tests written and type-checked, skipped without a server |
-| Command | `$env:LBE_TEST_PG_URL="postgres://postgres:<pw>@127.0.0.1:54329/lbe"; npm run test:pg` |
-| Scenarios | multiple workers claiming the same jobs; approve vs edit; two approvers; double enqueue; STOP after commit; **STOP racing claims of pending jobs**; **duplicate provider responses**; **recovery after ambiguous outcomes (concurrent reconciliation)**; **cross-organization requests in parallel** |
-| Blocker 1 | Docker Desktop is installed, but its engine cannot start: **WSL2 is not installed** (`wsl --status`: "Windows Subsystem for Linux is not installed"). Fix needs administrator rights and a reboot. |
-| Blocker 2 | The isolated alternative (`embedded-postgres` 18.6.0: MIT, user-level PostgreSQL on 127.0.0.1, temporary data folder, no admin rights) was **refused by this session's permission policy** when I tried to install it. I did not try another route around that. |
-| Covered meanwhile | Single-connection equivalents in PGlite: double claim, stale approval, double enqueue, STOP between claim and send, wrong-worker completion, lease expiry |
+| Status | ✅ **9 / 9 passed**, three consecutive clean runs |
+| Command | `npm run test:pg:embedded` |
+| Server | Temporary PostgreSQL 18.6 (x86_64-windows, msvc-19.44) from `embedded-postgres` 18.6.0-beta.19. Bound to 127.0.0.1, random port, random password, SCRAM authentication, throwaway data folder deleted after the run (verified: no leftover process or folder) |
+| Scenarios | multiple workers claiming the same jobs; approve vs edit (15 races); two approvers; double enqueue; STOP after commit; STOP racing claims of pending jobs; duplicate provider responses; recovery after ambiguous outcomes (concurrent reconciliation); cross-organization requests in parallel |
+| Proof the tests exercise real concurrency | Mutation: removing `FOR UPDATE SKIP LOCKED` from `claim_outbox` made **4 tests fail** (double claim, STOP race, duplicate responses, recovery race); restored → 9/9 |
+| Supply-chain notes | npm registry signatures verified (`npm audit signatures`: 83 verified). `postgres.exe` is **not Authenticode-signed** (SHA-256 `AF5B897C…2451A0`). Development-only dependency; never used at runtime |
+| Prerequisite installed | Microsoft Visual C++ Redistributable x64 14.52.37029.0 (winget, installer hash verified), owner-approved |
+| Docker path | Still blocked (WSL2 not installed); no longer needed for these tests |
 
 ## 4. Tenant-isolation status
 **Verified for all 48 API routes and all definer functions.** Every read path is filtered by organization, every
@@ -108,7 +112,7 @@ knowledge appears there.
 ## 7. LinkedIn pilot blockers (unchanged; live publishing stays off)
 1. Founder LinkedIn app not created; client ID and secret not in `.env.staging`.
 2. No real staging admin or founder approver user.
-3. P2-D8: concurrency tests not run (see §3), or an explicit waiver.
+3. ~~P2-D8: concurrency tests~~ — satisfied (§3). Re-run `npm run test:pg:embedded` before the pilot.
 
 ## 8. Updated architecture decisions
 ADR-022 (STOP levels), ADR-023 (tenant isolation status and gaps), ADR-024 (migration policy), ADR-025 (evidence
@@ -116,7 +120,7 @@ integrity), ADR-026 (evaluation policy). New runbooks: `docs/migrations-runbook.
 
 ## 9. Recommended next milestone — "First internal evaluation"
 1. **You:** complete the real Brand Brain in staging (checklist items 1–11) and verify 3–5 phishing-relevant claims.
-2. **You:** unblock the concurrency tests: install WSL2, or allow the `embedded-postgres` dev dependency.
+2. ~~Unblock the concurrency tests~~ — done (§3).
 3. **You:** authorize one paid evaluation run with a budget (suggested $5) and provide an API key.
 4. **Me:** run the paid evaluation from the staging snapshot; you score `scoring-sheet.md`.
 5. Decide from the scores whether to tune prompts or proceed to the founder LinkedIn pilot (Stage 2.2).
@@ -125,6 +129,7 @@ integrity), ADR-026 (evaluation policy). New runbooks: `docs/migrations-runbook.
 | Suite | Result |
 |---|---|
 | Vitest | **276 passed**, 0 failed, 9 skipped (PostgreSQL) — 19 files |
+| PostgreSQL concurrency (`npm run test:pg:embedded`) | **9 passed** ×3 runs; row-lock mutation → 4 failures |
 | — new this round | tenant-isolation 15, function-security 11, migration-upgrade 3, agent-readiness 5 + 12 unit, evaluate 3 |
 | Playwright | **6 passed** |
 | Type check / secret scan / npm audit | ✅ / ✅ 147 files / ✅ 0 vulnerabilities |

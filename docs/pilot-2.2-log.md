@@ -6,7 +6,7 @@ _Fill in during the pilot. Do not paste tokens, client secrets or passwords here
 
 | Item | Value | By / date |
 |---|---|---|
-| P2-D8 concurrency tests | ☐ run (result: ___ ) ☐ waived for founder pilot | |
+| P2-D8 concurrency tests | ☑ run (result: 9/9 passed, `npm run test:pg:embedded`, 3 runs) ☐ waived for founder pilot | 2026-11-19 |
 | Founder app created (products: Share on LinkedIn + OIDC only) | ☐ | |
 | Redirect URL registered: `https://localhost:8443/api/oauth/linkedin/callback` | ☐ accepted by LinkedIn ☐ rejected | |
 | `npm run pilot:preflight` → no blocking failures | ☐ | |
