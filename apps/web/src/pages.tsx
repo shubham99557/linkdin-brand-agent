@@ -265,7 +265,7 @@ export function AccountsPage({ me }: { me: Me }) {
           {a.stopped && a.stop_reason && <p className="small error">Stop reason: {a.stop_reason}</p>}
           <p className="small muted">LinkedIn URN: {a.linkedin_urn ?? "not set"} · approvers: {a.approvers.map((x) => x.display_name).join(", ") || "none"}</p>
           <LinkedInConnection a={a} me={me} live={!!health?.live_publishing} onChange={reload} onError={setActionError} />
-          <p className="small">Approved pillars: {a.pillars.join(", ")}</p>
+          <p className="small">Approved pillars: {a.pillars.join(", ")} <span className="muted">(edit in <a href="#/brain">Brand Brain</a>)</span></p>
           <button onClick={async () => {
             const r = await api<{ markdown: string }>(`/accounts/${a.id}/voice`);
             setVoice({ id: a.id, markdown: r.markdown });

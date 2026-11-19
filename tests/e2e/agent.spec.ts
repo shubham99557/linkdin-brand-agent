@@ -14,6 +14,30 @@ async function signOut(page: Page) {
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 }
 
+test("owner edits an account's content pillars in the Brand Brain; editors see but cannot edit", async ({ page }) => {
+  await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
+  await page.getByRole("link", { name: "Brand Brain" }).click();
+  const founder = page.getByTestId("pillars-founder_profile");
+  await founder.getByRole("button", { name: "Edit pillars" }).click();
+  const box = page.locator("#pillars-text-founder_profile");
+  await box.fill(`${await box.inputValue()}\nHiring Stories`);       // keep existing pillars, add one in plain words
+  await expect(founder).toContainText("Will be saved as:");
+  await expect(founder).toContainText("hiring-stories");
+  await founder.getByRole("button", { name: "Save pillars" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved content pillars");
+  await expect(founder).toContainText("hiring-stories");
+  await signOut(page);
+
+  await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await page.getByRole("link", { name: "Brand Brain" }).click();
+  await expect(page.getByTestId("pillars-founder_profile")).toContainText("hiring-stories");
+  await expect(page.getByTestId("pillars").getByRole("button", { name: "Edit pillars" })).toHaveCount(0);
+  await page.getByRole("link", { name: "New post" }).click();
+  const founderValue = await page.locator("#acct option", { hasText: "Founder" }).first().getAttribute("value");
+  await page.locator("#acct").selectOption(founderValue!);
+  await expect(page.locator("#pillar option", { hasText: "hiring-stories" })).toHaveCount(1);   // new pillar is usable at once
+});
+
 test("owner onboards a Brand Brain section; editor runs the Branding Agent; drafts land in review", async ({ page }) => {
   // Owner: guided onboarding for one section
   await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);

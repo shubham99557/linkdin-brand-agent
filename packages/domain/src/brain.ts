@@ -38,8 +38,10 @@ export const SECTION_META: readonly SectionMeta[] = [
     questions: ["How should the founder sound (first person)?", "Topics the founder is happy to talk about — and ones to avoid."] },
   { section: "product", label: "Product knowledge", required: true,
     questions: ["What does the product do today (not roadmap)?", "Which capabilities may be mentioned publicly?"] },
-  { section: "pillars_goals", label: "Content pillars & campaign goals", required: true,
-    questions: ["What should LinkedIn achieve this quarter (e.g. awareness, demo requests)?", "Which themes (pillars) should posts rotate through?"] },
+  // Pillars themselves live on each account (edited in the "Content pillars" panel); this section is the goals narrative.
+  { section: "pillars_goals", label: "Campaign goals", required: true,
+    questions: ["What should LinkedIn achieve this quarter (e.g. awareness, demo requests)?",
+      "Why do the content pillars matter to your buyers? (Edit the pillar list itself in the Content pillars panel.)"] },
   { section: "prohibited", label: "Prohibited claims & topics", required: true,
     questions: ["Words or claims that must never appear (e.g. 'unhackable', 'guaranteed').", "Topics that are off-limits."],
     listField: { key: "terms", label: "Prohibited words/phrases (one per line)" } },

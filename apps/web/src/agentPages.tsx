@@ -7,7 +7,7 @@ interface SectionMeta { section: string; label: string; required: boolean; quest
 interface Entry { id: string; section: string; key: string; title: string; body: string; structured: Record<string, unknown>; version: number; source: string; source_ref: string | null; approved_at: string }
 interface Brain {
   organization: { name: string }; entries: Entry[]; missing_sections: string[]; sections: SectionMeta[]; pending_proposals: number;
-  accounts: Array<{ kind: string; display_name: string; pillars: string[] }>; claims: Array<{ id: string; statement: string }>;
+  accounts: Array<{ id: string; kind: string; display_name: string; pillars: string[] }>; claims: Array<{ id: string; statement: string }>;
 }
 interface Proposal {
   id: string; section: string; key: string; title: string; body: string; rationale: string; proposer: string; status: string;
@@ -54,6 +54,8 @@ export function BrandBrainPage({ me }: { me: Me }) {
       </div>
 
       <ProposalsPanel isOwner={isOwner} onChange={reload} />
+      <PillarsPanel accounts={brain.accounts} isOwner={isOwner}
+        onSaved={(name) => { setMsg(`Saved content pillars for ${name}.`); reload(); }} />
       <IngestPanel onDone={(n) => { setMsg(`${n} proposal(s) created from your document — review them above.`); reload(); }} />
 
       {brain.sections.map((meta) => (
@@ -61,6 +63,53 @@ export function BrandBrainPage({ me }: { me: Me }) {
           missing={brain.missing_sections.includes(meta.section)} isOwner={isOwner}
           onSaved={() => { setMsg(`Saved "${meta.label}".`); reload(); }} onError={setActionError} />
       ))}
+    </div>
+  );
+}
+
+/** Turn "Threat landscape" into "threat-landscape" (the stored pillar id). */
+export const pillarSlug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+
+function PillarsPanel({ accounts, isOwner, onSaved }: {
+  accounts: Brain["accounts"]; isOwner: boolean; onSaved: (accountName: string) => void;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const preview = text.split("\n").map(pillarSlug).filter(Boolean);
+  return (
+    <div className="panel" data-testid="pillars">
+      <h3 style={{ marginTop: 0 }}>Content pillars</h3>
+      <p className="small muted">The themes posts rotate through, per account. The agent only plans and writes within these.
+        Changing them does not alter posts that already exist.</p>
+      <ErrorText error={error} />
+      {accounts.map((a) => (
+        <div key={a.id} style={{ marginTop: 8 }} data-testid={`pillars-${a.kind}`}>
+          <div className="row"><strong>{a.display_name}</strong>
+            {editing !== a.id && <span className="small">{a.pillars.join(" · ") || "none"}</span>}
+            <span style={{ flex: 1 }} />
+            {isOwner && editing !== a.id && <button onClick={() => { setEditing(a.id); setText(a.pillars.join("\n")); setError(null); }}>Edit pillars</button>}
+          </div>
+          {editing === a.id && (
+            <div>
+              <label htmlFor={`pillars-text-${a.kind}`}>One pillar per line (1–8), e.g. “Threat landscape”</label>
+              <textarea id={`pillars-text-${a.kind}`} style={{ minHeight: 110 }} value={text} onChange={(e) => setText(e.target.value)} />
+              <p className="small muted">Will be saved as: {preview.join(", ") || "—"}</p>
+              <div className="row">
+                <button className="primary" disabled={preview.length === 0} onClick={async () => {
+                  setError(null);
+                  try {
+                    await api(`/accounts/${a.id}/pillars`, { method: "PUT", body: { pillars: preview } });
+                    setEditing(null); onSaved(a.display_name);
+                  } catch (e) { setError((e as Error).message); }
+                }}>Save pillars</button>
+                <button onClick={() => setEditing(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+      {!isOwner && <p className="small muted">Only the owner (admin) can change pillars.</p>}
     </div>
   );
 }

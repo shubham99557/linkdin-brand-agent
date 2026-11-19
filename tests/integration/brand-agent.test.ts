@@ -373,6 +373,43 @@ describe("learning, onboarding and research hand-off", () => {
   });
 });
 
+describe("content pillars (P2-01: single source, owner-edited)", () => {
+  it("only the owner can change pillars; agents then plan and draft within the new pillars", async () => {
+    const editor = await login("editor");
+    const admin = await login("admin");
+    const company = t.ids.accounts.company;
+    expect((await call(editor, "PUT", `/api/accounts/${company}/pillars`, { pillars: ["x-y"] })).status).toBe(403);
+    const r = await call(admin, "PUT", `/api/accounts/${company}/pillars`, { pillars: ["awareness-habits", "incident-readiness"] });
+    expect(r.status).toBe(200);
+    expect(r.body.pillars).toEqual(["awareness-habits", "incident-readiness"]);
+    expect((await call(editor, "GET", "/api/brain")).body.accounts.find((a: { id: string }) => a.id === company).pillars)
+      .toEqual(["awareness-habits", "incident-readiness"]);
+
+    const wf = await call(editor, "POST", "/api/agent/workflows", { goal: "Password manager adoption week", start_date: "2027-01-04" });
+    expect(wf.status).toBe(201);
+    const items = wf.body.result.strategy.items as Array<{ pillars: { company_page: string } }>;
+    expect(items.length).toBeGreaterThan(0);
+    for (const i of items) expect(["awareness-habits", "incident-readiness"]).toContain(i.pillars.company_page);
+    const companyDrafts = (wf.body.result.drafts as Array<{ content_id?: string; account_kind: string }>).filter((d) => d.account_kind === "company_page" && d.content_id);
+    expect(companyDrafts.length).toBeGreaterThan(0);
+    for (const d of companyDrafts) {
+      const [row] = await t.db.query<{ pillar: string }>("select pillar from lbe.content_items where id = $1", [d.content_id]);
+      expect(["awareness-habits", "incident-readiness"]).toContain(row!.pillar);
+    }
+  });
+
+  it("existing content keeps its old pillar; new content must use an approved one", async () => {
+    const editor = await login("editor");
+    const [old] = await t.db.query<{ n: number }>(
+      "select count(*)::int as n from lbe.content_items where account_id = $1 and pillar = 'security-culture'", [t.ids.accounts.company]);
+    expect(old!.n).toBeGreaterThan(0);                                   // created before the change, untouched
+    const bad = await call(editor, "POST", "/api/content", { account_id: t.ids.accounts.company, pillar: "security-culture", brief: "old pillar" });
+    expect(bad.status).toBe(422);
+    const good = await call(editor, "POST", "/api/content", { account_id: t.ids.accounts.company, pillar: "incident-readiness", brief: "new pillar" });
+    expect(good.status).toBe(201);
+  });
+});
+
 describe("missing knowledge", () => {
   it("a workflow for an organization with an empty Brand Brain reports gaps and marks them UNKNOWN", async () => {
     const b = await login("adminB");

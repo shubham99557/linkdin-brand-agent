@@ -671,6 +671,13 @@ export function createApp(deps: AppDeps) {
     return c.json({ ok: true, note: "Also remove the app's access in LinkedIn settings to revoke the token at LinkedIn." });
   });
 
+  // Content pillars (admin; validated and audited in the database).
+  api.put("/accounts/:id/pillars", async (c) => {
+    const b = await json(c, z.object({ pillars: z.array(z.string().max(60)).min(1).max(8) }));
+    const pillars = await one<string[]>("select lbe.set_account_pillars($1, $2, $3)", [c.get("session"), param(c, "id"), b.pillars]);
+    return c.json({ pillars });
+  });
+
   api.post("/accounts/:id/live", async (c) => {
     const id = param(c, "id");
     const b = await json(c, z.object({ live: z.boolean(), org_urn: z.string().max(80).nullable().optional() }));

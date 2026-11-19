@@ -10,7 +10,7 @@ work was complete._
 | Company and founder voices | Partial — `brand/voice/*.md` files, placeholder text | **Built** — Brand Brain `voice_company` / `voice_founder`; files importable; file fallback kept | `buildBrandContext`, `voiceFor` |
 | Product knowledge | Missing | **Built** (section `product`) | — |
 | Verified claims with evidence | **Existed** (`lbe.claims`, immutable when verified) | Reused; now organization-scoped; research → draft claim hand-off | `research_to_claim` |
-| Content pillars & campaign goals | Partial (`social_accounts.pillars`) | Pillars reused; goals in section `pillars_goals` | — |
+| Content pillars & campaign goals | Done (P2-01) | Pillars: `social_accounts.pillars`, owner-edited in Brand Brain → *Content pillars* (single source); goals narrative: section `pillars_goals` ("Campaign goals") | — |
 | Historical content & topic tracking | Missing | **Built** — `content_items.topic`, 90-day recent topics, duplicate detection | `validateStrategy` |
 | Feedback, performance & learning memory | Missing (approval notes unused) | **Built** — learning review → owner-approved `lessons` / `communication_rules` | `runLearningReview` |
 | Prohibited claims, topics & rules | Partial (detector patterns; text in voice files) | **Built** — `prohibited` section with structured terms/topics, enforced on drafts and plans | `checkBrandRules` |

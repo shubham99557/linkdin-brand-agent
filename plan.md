@@ -17,12 +17,12 @@
 |---|---|
 | Current phase | **Phase 2 — Real Brand Brain** (Phases 0 and 1 DONE) |
 | Active task | — |
-| Next READY tasks | **P2-01 pillars UI** · P4-01 durable jobs · P3-01 pricing check · P5-00 render dependency review |
+| Next READY tasks | **P2-02 onboarding wizard (last M1 task)** · P2-04 account names · P4-01 durable jobs · P3-01 pricing check · P5-00 render dependency review |
 | First safe milestone | **M1 Technical prototype hardened** — P1-01..05 + P2-01/02 need no external action |
-| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change |
+| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars |
 | Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · P0-07 off-machine code backup |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9) |
-| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 320 ✅ (9 PG skipped there) · `test:pg:embedded` 9/9 ✅ · Playwright 9 ✅ · secret scan ✅ · npm audit 0 ✅ |
+| Latest passing tests | 2026-11-19: typecheck ✅ · Vitest 327 ✅ (9 PG skipped there) · `test:pg:embedded` 9/9 ✅ · Playwright 10 ✅ · secret scan ✅ · npm audit 0 ✅ |
 | Latest commit | see `git log -1` (P1-02 follows `2ad93b5`) |
 | Next milestone | **M1 Technical prototype hardened** → then **M2 AI intelligence evaluation** (needs OA-3, OA-6) |
 
@@ -201,10 +201,10 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 ### Phase 2 — Real Brand Brain
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
 |---|---|---|---|---|---|---|---|---|
-| P2-01 | **Pillars single source**: owner edits account pillars in Brand Brain UI (DB function, audit); `pillars_goals` = goals narrative | — | P1 | READY | C | migration, app.ts, agentPages.tsx | Admin edit; existing content unaffected; agents use updated pillars; tests | integration test |
-| P2-02 | Onboarding wizard: step-by-step order, progress, "UNKNOWN is OK" guidance, claims step linking to Claims register | P2-01 | P1 | NOT_STARTED | C | web | Beginner can complete without docs; e2e test | Playwright |
+| P2-01 | **Pillars single source**: owner edits account pillars in Brand Brain UI (DB function, audit); `pillars_goals` = goals narrative. **Evidence 2026-11-19:** migration 1100 `set_account_pillars` (admin, org-scoped, 1–8 slugs, dedupe, audited); `tests/db/account-pillars.test.ts` 5/5 (mutation: allowing non-admins → 1 failure); `brand-agent` +2 (workflow strategy + drafts use edited pillars; old content untouched; new content must use approved pillar); e2e +1 (10/10); mock strategist now picks from approved pillars | — | P1 | DONE | C | migration, app.ts, agentPages.tsx | Admin edit; existing content unaffected; agents use updated pillars; tests | integration test |
+| P2-02 | Onboarding wizard: step-by-step order, progress, "UNKNOWN is OK" guidance, claims step linking to Claims register | P2-01 | P1 | READY | C | web | Beginner can complete without docs; e2e test | Playwright |
 | P2-03 | Document import improvements: file upload (txt/md/pdf→text) for proposals | P2-02 | P2 | NOT_STARTED | C | app.ts, web | Grounded proposals only; size limits; tests | test |
-| P2-04 | Account display names / founder name editable (admin) | P2-01 | P2 | NOT_STARTED | C | migration, web | Audited; tests | test |
+| P2-04 | Account display names / founder name editable (admin) | P2-01 | P2 | READY | C | migration, web | Audited; tests | test |
 | P2-05 | Retire synthetic dev knowledge path: `brain:reset-dev` (dev only) | — | P3 | NOT_STARTED | C | cli | Refuses on staging | test |
 | P2-06 | Staging bootstrap for real use (`staging:init` + admin user) | — | P1 | BLOCKED | O | — | Pre-flight passes user checks | OA-2 |
 | P2-07 | Import brand/voice files decision (keep or replace placeholders) | — | P3 | DONE | C | — | Placeholder files flagged by audit | ADR-018 |
@@ -371,4 +371,5 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-19 | P1-03 DONE (migration 0800 user management + Users page) | `3e512ba` |
 | 2026-11-19 | P1-04 DONE (request IDs, access log, log redaction) | `d0aa635` |
 | 2026-11-19 | P1-05 DONE (sign-off; F-1 fixed via migration 0900); P1-06 added from F-2 | `e6cce2f` |
-| 2026-11-19 | P1-06 DONE (password change, forced change of temporary passwords) — Phase 1 complete | P1-06 commit |
+| 2026-11-19 | P1-06 DONE (password change, forced change of temporary passwords) — Phase 1 complete | `cff4734` |
+| 2026-11-19 | P2-01 DONE (owner-edited content pillars, single source) | P2-01 commit |

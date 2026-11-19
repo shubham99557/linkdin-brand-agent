@@ -111,13 +111,19 @@ export class MockStrategySpecialist extends MockBase<StrategyInput> {
     const isFresh = (t: { topic: string }) => !input.recentTopics.some((r) => topicSimilarity(r, t.topic) >= 0.5);
     const chosen = [...bank.filter(isFresh), ...bank.filter((t) => !isFresh(t))].slice(0, input.postCount);
     const step = Math.max(1, Math.floor(input.days / Math.max(1, chosen.length)));
+    // Use the bank's pillar when the owner approved it; otherwise rotate through the account's approved pillars.
+    const pick = (kind: "company_page" | "founder_profile", preferred: string, i: number) => {
+      const approved = input.accounts.find((a) => a.kind === kind)?.pillars ?? [];
+      return approved.length === 0 || approved.includes(preferred) ? preferred : approved[i % approved.length]!;
+    };
     const items = chosen.map((t, i) => {
       const tokens = topicTokens(`${t.topic} ${t.keywords.join(" ")}`);
       const relatedClaims = input.claims.filter((c) => [...topicTokens(c.statement)].some((w) => tokens.has(w))).map((c) => c.id);
       const relatedFindings = input.findings.filter((f) => [...topicTokens(f.statement)].some((w) => tokens.has(w))).map((f) => f.id);
       return {
         day: Math.min(input.days, 1 + i * step), topic: t.topic, angle: t.angle, objective: t.objective, audience_problem: t.problem,
-        pillars: { company_page: t.company, founder_profile: t.founder }, finding_ids: relatedFindings, claim_ids: relatedClaims,
+        pillars: { company_page: pick("company_page", t.company, i), founder_profile: pick("founder_profile", t.founder, i) },
+        finding_ids: relatedFindings, claim_ids: relatedClaims,
       };
     });
     return { kind: "ok", raw: { summary: `[MOCK] ${items.length}-post plan for: ${input.goal}`, items } };
