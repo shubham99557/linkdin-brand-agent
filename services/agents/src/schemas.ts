@@ -25,6 +25,10 @@ export const ResearchOutputSchema = z.object({
     relevance: z.string().describe("Why this matters for the goal."),
   }).strict()).max(20),
   gaps: z.array(z.string()).describe("What could not be found or verified."),
+  conflicts: z.array(z.object({
+    finding_indexes: z.array(z.number().int()).describe("Zero-based indexes into findings that disagree with each other."),
+    description: z.string(),
+  }).strict()).describe("Sources that contradict each other (e.g. different figures for the same thing). Empty if none."),
 }).strict();
 export type ResearchOutput = z.infer<typeof ResearchOutputSchema>;
 
@@ -114,7 +118,7 @@ export type ExtractionOutput = z.infer<typeof ExtractionOutputSchema>;
 
 // ---------------------------------------------------------------- common
 export type SpecialistResult =
-  | { kind: "ok"; raw: unknown; usage?: { inputTokens: number; outputTokens: number }; allowedUrls?: string[] }
+  | { kind: "ok"; raw: unknown; usage?: { inputTokens: number; outputTokens: number; webSearchRequests?: number }; allowedUrls?: string[] }
   | { kind: "refused"; reason: string }
   | { kind: "error"; message: string };
 

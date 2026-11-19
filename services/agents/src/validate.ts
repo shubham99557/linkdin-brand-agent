@@ -17,8 +17,11 @@ export interface ValidFinding {
 const INJECTION = /\b(ignore (all |any )?(previous|prior|above) (instructions|prompts)|system prompt|you are now|disregard (the )?(rules|instructions)|(approve|publish) (this|it|immediately|now)|auto-?approve)\b/i;
 
 export function validateResearch(raw: unknown, opts: { allowedUrls?: string[]; now: Date; staleAfterMonths?: number }):
-  { ok: true; accepted: ValidFinding[]; rejected: Array<{ source_url: string; reason: string }>; gaps: string[] } | { ok: false; error: string } {
-  const parsed = ResearchOutputSchema.safeParse(raw);
+  { ok: true; accepted: ValidFinding[]; rejected: Array<{ source_url: string; reason: string }>; gaps: string[];
+    contradictions: Array<{ source_urls: string[]; description: string }> } | { ok: false; error: string } {
+  // Older/other producers may omit `conflicts`; treat as none.
+  const withDefaults = raw && typeof raw === "object" && !("conflicts" in raw) ? { ...(raw as object), conflicts: [] } : raw;
+  const parsed = ResearchOutputSchema.safeParse(withDefaults);
   if (!parsed.success) return { ok: false, error: `research output failed validation (${first(parsed.error)})` };
   const allowed = opts.allowedUrls ? new Set(opts.allowedUrls.map(normaliseUrl)) : null;
   const staleBefore = new Date(opts.now);
@@ -26,7 +29,13 @@ export function validateResearch(raw: unknown, opts: { allowedUrls?: string[]; n
   const accepted: ValidFinding[] = [];
   const rejected: Array<{ source_url: string; reason: string }> = [];
   const seen = new Set<string>();
-  for (const f of parsed.data.findings) {
+  // Contradicting findings stay visible but are never used as evidence until a human resolves them.
+  const contradicted = new Set<number>();
+  const contradictions = parsed.data.conflicts.map((c) => {
+    for (const i of c.finding_indexes) contradicted.add(i);
+    return { source_urls: c.finding_indexes.map((i) => parsed.data.findings[i]?.source_url).filter((u): u is string => !!u), description: c.description };
+  });
+  for (const [index, f] of parsed.data.findings.entries()) {
     let url: URL;
     try { url = new URL(f.source_url); } catch { rejected.push({ source_url: f.source_url, reason: "not a valid URL" }); continue; }
     if (url.protocol !== "https:") { rejected.push({ source_url: f.source_url, reason: "source must use HTTPS" }); continue; }
@@ -56,15 +65,31 @@ export function validateResearch(raw: unknown, opts: { allowedUrls?: string[]; n
       if (confidence === "high") confidence = "medium";
     }
     if (INJECTION.test(f.statement) || INJECTION.test(f.source_title)) { flags.push("possible_prompt_injection"); confidence = "low"; }
+    if (contradicted.has(index)) { flags.push("contradicted"); confidence = "low"; }
     accepted.push({ statement: f.statement.trim(), source_url: f.source_url, source_title: f.source_title, publisher: f.publisher,
       published_at: published, confidence, stale, flags, relevance: f.relevance });
   }
-  return { ok: true, accepted, rejected, gaps: parsed.data.gaps };
+  return { ok: true, accepted, rejected, gaps: parsed.data.gaps, contradictions };
 }
 
-/** Findings usable as evidence in strategy: not stale, not suspicious, not low confidence. */
+/** Findings usable as evidence in strategy: not stale, not suspicious, not contradicted, not low confidence. */
 export const usableEvidence = (f: { stale: boolean; flags: string[]; confidence: string }) =>
-  !f.stale && !f.flags.includes("possible_prompt_injection") && f.confidence !== "low";
+  !f.stale && !f.flags.includes("possible_prompt_injection") && !f.flags.includes("contradicted") && f.confidence !== "low";
+
+/**
+ * Claim-to-source verification: a draft sentence that restates a research finding is a factual claim.
+ * Unless it is covered by a verified-claim citation, it must not reach review.
+ */
+export function findingRestatements(body: string, citedSpans: string[], findings: Array<{ statement: string; source_url: string }>, threshold = 0.5):
+  string[] {
+  const out: string[] = [];
+  for (const sentence of splitSentences(body)) {
+    if (citedSpans.some((s) => s && (sentence.includes(s) || s.includes(sentence)))) continue;
+    const match = findings.find((f) => topicSimilarity(sentence, f.statement) >= threshold);
+    if (match) out.push(`${sentence} [restates research from ${match.source_url} — create and verify a claim before using it]`);
+  }
+  return out;
+}
 
 function normaliseUrl(u: string): string {
   try {

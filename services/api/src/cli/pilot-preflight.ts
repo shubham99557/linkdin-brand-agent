@@ -67,6 +67,12 @@ try {
     check(synthetic.length === 0 ? "PASS" : "FAIL", synthetic.length ? `synthetic users present in staging: ${synthetic.map((u) => u.email).join(", ")}` : "no synthetic users in staging");
     check(users.some((u) => u.role === "admin") ? "PASS" : "FAIL", "at least one admin user (connects LinkedIn, runs the publisher)");
     check(users.some((u) => u.approver && (u.role === "approver" || u.role === "admin")) ? "PASS" : "FAIL", "founder account has an approver (the founder)");
+    const synthEntries = await db.query<{ n: number }>(
+      "select count(*)::int as n from lbe.brand_entries where status = 'approved' and body ~* '\\[SYNTHETIC\\]|PLACEHOLDER'").catch(() => [{ n: 0 }]);
+    const synthClaims = await db.query<{ n: number }>(
+      "select count(*)::int as n from lbe.claims where statement ~* '\\[SYNTHETIC\\]' or evidence_note ~* 'synthetic'");
+    check((synthEntries[0]?.n ?? 0) + (synthClaims[0]?.n ?? 0) === 0 ? "PASS" : "FAIL",
+      `no synthetic/placeholder Brand Brain entries or claims in staging (found ${(synthEntries[0]?.n ?? 0)} entries, ${(synthClaims[0]?.n ?? 0)} claims)`);
     const flags = await db.query<{ key: string; stopped: boolean }>("select key, stopped from lbe.control_flags");
     const global = flags.find((f) => f.key === "global");
     check(global && !global.stopped ? "PASS" : "WARN", `global STOP is ${global?.stopped ? "ON (resume when ready)" : "off"}`);

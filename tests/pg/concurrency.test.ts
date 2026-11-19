@@ -133,4 +133,76 @@ suite("PostgreSQL concurrency", () => {
     expect(claims.flat()).toHaveLength(0);
     await api("select lbe.set_stop($1, 'global', false, 'done')", [sessions.admin]);
   });
+
+  it("STOP racing claims of pending jobs: no claim succeeds after the STOP transaction commits", async () => {
+    await db.tx("lbe_worker", (q) => q.query("select lbe.claim_outbox('drain2', 50, 60, array['mock'])"));
+    await Promise.all(Array.from({ length: 6 }, () => queued()));
+    // Fire STOP and many claimers concurrently; afterwards nothing may move to dispatching.
+    const results = await settle([
+      api("select lbe.set_stop($1, 'global', true, 'race')", [sessions.editor]),
+      ...Array.from({ length: 6 }, (_, i) => db.tx("lbe_worker", (q) => q.query<{ id: string }>("select id from lbe.claim_outbox($1, 1, 60, array['mock'])", [`r${i}`]))),
+    ]);
+    expect(results[0]!.status).toBe("fulfilled");
+    const claimedDuringRace = results.slice(1).flatMap((r) => (r.status === "fulfilled" ? (r.value as Array<{ id: string }>) : []));
+    const after = await Promise.all(Array.from({ length: 4 }, (_, i) =>
+      db.tx("lbe_worker", (q) => q.query("select id from lbe.claim_outbox($1, 5, 60, array['mock'])", [`a${i}`]))));
+    expect(after.flat()).toHaveLength(0);
+    // Anything claimed in the race was claimed by exactly one worker.
+    expect(new Set(claimedDuringRace.map((c) => c.id)).size).toBe(claimedDuringRace.length);
+    await api("select lbe.set_stop($1, 'global', false, 'race over')", [sessions.admin]);
+  });
+
+  it("duplicate provider responses: concurrent completions record exactly one outcome", async () => {
+    await db.tx("lbe_worker", (q) => q.query("select lbe.claim_outbox('drain3', 50, 60, array['mock'])"));
+    const id = await queued();
+    const [ob] = await db.tx("lbe_worker", (q) => q.query<{ id: string }>("select id from lbe.claim_outbox('w-dup', 1, 60, array['mock'])"));
+    const results = await settle([
+      db.tx("lbe_worker", (q) => q.query("select lbe.complete_outbox($1, 'w-dup', 'success', 'urn:li:share:dup-1', null, null)", [ob!.id])),
+      db.tx("lbe_worker", (q) => q.query("select lbe.complete_outbox($1, 'w-dup', 'success', 'urn:li:share:dup-2', null, null)", [ob!.id])),
+      db.tx("lbe_worker", (q) => q.query("select lbe.complete_outbox($1, 'w-dup', 'ambiguous', null, 'late', null)", [ob!.id])),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const [row] = await db.query<{ status: string; provider_ref: string | null }>("select status, provider_ref from lbe.publication_outbox where id = $1", [ob!.id]);
+    const [content] = await db.query<{ status: string }>("select status from lbe.content_items where id = $1", [id]);
+    expect(["succeeded", "needs_reconciliation"]).toContain(row!.status);
+    expect(content!.status).toBe(row!.status === "succeeded" ? "published" : "needs_reconciliation");
+  });
+
+  it("recovery after an ambiguous outcome: concurrent reconciliation and lease expiry cannot double-dispatch", async () => {
+    await db.tx("lbe_worker", (q) => q.query("select lbe.claim_outbox('drain4', 50, 60, array['mock'])"));
+    const id = await queued();
+    const [ob] = await db.tx("lbe_worker", (q) => q.query<{ id: string }>("select id from lbe.claim_outbox('w-amb', 1, 60, array['mock'])"));
+    await db.tx("lbe_worker", (q) => q.query("select lbe.complete_outbox($1, 'w-amb', 'ambiguous', null, 'timeout', null)", [ob!.id]));
+    // Two admins resolve at the same time with different conclusions; exactly one wins.
+    const results = await settle([
+      api("select lbe.reconcile_publication($1, $2, 'confirmed_not_published', null, 'checked: absent')", [sessions.admin, ob!.id]),
+      api("select lbe.reconcile_publication($1, $2, 'confirmed_published', 'urn:li:share:found', 'checked: present')", [sessions.admin, ob!.id]),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    // If re-queued, concurrent workers dispatch it at most once.
+    const claims = await Promise.all(Array.from({ length: 4 }, (_, i) =>
+      db.tx("lbe_worker", (q) => q.query<{ id: string }>("select id from lbe.claim_outbox($1, 5, 60, array['mock'])", [`rec${i}`]))));
+    expect(claims.flat().filter((c) => c.id === ob!.id).length).toBeLessThanOrEqual(1);
+    const [c] = await db.query<{ status: string }>("select status from lbe.content_items where id = $1", [id]);
+    expect(["published", "queued"]).toContain(c!.status);
+  });
+
+  it("cross-organization requests in parallel never touch the other organization", async () => {
+    const [o] = await db.query<{ id: string }>("insert into lbe.organizations(name, slug) values ('Par B', $1) returning id", [`par-${Date.now()}`]);
+    await db.query("select lbe.admin_create_user($1, 'PB', 'admin', 'parallel-b-password', $2)", [`pb-${Date.now()}@b.test`, o!.id]);
+    const [u] = await db.query<{ email: string }>("select email from lbe.app_users where organization_id = $1", [o!.id]);
+    const sB = (await api<{ token: string }>("select lbe.login($1, 'parallel-b-password')", [u!.email])).token;
+    const id = await queued();
+    const [ob] = await db.query<{ id: string }>("select id from lbe.publication_outbox where content_id = $1", [id]);
+    const results = await settle([
+      api("select lbe.cancel_publication($1, $2)", [sB, ob!.id]),
+      api("select lbe.set_stop($1, $2, true, 'x')", [sB, `account:${ids.accounts.company}`]),
+      api("select lbe.update_content($1, $2, '{\"brief\":\"x\"}'::jsonb)", [sB, id]),
+      api("select lbe.brain_load($1)", [sB]),
+    ]);
+    expect(results.slice(0, 3).every((r) => r.status === "rejected" && (r.reason as { code?: string }).code === "LBE04")).toBe(true);
+    expect(results[3]!.status).toBe("fulfilled");
+    const [row] = await db.query<{ status: string }>("select status from lbe.publication_outbox where id = $1", [ob!.id]);
+    expect(row!.status).toBe("pending");
+  });
 });

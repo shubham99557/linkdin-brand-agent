@@ -41,4 +41,28 @@ const listFrom = (brain: BrandBrain, field: string) =>
     .filter((t): t is string => typeof t === "string" && t.trim().length > 0).map((t) => t.trim());
 
 export const prohibitedTerms = (brain: BrandBrain) => listFrom(brain, "terms");
+
+/** Knowledge quality classes used by the audit, the workflow and the pilot pre-flight. */
+export type KnowledgeQuality = "SYNTHETIC" | "PLACEHOLDER" | "IMPORTED_PLACEHOLDER" | "AGENT_DERIVED" | "OWNER_PROVIDED";
+
+export function entryQuality(e: { body: string; source: string }): KnowledgeQuality {
+  if (/\[SYNTHETIC\]/i.test(e.body)) return "SYNTHETIC";
+  const placeholder = /PLACEHOLDER|owner to complete|_?Example post \d|_Owner to |must complete and approve this file/i.test(e.body);
+  if (placeholder && e.source === "import") return "IMPORTED_PLACEHOLDER";
+  if (placeholder) return "PLACEHOLDER";
+  if (e.source === "agent_proposal") return "AGENT_DERIVED";
+  return "OWNER_PROVIDED";
+}
+
+export const claimIsSynthetic = (c: { statement: string; evidence_note?: string | null }) =>
+  /\[SYNTHETIC\]|synthetic development claim|UNVERIFIED example/i.test(`${c.statement} ${c.evidence_note ?? ""}`);
+
+/** Entries/claims that are not real owner knowledge. Never silently treated as production-ready. */
+export function nonProductionKnowledge(brain: BrandBrain): string[] {
+  return [
+    ...brain.entries.filter((e) => ["SYNTHETIC", "PLACEHOLDER", "IMPORTED_PLACEHOLDER"].includes(entryQuality(e)))
+      .map((e) => `${e.section}/${e.key} (${entryQuality(e).toLowerCase()})`),
+    ...brain.claims.filter(claimIsSynthetic).map((c) => `claim: ${c.statement.slice(0, 60)}`),
+  ];
+}
 export const prohibitedTopics = (brain: BrandBrain) => listFrom(brain, "topics");

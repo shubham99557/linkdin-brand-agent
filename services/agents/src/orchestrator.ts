@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { VerifiedClaim } from "@lbe/domain";
 import { PROMPT_VERSION as DRAFT_PROMPT_VERSION, validateDraftOutput, type Drafter } from "@lbe/drafting";
-import { buildBrandContext, entriesFor, prohibitedTerms, prohibitedTopics, voiceFor, type BrandBrain } from "./brain.ts";
+import { buildBrandContext, entriesFor, nonProductionKnowledge, prohibitedTerms, prohibitedTopics, voiceFor, type BrandBrain } from "./brain.ts";
 import type { Specialist, Specialists, SpecialistResult, StrategyItem } from "./schemas.ts";
+import { Budget } from "./cost.ts";
 import {
-  checkBrandRules, usableEvidence, validateCreative, validateExtraction, validatePerformance, validateResearch,
+  checkBrandRules, findingRestatements, usableEvidence, validateCreative, validateExtraction, validatePerformance, validateResearch,
   validateStrategy, type ValidFinding,
 } from "./validate.ts";
 
@@ -27,6 +28,8 @@ export interface AgentDeps {
   /** Fallback when a voice is not yet in the Brand Brain (Phase 1 brand/voice files). */
   readVoiceFile?: (profile: "company" | "founder") => Promise<string | null>;
   now?: () => Date;
+  /** Hard ceiling on estimated model spend for one workflow (USD). Calls stop once reached. */
+  budgetUsd?: number;
 }
 
 export interface WorkflowInput {
@@ -77,6 +80,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
   const workflowId = await one<string>("select lbe.workflow_create($1, $2, $3::jsonb)",
     [deps.session, goal, JSON.stringify({ startDate, days, postCount, region: input.region ?? "UK", audience: input.audience ?? null })]);
   const warnings: string[] = [];
+  const budget = new Budget(deps.budgetUsd ?? null);
 
   try {
     // 1. Brand Brain (org-scoped by the database)
@@ -84,6 +88,10 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     const brandContext = buildBrandContext(brain);
     if (brain.missing_sections.length) {
       warnings.push(`Brand Brain is missing: ${brain.missing_sections.join(", ")}. Drafts avoid these topics rather than inventing them.`);
+    }
+    const nonProduction = nonProductionKnowledge(brain);
+    if (nonProduction.length) {
+      warnings.push(`NOT PRODUCTION KNOWLEDGE: ${nonProduction.length} synthetic/placeholder Brand Brain item(s) were used — drafts are for testing only and must not be published.`);
     }
     const terms = prohibitedTerms(brain);
     const accounts = KINDS.map((k) => brain.accounts.find((a) => a.kind === k)).filter((a): a is BrandBrain["accounts"][number] => !!a);
@@ -95,14 +103,18 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
       goal, region: input.region ?? "UK", audience: input.audience ?? (entriesFor(brain, "icp")[0]?.body.slice(0, 500) ?? "UNKNOWN"),
       brandSummary: entriesFor(brain, "identity").map((e) => e.body).join(" ").slice(0, 1000) || "UNKNOWN", maxFindings: 8,
     });
+    budget.add("research", deps.specialists.research.model, research.kind === "ok" ? research.usage : undefined, deps.specialists.research.provider);
     let findings: Array<ValidFinding & { id: string }> = [];
     let rejectedSources: Array<{ source_url: string; reason: string }> = [];
     let gaps: string[] = [];
+    let contradictions: Array<{ source_urls: string[]; description: string }> = [];
     if (research.kind === "ok") {
       const v = validateResearch(research.raw, { allowedUrls: research.allowedUrls, now });
       if (v.ok) {
         rejectedSources = v.rejected;
         gaps = v.gaps;
+        contradictions = v.contradictions;
+        if (contradictions.length) warnings.push(`${contradictions.length} contradiction(s) between sources — those findings are excluded from evidence until reviewed.`);
         const retrievedAt = now.toISOString();
         const ids = await one<string[]>("select lbe.research_record($1, $2, $3::jsonb)", [deps.session, workflowId,
           JSON.stringify(v.accepted.map((f) => ({ ...f, query: goal, retrieved_at: retrievedAt })))]);
@@ -120,6 +132,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     const evidence = findings.filter(usableEvidence);
 
     // 3. Strategy
+    if (budget.exhausted) throw new Error(`budget of $${budget.maxUsd} reached after research ($${budget.spentUsd}) — strategy not started`);
     const recentTopics = brain.recent_topics.map((t) => t.topic);
     const strategyStarted = new Date().toISOString();
     const strategyRaw = await deps.specialists.strategy.run({
@@ -129,6 +142,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
       claims: brain.claims.map((c) => ({ id: c.id, statement: c.statement })),
       recentTopics, prohibitedTopics: prohibitedTopics(brain),
     });
+    budget.add("strategy", deps.specialists.strategy.model, strategyRaw.kind === "ok" ? strategyRaw.usage : undefined, deps.specialists.strategy.provider);
     if (strategyRaw.kind !== "ok") {
       await recordRun("strategy", deps.specialists.strategy, strategyRaw, strategyStarted, { workflow_id: workflowId });
       throw new Error(`strategy specialist failed: ${strategyRaw.kind === "refused" ? strategyRaw.reason : strategyRaw.message}`);
@@ -160,15 +174,19 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     const claimsById = new Map(brain.claims.map((c) => [c.id, c]));
     const drafts: Array<Record<string, unknown>> = [];
 
-    for (const item of sv.strategy.items) {
+    outer: for (const item of sv.strategy.items) {
       const group = randomUUID();
       const itemFindings = evidence.filter((f) => item.finding_ids.includes(f.id));
       const itemClaims: VerifiedClaim[] = item.claim_ids.map((id) => claimsById.get(id)!).map((c) => ({
         id: c.id, statement: c.statement, category: c.category as VerifiedClaim["category"], evidence_url: c.evidence_url, evidence_note: c.evidence_note,
       }));
       for (const acct of accounts) {
+        if (budget.exhausted) {
+          warnings.push(`Budget of $${budget.maxUsd} reached ($${budget.spentUsd}); remaining drafts were not created.`);
+          break outer;
+        }
         drafts.push(await draftOne(deps, { workflowId, item, acct, group, startDate, brandContext, voice: voices[acct.kind].text,
-          itemFindings, itemClaims, terms, identity: entriesFor(brain, "identity").map((e) => e.body).join("\n") }));
+          itemFindings, allFindings: findings, itemClaims, terms, identity: entriesFor(brain, "identity").map((e) => e.body).join("\n"), budget }));
       }
     }
 
@@ -178,11 +196,12 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
     const result = {
       goal, startDate, days,
       brain: { organization: brain.organization.name, missing_sections: brain.missing_sections, entries_used: brain.entries.length,
+               non_production_knowledge: nonProduction,
                voice_sources: { company_page: voices.company_page.source, founder_profile: voices.founder_profile.source } },
       research: {
         provider: deps.specialists.research.provider,
         accepted: findings.length, usable_as_evidence: evidence.length, stale: findings.filter((f) => f.stale).length,
-        flagged: findings.filter((f) => f.flags.includes("possible_prompt_injection")).length, rejected: rejectedSources, gaps,
+        flagged: findings.filter((f) => f.flags.includes("possible_prompt_injection")).length, rejected: rejectedSources, gaps, contradictions,
         summary: findings.map((f) => ({ id: f.id, statement: f.statement, source_url: f.source_url, confidence: f.confidence,
           stale: f.stale, flags: f.flags, retrieved_at: now.toISOString() })),
       },
@@ -195,6 +214,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
         held_as_draft: drafts.filter((d) => d.status === "draft").length,
       },
       publishing: "Nothing was published. Drafts await human approval in the review queue.",
+      cost: { estimated_usd: budget.spentUsd, budget_usd: budget.maxUsd, budget_exhausted: budget.exhausted, by_step: budget.byStep },
       warnings,
     };
     await one("select lbe.workflow_finish($1, $2, 'completed', $3::jsonb, null)", [deps.session, workflowId, JSON.stringify(result)]);
@@ -209,7 +229,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
 async function draftOne(deps: AgentDeps, p: {
   workflowId: string; item: StrategyItem; acct: BrandBrain["accounts"][number]; group: string; startDate: string;
   brandContext: string; voice: string; itemFindings: Array<ValidFinding & { id: string }>; itemClaims: VerifiedClaim[];
-  terms: string[]; identity: string;
+  allFindings: Array<ValidFinding & { id: string }>; terms: string[]; identity: string; budget: Budget;
 }): Promise<Record<string, unknown>> {
   const { one, recordRun } = helpers(deps);
   const pillar = p.item.pillars[p.acct.kind];
@@ -232,6 +252,7 @@ async function draftOne(deps: AgentDeps, p: {
     allowedPillars: p.acct.pillars, brief, sourceMaterial, claims: p.itemClaims, brandContext: p.brandContext,
   });
   const writerMeta = { provider: deps.writer.provider, model: deps.writer.model, promptVersion: DRAFT_PROMPT_VERSION };
+  p.budget.add(`draft:${p.acct.kind}`, deps.writer.model, written.kind === "ok" ? written.usage : undefined, deps.writer.provider);
   const asSpecialist: SpecialistResult = written.kind === "ok" ? { kind: "ok", raw: written.raw, usage: written.usage }
     : written.kind === "refused" ? { kind: "refused", reason: written.reason } : { kind: "error", message: written.message };
   if (written.kind !== "ok") {
@@ -246,17 +267,22 @@ async function draftOne(deps: AgentDeps, p: {
   }
   // Verify brand rules (prohibited terms block submission; voice issues are warnings)
   const rules = checkBrandRules(v.draft.body, { accountKind: p.acct.kind, prohibitedTerms: p.terms });
-  const unsupported = [...v.draft.unsupported, ...rules.blocking];
+  // Claim-to-source verification: restating research without a verified claim blocks review.
+  const restated = findingRestatements(v.draft.body, v.draft.citations.map((c) => c.quoted_span), p.allFindings);
+  const unsupported = [...v.draft.unsupported, ...rules.blocking, ...restated];
   await one("select lbe.set_draft_output($1, $2, $3, $4::jsonb, $5::jsonb)",
     [deps.session, contentId, v.draft.body, JSON.stringify(v.draft.citations), JSON.stringify(unsupported)]);
   await recordRun("draft_post", writerMeta, asSpecialist, started, { workflow_id: p.workflowId, claim_ids: p.itemClaims.map((c) => c.id) },
     { body: v.draft.body, citations: v.draft.citations, unsupported, validation_notes: [...v.draft.validationNotes, ...rules.warnings],
       notes_for_reviewer: v.draft.notesForReviewer, hook_variants: v.draft.hookVariants }, contentId);
 
-  // Creative Brief Specialist
+  // Creative Brief Specialist (skipped once the budget is reached)
   const cStarted = new Date().toISOString();
-  const creative = await deps.specialists.creative.run({ body: v.draft.body, accountKind: p.acct.kind, topic: p.item.topic,
-    visualIdentity: p.identity, prohibitedTerms: p.terms });
+  const creative: SpecialistResult = p.budget.exhausted
+    ? { kind: "error", message: "skipped: budget reached" }
+    : await deps.specialists.creative.run({ body: v.draft.body, accountKind: p.acct.kind, topic: p.item.topic,
+        visualIdentity: p.identity, prohibitedTerms: p.terms });
+  p.budget.add(`creative:${p.acct.kind}`, deps.specialists.creative.model, creative.kind === "ok" ? creative.usage : undefined, deps.specialists.creative.provider);
   let visualBrief: Record<string, unknown> | null = null;
   const creativeWarnings: string[] = [];
   if (creative.kind === "ok") {
