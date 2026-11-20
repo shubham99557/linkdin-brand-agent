@@ -389,6 +389,7 @@ Chat-created drafts remain ordinary drafts. The API mode is unaffected.
 | Legal: scheduled release; privacy/LIA | **Open** | D-03, D-11, OA-7/8 |
 | SSO/Supabase Auth before multi-user production | Open | D-05 |
 | Hosting for internal production | Owner direction: this PC (D-13); revisit if others need remote access | D-09, OA-9 |
+| Code sharing (D-13 amended) | **Owner 2026-11-20:** "create a new repo named linkdin-brand-agent and push the code there so that i can share it with my team" → **private** GitHub repository with the code and its history. Data, backups, evaluation output and secrets (`.env*`, `secrets/`, `.data/`, `backups/`, `eval-results/`) stay on this PC (git-ignored). Pre-push audit: no sensitive path ever committed; none of the 10 secret values on this PC found in any commit; secret scan passed | D-13 |
 | Chat-First connector design (A Claude Desktop + local MCP / B remote MCP / C API only) | **Open** — recommended A + keep C | D-14, ADR-036 (proposed), P11-01 |
 | Connector write tools (drafts, research, proposals) | **Open** — recommended yes, approval stays manual | D-15 |
 | Claude plan and terms (API credits only on Max/Ultra/Team; Consumer Terms §11 non-commercial clause; applicability to a company account unresolved, review §6.2) | **Largely settled 2026-11-20:** `claude auth status` shows a **Team** subscription (business plan, Commercial Terms); owner to confirm | D-16 |
