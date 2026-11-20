@@ -37,7 +37,9 @@ but it is your call.
    Do **not** add anything else. The company page needs a separate app later.
 3. **Auth** tab → *Authorized redirect URLs* → add exactly:
    `https://localhost:8443/api/oauth/linkedin/callback`
-4. Copy **Client ID** and **Primary Client Secret** into the project's `.env.staging` yourself
+4. Enter **Client ID** and **Primary Client Secret** in the guided window
+   (`powershell -ExecutionPolicy Bypass -File scripts\set-linkedin-app.ps1`; Claude opens it for you). The secret
+   is hidden while you type and is written only to `.env.staging`. Or edit the file yourself
    (`notepad .env.staging` → `LBE_LINKEDIN_FOUNDER_CLIENT_ID=` / `LBE_LINKEDIN_FOUNDER_CLIENT_SECRET=`).
    **Do not paste the secret into chat, email or tickets.**
 

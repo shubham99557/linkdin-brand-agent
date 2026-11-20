@@ -99,7 +99,7 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
   3. Read `docs/chat-first-mcp-review.md` §0 and choose a design (recommended: A).
 - **Why:**
   - Max, Ultra and Team include monthly API credits ($100, $200, or $20 per seat pooled); Pro does not.
-  - The terms for Claude.ai and Claude Pro for individuals exclude business use.
+  - The current Consumer Terms say "You agree not to use our Services for any commercial or business purposes" (§11). Whether that applies to a company's Pro or Max account is a legal question; Team, Enterprise and the API are clearly business routes (`docs/chat-first-mcp-review.md` §6.2).
   - Local connectors only work in Claude Desktop.
 - **Tell Claude:**
   - your plan name;
@@ -131,7 +131,9 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
   products *Share on LinkedIn* + *Sign In with LinkedIn using OpenID Connect* only; redirect URL
   `https://localhost:8443/api/oauth/linkedin/callback`).
 - **Why:** required for any real founder post.
-- **You put** the Client ID and Primary Client Secret into `.env.staging` yourself (`notepad .env.staging`).
+- **You type** the Client ID and Primary Client Secret into the guided window Claude opens
+  (`scripts\set-linkedin-app.ps1`; the secret is hidden while you type and goes only into `.env.staging`), or put
+  them into `.env.staging` yourself (`notepad .env.staging`).
 - **Confirm:** `npm run pilot:preflight` shows PASS for "founder LinkedIn app client id/secret". Tell Claude whether
   LinkedIn **accepted** the `https://localhost` redirect URL (that's pilot check U1).
 - **Secret:** the client secret. Connecting and posting remain separate go-decisions (runbook steps D–G).
