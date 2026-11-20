@@ -399,4 +399,4 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-20 | P9-04 DONE (automatic backups while the server runs, restore drill per backup, Backups page; ADR-034) and P9-01 DONE (local operations guide, D-13) — owner asked for end-to-end work through the plan | `4543344` |
 | 2026-11-20 | P9-05 DONE (System health page + admin attention banner; incident runbook with the LinkedIn 24-hour rule verified at the source) | `3ddb040` |
 | 2026-11-20 | P2-05 DONE (`brain:reset-dev`: fresh development database without the synthetic example knowledge; refuses staging) | `905cfc3` |
-| 2026-11-20 | P9-03 DONE (disk-encryption, secret-file-access and certificate checks; certificate renewal; shared-database start-up guard; secrets inventory; ADR-035). OA-11 added: C: not encrypted | P9-03 commit |
+| 2026-11-20 | P9-03 DONE (disk-encryption, secret-file-access and certificate checks; certificate renewal; shared-database start-up guard; secrets inventory; ADR-035). OA-11 added: C: not encrypted | `7f27b6f` |
