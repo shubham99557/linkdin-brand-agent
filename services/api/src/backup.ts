@@ -88,6 +88,32 @@ export async function backupPglite(opts: { dataDir: string; outDir: string; envi
   return { manifestPath, manifest };
 }
 
+/**
+ * Loads an archive into `targetDir` (must be missing or empty) and returns what it contains. Used by the
+ * automatic-backup restore drill (P9-04), which writes the manifest only after this succeeds.
+ */
+export async function fingerprintArchive(archive: Uint8Array, targetDir: string): Promise<Fingerprint> {
+  if (!(await isEmptyOrMissing(targetDir))) throw new Error(`refusing to use non-empty folder ${targetDir}`);
+  await mkdir(targetDir, { recursive: true });
+  const db = await PGlite.create({
+    dataDir: targetDir, extensions: { pgcrypto },
+    loadDataDir: new Blob([archive as Uint8Array<ArrayBuffer>], { type: "application/x-gzip" }),
+  });
+  try {
+    return await fingerprint(db);
+  } finally {
+    await db.close();
+  }
+}
+
+/** Manifest for an archive whose contents were checked by restoring it. Same format as backupPglite. */
+export function manifestFor(archiveName: string, archive: Uint8Array, environment: string, createdAt: Date, fp: Fingerprint): BackupManifest {
+  return {
+    format: "lbe-pglite-backup/1", created_at: createdAt.toISOString(), environment,
+    archive: archiveName, archive_sha256: sha256(archive), archive_bytes: archive.byteLength, fingerprint: fp,
+  };
+}
+
 /** Restore a backup (by manifest path) into `targetDir`, which must be missing or empty. Verifies hash and contents. */
 export async function restorePglite(opts: { manifestPath: string; targetDir: string }): Promise<{ fingerprint: Fingerprint; sessionsPurged: number }> {
   const manifest = JSON.parse(await readFile(opts.manifestPath, "utf8")) as BackupManifest;

@@ -18,6 +18,12 @@ export interface Db extends Queryable {
   tx<T>(role: DbRole, fn: (q: Queryable) => Promise<T>): Promise<T>;
   /** Execute a multi-statement SQL script inside a transaction (owner only). */
   execScript(sql: string): Promise<void>;
+  /**
+   * Embedded database only (P9-04): a gzip snapshot of the data folder while the server keeps running. Taken in a
+   * transaction slot, so no other transaction is half-way through; restoring it is like restarting after a crash
+   * at that moment (PostgreSQL replays its log). PostgreSQL servers are backed up with pg_dump instead.
+   */
+  snapshot?(): Promise<Uint8Array>;
   close(): Promise<void>;
 }
 
@@ -49,6 +55,11 @@ class PgliteDb implements Db {
     await this.pglite.transaction(async (t) => {
       await t.exec(sql);
     });
+  }
+
+  async snapshot(): Promise<Uint8Array> {
+    await this.pglite.query("checkpoint");     // write changes to the data files, so a restore has little to replay
+    return this.pglite.transaction(async () => new Uint8Array(await (await this.pglite.dumpDataDir("gzip")).arrayBuffer()));
   }
 
   async close(): Promise<void> {

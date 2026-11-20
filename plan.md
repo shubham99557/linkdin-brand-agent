@@ -19,10 +19,10 @@
 | Active task | — |
 | Next READY tasks | none: every open task waits on an owner action (see "Blocked (owner)" and `docs/owner-action-checklist.md`) |
 | First safe milestone | **M1 Technical prototype hardened — REACHED 2026-11-19** (P1-01..06, P2-01/02; gate §H met: all suites green, restore proven, no open critical/high) |
-| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate · P5-01 render service · P5-02 brand templates & previews · P5-03 visuals in approval · P5-06 accessibility · P5-04 history · P5-05 monthly campaigns · P3-01 pricing verified · P3-03 prompt review · P3-02 realistic mock drafts · P2-04 account names · P2-03 document upload (txt/md) · P4-05 pipelined drafting · P2-03b PDF upload (2026-11-20, after OA-10) · P0-07 backup to a separate device (2026-11-20, D-13) |
+| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate · P5-01 render service · P5-02 brand templates & previews · P5-03 visuals in approval · P5-06 accessibility · P5-04 history · P5-05 monthly campaigns · P3-01 pricing verified · P3-03 prompt review · P3-02 realistic mock drafts · P2-04 account names · P2-03 document upload (txt/md) · P4-05 pipelined drafting · P2-03b PDF upload (2026-11-20, after OA-10) · P0-07 backup to a separate device (2026-11-20, D-13) · P9-04 automatic backups + Backups page · P9-01 local operations guide |
 | Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · OA-1 first backup copy to a USB drive (tool ready: `npm run backup:external`) |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9 open; OA-10 done 2026-11-20) |
-| Latest passing tests | 2026-11-20: typecheck ✅ · Vitest 454 ✅ (11 PG skipped there) · `test:pg:embedded` 11/11 ✅ · Playwright 19 ✅ (incl. axe a11y) · secret scan ✅ (219 files) · npm audit 0 ✅ · signatures verified ✅ |
+| Latest passing tests | 2026-11-20: typecheck ✅ · Vitest 464 ✅ (11 PG skipped there) · `test:pg:embedded` 11/11 ✅ · Playwright 20 ✅ (incl. axe a11y) · secret scan ✅ (225 files) · npm audit 0 ✅ · signatures verified ✅ |
 | Latest commit | see `git log -1` |
 | Next milestone | **M3 Internal MVP — engineering gate met** (durable jobs with kill/resume test, real visuals approved with posts, monthly campaigns); remaining M3 criterion is a person: **the owner completes one campaign end-to-end in the dashboard** (needs OA-2 user; best with OA-3 Brand Brain + brand colours). ∥ **M2 AI intelligence evaluation** (blocked on OA-3 + OA-6) |
 
@@ -273,10 +273,10 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 ### Phase 9 — Internal production readiness
 | ID | Task | Deps | Status | Who |
 |---|---|---|---|---|
-| P9-01 | Hosting decision (owner) & deployment architecture | OA-9 | BLOCKED | O+C |
+| P9-01 | Hosting decision (owner) & deployment architecture — owner direction D-13 (2026-11-20): this PC; local operations guide. **DONE 2026-11-20:** `docs/local-operations.md` (development vs staging, this-PC-only access, start/stop, both backup layers, restore incl. new PC, updates, 5-minute weekly routine). Remote access for colleagues = future decision (HTTPS for the PC name, firewall, P9-02) | OA-9 → D-13 | DONE | O+C |
 | P9-02 | Real-user auth (SSO or MFA) | P1-02 | NOT_STARTED | C |
 | P9-03 | Secrets management, TLS, environment separation | P9-01 | NOT_STARTED | C |
-| P9-04 | Automated backups + restore drill | P1-01, P9-01 | NOT_STARTED | C |
+| P9-04 | Automated backups + restore drill (in-server daily backups while running, retention, restore drill per backup, USB copy without stopping the server, dashboard status + overdue reminder). **DONE 2026-11-20 (ADR-034):** `auto-backup.ts` — server snapshots its embedded DB (`Db.snapshot`: CHECKPOINT + `dumpDataDir` inside a transaction slot), restore-tests it in a separate process (`backup-drill-child.ts`), writes the P1-01 manifest only after the drill passes (failed → archive deleted, status "failed"), keeps newest 14, every 24 h (`LBE_AUTO_BACKUP_HOURS`/`_KEEP`). `backup:external` uses a running server's newest automatic backup (≤ 26 h) instead of refusing, records each separate-disk copy. Admin **Backups** page + `GET /api/admin/backups` (read-only): newest backup, last attempt, last USB copy, warnings (failed, stale, no/7-day-old USB copy). Tests: `auto-backup` 8/8, `external-backup` +2 (9/9), Playwright +1 and Backups in the a11y scan (20/20). Mutations (non-exclusive snapshot, failed drill keeping archive, schedule ignoring interval, page not admin-only, any-age auto backup, same-disk copy recorded) each caught. Real runs: server's first automatic backup 1 min after start (231 rows, drill passed); `backup:external` while running used it + fresh staging backup, verified. A test hang was found and fixed (the test's write loop starved the event loop; the server is not affected because each query is its own request) | P1-01, P9-01 | DONE | C |
 | P9-05 | Monitoring, alerting, incident runbook (incl. LinkedIn 24 h incident rule) | P9-01 | NOT_STARTED | C |
 | P9-06 | Retention jobs, privacy docs, accessibility review | P8-01 | NOT_STARTED | C |
 | P9-07 | Internal acceptance test with real approved content | all above | NOT_STARTED | O+C |
@@ -331,7 +331,7 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 
 | Risk | Type | Mitigation |
 |---|---|---|
-| Laptop loss, disk failure, ransomware (everything on one disk) | Operational | P1-01 + P0-07 `backup:external` to a USB drive kept unplugged (OA-1, weekly) |
+| Laptop loss, disk failure, ransomware (everything on one disk) | Operational | P9-04 automatic daily backups (mistakes, corruption) + P0-07 weekly USB copy kept unplugged (OA-1); Backups page warns when the USB copy is 7+ days old |
 | AI fabricates or misattributes facts | AI quality | Claims register, restatement check, human scoring (ADR-025/026) |
 | Content quality unknown (mock only) | Product | Phase 3 paid evaluation before UI rollout |
 | LinkedIn treats scheduled release as automated posting | Platform/legal | Manual release (ADR-014); OA-7 |
@@ -396,3 +396,4 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-19 | P4-05 DONE (pipelined drafting, same results and budget decisions; ADR-033) — no READY engineering tasks left; everything open waits on owner actions | `c664605` |
 | 2026-11-20 | P2-03b DONE: PDF upload after owner approval OA-10 (`unpdf` 2.1.0 in a permission-locked child process; ADR-032 amendment: separate process instead of worker thread) | `67467cb` |
 | 2026-11-20 | Owner decision D-13 (code and data stay on this PC, no cloud repository); P0-07 rescoped and DONE: `backup:external` / `backup:verify` copy code + databases to a separate physical device and prove the copy restores; first USB copy = OA-1 | `d9aced7` |
+| 2026-11-20 | P9-04 DONE (automatic backups while the server runs, restore drill per backup, Backups page; ADR-034) and P9-01 DONE (local operations guide, D-13) — owner asked for end-to-end work through the plan | P9-04 commit |

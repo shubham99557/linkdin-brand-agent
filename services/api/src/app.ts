@@ -26,6 +26,7 @@ import {
 import { dbErrorStatus, type Db } from "./db.ts";
 import { DOC_LIMITS, DocumentError, extractDocument } from "./documents.ts";
 import { PdfBusyError } from "./pdf-text.ts";
+import { backupStatus, type BackupStatusConfig } from "./backup-status.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 
 export interface LinkedInDeps {
@@ -53,6 +54,8 @@ export interface AppDeps {
   workerId: string;
   internalJobToken?: string;
   log?: (msg: string, extra?: Record<string, unknown>) => void;
+  /** P9-04: where automatic backups and the last USB-copy record live (status page only). */
+  backups?: BackupStatusConfig;
 }
 
 interface SessionUser {
@@ -877,6 +880,13 @@ export function createApp(deps: AppDeps) {
     const posts = await li!.liveProvider!.findRecentPostsByAuthor(r.account_id, r.author);
     const expected = escapeLittleText(r.body);
     return c.json({ supported: true, candidates: posts.map((p) => ({ ...p, matches: p.commentary === expected || p.commentary === r.body })) });
+  });
+
+  // P9-04: backup status for the owner (admin only). Read from files written by the automatic backup and by
+  // `npm run backup:external`; nothing here can start, change or delete a backup.
+  api.get("/admin/backups", async (c) => {
+    if (c.get("user").role !== "admin") throw new HTTPException(403, { message: "admin only" });
+    return c.json(await backupStatus(deps.backups));
   });
 
   // User management (admin only; every rule is enforced in the database functions).

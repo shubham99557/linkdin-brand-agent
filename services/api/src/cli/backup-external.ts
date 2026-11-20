@@ -1,5 +1,5 @@
 // P0-07: copy the code and databases to a separate device (USB drive) and prove the copy restores.
-// Usage (stop the server first):
+// Usage (the server may keep running: its newest automatic backup is used, P9-04):
 //   npm run backup:external -- --to E:\LBE-backups
 //   npm run backup:verify -- --set E:\LBE-backups\lbe-backup-<date>
 // --same-disk-ok allows a folder on the same physical disk (protects against accidental deletion only).
@@ -23,7 +23,7 @@ try {
     const { setDir, set, warnings } = await createExternalBackup({ repoRoot: REPO_ROOT, dest: values.to, allowSameDisk: values["same-disk-ok"] });
     console.log(`Backup written and verified: ${setDir}`);
     console.log(`  code: ${set.git.commits} commits, latest ${set.git.head.slice(0, 7)} (${set.git.branch})`);
-    for (const d of set.databases) console.log(`  ${d.environment} database: ${d.rows} rows, ${d.migrations} migrations`);
+    for (const d of set.databases) console.log(`  ${d.environment} database: ${d.rows} rows, ${d.migrations} migrations (${d.source})`);
     for (const s of set.skipped) console.log(`  skipped: ${s}`);
     for (const w of warnings) console.log(`  WARNING: ${w}`);
     console.log("Secrets (.env files, secrets\\) are not copied. Unplug the drive and keep it somewhere safe.");

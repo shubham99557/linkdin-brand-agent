@@ -36,13 +36,22 @@
   git-ignored. Copies kept off this machine must be encrypted. Restored LinkedIn credentials only work with the
   same `LBE_TOKEN_ENC_KEY`; keep that key backed up separately (never alongside the backup).
 - Test a restore after every backup you intend to rely on (`--target .data/restore-check`, then delete the folder).
+- **Automatic backups while the server runs (P9-04, ADR-034).** Every `LBE_AUTO_BACKUP_HOURS` (default 24) the
+  server snapshots its embedded database into `backups/auto/<env>/`, restore-tests it in a separate process and only
+  then writes the manifest (same format as above, so `db:restore` accepts it). The newest `LBE_AUTO_BACKUP_KEEP`
+  (default 14) are kept. Status: `backups/auto/<env>/status.json`, the log (`auto_backup_ok` / `auto_backup_failed`)
+  and the admin **Backups** page. Day-to-day guide: `docs/local-operations.md`.
 - **Copy to a separate device (P0-07, owner decision D-13: everything stays on this PC).**
   `npm run backup:external -- --to E:\LBE-backups` writes a dated folder with `code.bundle` (whole Git history),
   `databases/` (every embedded database named in `.env` / `.env.staging`), `backup-set.json` (SHA-256 of every
   file) and `READ-ME-restore.txt`. It then restores the copy into a temporary folder (clone + database restore)
   and fails loudly if anything differs.
   - **Refuses:** a folder on the same *physical* disk as the project (checked with `Get-Partition`; on this laptop
-    C: and D: are one disk), a folder inside the project, and a running server.
+    C: and D: are one disk) and a folder inside the project. A running server's database is taken from its newest
+    automatic backup if that is at most 26 hours old; otherwise the command refuses and asks for the server to be
+    stopped.
+  - **Reminder:** each copy to a separate disk is recorded in `backups/last-external-copy.json` for the Backups
+    page.
   - **Override:** `--same-disk-ok` allows the same disk; that copy protects against accidental deletion only.
   - **Check an old copy:** `npm run backup:verify -- --set <folder>` re-checks every checksum and restores again.
   - **Not copied:** secrets (`.env*`, `secrets/`); keep the token key separately, as above. Committed code only:

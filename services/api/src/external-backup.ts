@@ -12,13 +12,15 @@
 // inside the project folder, and a running server (an open embedded database must not be copied).
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { constants as fsConstants, existsSync, readFileSync } from "node:fs";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseEnv, promisify } from "node:util";
+import { listAutoBackups, type AutoBackupEntry } from "./auto-backup.ts";
 import { backupPglite, restorePglite, type BackupManifest } from "./backup.ts";
+import { autoBackupDir, externalMarkerFor } from "./backup-paths.ts";
 
 const run = promisify(execFile);
 
@@ -30,7 +32,7 @@ export interface BackupSet {
   created_at: string;
   separate_disk: "yes" | "no (allowed by the owner)" | "unknown";
   git: { head: string; branch: string; commits: number; uncommitted_changes: boolean };
-  databases: Array<{ environment: string; manifest: string; migrations: number; rows: number }>;
+  databases: Array<{ environment: string; manifest: string; migrations: number; rows: number; source: string }>;
   skipped: string[];
   files: Array<{ path: string; bytes: number; sha256: string }>;
 }
@@ -49,6 +51,8 @@ export interface ExternalBackupOptions {
   portInUse?: (port: number) => Promise<boolean>;
   /** For tests: runs after the files are written and before the restore check (e.g. to simulate a faulty drive). */
   onWritten?: (setDir: string) => Promise<void>;
+  /** While a server runs, its newest automatic backup is used if it is at most this old (default 26 hours). */
+  maxAutoBackupAgeHours?: number;
 }
 
 const sha256 = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
@@ -194,16 +198,26 @@ export async function createExternalBackup(opts: ExternalBackupOptions): Promise
     warnings.push("Could not confirm that the backup folder is on a separate disk. Make sure it is a USB drive or another computer.");
   }
 
+  const now = opts.now ?? new Date();
   const skipped: string[] = [];
   const dbs = databasesToBackUp(repoRoot, opts.envFiles ?? [".env", ".env.staging"], skipped);
-  const running = [];
-  for (const d of dbs) if (await portInUse(d.port)) running.push(`${d.environment} (port ${d.port})`);
+  // A running server's database is open and cannot be copied directly. P9-04: use its newest automatic backup
+  // instead (made by the server itself and already restore-tested), if it is recent enough.
+  const maxAge = opts.maxAutoBackupAgeHours ?? 26;
+  const fromAuto = new Map<string, AutoBackupEntry & { dir: string }>();
+  const running: string[] = [];
+  for (const d of dbs) {
+    if (!(await portInUse(d.port))) continue;
+    const dir = autoBackupDir(d.environment, repoRoot);
+    const newest = (await listAutoBackups(dir))[0];
+    if (newest && (now.getTime() - Date.parse(newest.created_at)) / 3_600_000 <= maxAge) fromAuto.set(d.environment, { ...newest, dir });
+    else running.push(`${d.environment} (port ${d.port})`);
+  }
   if (running.length) {
-    throw new BackupRefused(`Stop the server first (Ctrl+C in its window), then run the backup again: ${running.join(", ")}. `
-      + "An open database cannot be copied safely.");
+    throw new BackupRefused(`The server is running and has no automatic backup from the last ${maxAge} hours: ${running.join(", ")}. `
+      + "Stop the server (Ctrl+C in its window) and run the backup again. An open database cannot be copied safely.");
   }
 
-  const now = opts.now ?? new Date();
   const setDir = path.join(dest, `lbe-backup-${now.toISOString().replace(/[:.]/g, "-")}`);
   if (existsSync(setDir)) throw new BackupRefused(`${setDir} already exists`);
   await mkdir(setDir, { recursive: true });
@@ -216,10 +230,21 @@ export async function createExternalBackup(opts: ExternalBackupOptions): Promise
   await git(repoRoot, "bundle", "create", path.join(setDir, "code.bundle"), "--all");
 
   const databases: BackupSet["databases"] = [];
+  const dbOut = path.join(setDir, "databases");
   for (const d of dbs) {
-    const { manifestPath, manifest } = await backupPglite({ dataDir: d.dataDir, outDir: path.join(setDir, "databases"), environment: d.environment, now });
+    const auto = fromAuto.get(d.environment);
+    if (auto) {
+      const m = JSON.parse(await readFile(path.join(auto.dir, auto.manifest), "utf8")) as BackupManifest;
+      await mkdir(dbOut, { recursive: true });
+      await copyFile(path.join(auto.dir, m.archive), path.join(dbOut, m.archive), fsConstants.COPYFILE_EXCL);
+      await copyFile(path.join(auto.dir, auto.manifest), path.join(dbOut, auto.manifest), fsConstants.COPYFILE_EXCL);
+      databases.push({ environment: d.environment, manifest: auto.manifest, migrations: auto.migrations, rows: auto.rows,
+        source: `automatic backup from ${auto.created_at} (server was running)` });
+      continue;
+    }
+    const { manifestPath, manifest } = await backupPglite({ dataDir: d.dataDir, outDir: dbOut, environment: d.environment, now });
     databases.push({ environment: d.environment, manifest: path.basename(manifestPath), migrations: manifest.fingerprint.migrations.length,
-      rows: Object.values(manifest.fingerprint.rowCounts).reduce((a, b) => a + b, 0) });
+      rows: Object.values(manifest.fingerprint.rowCounts).reduce((a, b) => a + b, 0), source: "made now (server stopped)" });
   }
 
   const gitInfo = { head, branch, commits, uncommitted_changes: uncommitted };
@@ -235,6 +260,13 @@ export async function createExternalBackup(opts: ExternalBackupOptions): Promise
   const set: BackupSet = { format: "lbe-backup-set/1", created_at: now.toISOString(), separate_disk: separate, git: gitInfo, databases, skipped, files };
   await writeFile(path.join(setDir, "backup-set.json"), JSON.stringify(set, null, 2), { flag: "wx" });
   await writeFile(path.join(setDir, "READ-ME-restore.txt"), RESTORE_HELP(set).replace(/\n/g, "\r\n"), { flag: "wx" });
+  // P9-04: the dashboard reminds the owner when the next copy is due. A same-disk copy does not count.
+  if (separate !== "no (allowed by the owner)") {
+    const marker = externalMarkerFor(repoRoot);
+    await mkdir(path.dirname(marker), { recursive: true });
+    await writeFile(marker, JSON.stringify({ at: now.toISOString(), folder: setDir, separate_disk: separate,
+      databases: databases.map((d) => d.environment) }, null, 2));
+  }
   return { setDir, set, warnings };
 }
 

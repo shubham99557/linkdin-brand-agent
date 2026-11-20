@@ -33,6 +33,20 @@ test("sign out everywhere ends other browser sessions, which then see the sign-i
   await other.context().close();
 });
 
+test("P9-04: the owner sees backup status and what to do; editors don't see Backups", async ({ page }) => {
+  await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await expect(page.getByRole("link", { name: "Backups" })).toHaveCount(0);
+  await signOut(page);
+  await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
+  await page.getByRole("link", { name: "Backups" }).click();
+  await expect(page.getByRole("heading", { name: "Backups", level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Automatic backups (on this PC)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Copy on a USB drive" })).toBeVisible();
+  // The test server has no automatic backups and no USB copy: both are flagged with what to do.
+  await expect(page.getByRole("status")).toContainText("Automatic backups are switched off");
+  await expect(page.getByRole("status")).toContainText("No copy on a USB drive yet");
+  await expect(page.getByText("npm run backup:external -- --to E:\\LBE-backups").last()).toBeVisible();
+});
 test("admin adds a user, makes them an approver, then disables them; non-admins don't see Users", async ({ page }) => {
   await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
   await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);

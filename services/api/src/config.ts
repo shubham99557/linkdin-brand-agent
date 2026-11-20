@@ -31,6 +31,9 @@ const EnvSchema = z.object({
   LBE_RUN_AGENT_JOBS: bool.default(true),
   LBE_AGENT_JOB_INTERVAL_MS: z.coerce.number().int().min(500).default(2000),
   LBE_INTERNAL_JOB_TOKEN: z.string().optional(),
+  // P9-04: automatic backups of the embedded database while the server runs (0 = off). Kept in backups/auto/<env>.
+  LBE_AUTO_BACKUP_HOURS: z.coerce.number().min(0).max(168).default(24),
+  LBE_AUTO_BACKUP_KEEP: z.coerce.number().int().min(1).max(365).default(14),
   // ---- Phase 2: live LinkedIn (all optional; live publishing is OFF unless explicitly enabled) ----
   LBE_LIVE_PUBLISHING: z.enum(["on", "off"]).default("off"),
   LBE_TOKEN_ENC_KEY: z.string().optional(),

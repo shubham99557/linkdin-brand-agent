@@ -5,6 +5,8 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { redactForLog } from "@lbe/security";
 import { createApp } from "./app.ts";
+import { startAutoBackup } from "./auto-backup.ts";
+import { autoBackupDir, EXTERNAL_MARKER } from "./backup-paths.ts";
 import { loadConfig, REPO_ROOT } from "./config.ts";
 import { startAgentRunner } from "./jobs/agent-runner.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
@@ -18,6 +20,11 @@ const registry = buildRegistry(provider, linkedin);
 const drafter = buildDrafter(cfg);
 const tls = !!cfg.LBE_TLS_PFX;
 const specialists = buildSpecialists(cfg);
+const logLine = (msg: string, extra?: Record<string, unknown>) => console.log(JSON.stringify({ at: new Date().toISOString(), msg, ...extra }));
+// P9-04: automatic backups (embedded database only; a PostgreSQL server is backed up with pg_dump).
+const backups = cfg.LBE_DATABASE_URL === "pglite" && cfg.LBE_AUTO_BACKUP_HOURS > 0
+  ? { dir: autoBackupDir(cfg.LBE_ENV), externalMarker: EXTERNAL_MARKER, intervalHours: cfg.LBE_AUTO_BACKUP_HOURS, keep: cfg.LBE_AUTO_BACKUP_KEEP }
+  : undefined;
 const app = createApp({
   db, drafter, provider, linkedin, specialists,
   appOrigins: cfg.appOrigins,
@@ -25,7 +32,11 @@ const app = createApp({
   voiceDir: VOICE_DIR,
   workerId: cfg.LBE_WORKER_ID,
   internalJobToken: cfg.LBE_INTERNAL_JOB_TOKEN,
+  backups: backups ?? { dir: autoBackupDir(cfg.LBE_ENV), externalMarker: EXTERNAL_MARKER, intervalHours: 0, keep: cfg.LBE_AUTO_BACKUP_KEEP },
 });
+if (backups) {
+  startAutoBackup({ db, dir: backups.dir, environment: cfg.LBE_ENV, keep: backups.keep, intervalHours: backups.intervalHours, log: logLine });
+}
 
 // Serve the built dashboard (npm run build:web) from the same origin.
 if (existsSync(path.join(WEB_DIST, "index.html"))) {
@@ -72,4 +83,5 @@ serve({
   console.log(`  LinkedIn apps configured: ${linkedin ? Object.keys(linkedin.apps).filter((k) => linkedin.apps[k as "founder_app"]).join(", ") : "none"}`);
   console.log(`  in-process publisher worker: ${cfg.LBE_RUN_WORKER ? `every ${cfg.LBE_WORKER_INTERVAL_MS}ms` : "off"}`);
   console.log(`  agent job runner: ${cfg.LBE_RUN_AGENT_JOBS ? `every ${cfg.LBE_AGENT_JOB_INTERVAL_MS}ms` : "off (queued Branding Agent jobs will wait)"}`);
+  console.log(`  automatic backups: ${backups ? `every ${backups.intervalHours} h, keep ${backups.keep}, in ${path.relative(REPO_ROOT, backups.dir)}` : "off"}`);
 });

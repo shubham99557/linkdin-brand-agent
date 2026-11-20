@@ -47,7 +47,7 @@ test("no serious or critical accessibility violations on the main dashboard page
   await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
   const pages: Array<[string, string]> = [
     ["Content calendar", "/"], ["Brand Brain", "/brain"], ["Agent workspace", "/agent"], ["Claims register", "/claims"],
-    ["Accounts & voices", "/accounts"], ["Users", "/users"], ["New post", "/new"], ["Audit log", "/audit"],
+    ["Accounts & voices", "/accounts"], ["Users", "/users"], ["Backups", "/backups"], ["New post", "/new"], ["Audit log", "/audit"],
   ];
   const found: string[] = [];
   for (const [name, route] of pages) {

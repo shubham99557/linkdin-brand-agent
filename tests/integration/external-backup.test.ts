@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate, openDb } from "../../services/api/src/db.ts";
 import { BackupRefused, createExternalBackup, physicalDiskOf, verifyExternalBackup } from "../../services/api/src/external-backup.ts";
+import { runAutoBackup } from "../../services/api/src/auto-backup.ts";
 import { seed } from "../../services/api/src/seed.ts";
 import { TEST_PASSWORDS } from "../helpers/db.ts";
 
@@ -28,7 +29,7 @@ beforeAll(async () => {
   usb = path.join(work, "usb");
   await run("git", ["init", "--quiet", "-b", "main", repo]);
   await writeFile(path.join(repo, "README.md"), "# Project\n");
-  await writeFile(path.join(repo, ".gitignore"), ".env\n.env.*\n.data/\nsecrets/\n");
+  await writeFile(path.join(repo, ".gitignore"), ".env\n.env.*\n.data/\nsecrets/\nbackups/\n");
   await git(repo, "add", "-A");
   await git(repo, "commit", "--quiet", "-m", "first");
   await writeFile(path.join(repo, "app.ts"), "export const x = 1;\n");
@@ -122,9 +123,34 @@ describe("backup to a separate device (P0-07)", () => {
   it("refuses while the server is running (an open database must not be copied)", async () => {
     const e = await createExternalBackup({ repoRoot: repo, dest: path.join(usb, "other"), diskOf, portInUse: async (p) => p === 59998 }).catch((x) => x);
     expect(e).toBeInstanceOf(BackupRefused);
-    expect((e as Error).message).toMatch(/Stop the server first.*development \(port 59998\)/);
+    expect((e as Error).message).toMatch(/server is running and has no automatic backup.*development \(port 59998\).*Stop the server/);
     expect(existsSync(path.join(usb, "other"))).toBe(false);
   });
+
+  it("P9-04: while the server runs, its newest automatic backup is used (if under 26 hours old) and still proven to restore", async () => {
+    const autoDir = path.join(repo, "backups", "auto", "development");
+    const live = await openDb({ url: "pglite", dataDir: path.join(repo, ".data", "pglite") });   // the "running server"
+    try {
+      expect((await runAutoBackup({ db: live, dir: autoDir, environment: "development", now: () => new Date("2026-11-20T09:00:00Z") })).ok).toBe(true);
+    } finally { await live.close(); }
+    const running = async (p: number) => p === 59998;
+    const r = await createExternalBackup({ repoRoot: repo, dest: path.join(usb, "while-running"), diskOf, portInUse: running, now: new Date("2026-11-20T12:00:00Z") });
+    expect(r.set.databases).toEqual([expect.objectContaining({ environment: "development", source: "automatic backup from 2026-11-20T09:00:00.000Z (server was running)" })]);
+    expect((await verifyExternalBackup(r.setDir)).problems).toEqual([]);
+    // 27 hours later the newest automatic backup is too old: refused, nothing written.
+    const old = await createExternalBackup({ repoRoot: repo, dest: path.join(usb, "too-old"), diskOf, portInUse: running, now: new Date("2026-11-21T12:00:00Z") }).catch((x) => x);
+    expect(old).toBeInstanceOf(BackupRefused);
+    expect(existsSync(path.join(usb, "too-old"))).toBe(false);
+  }, 180_000);
+
+  it("records each USB copy for the dashboard reminder; a same-disk copy does not count", async () => {
+    const marker = path.join(repo, "backups", "last-external-copy.json");
+    await rm(marker, { force: true });
+    await createExternalBackup({ repoRoot: repo, dest: path.join(work, "same-disk-2"), diskOf, portInUse: noServer, allowSameDisk: true });
+    expect(existsSync(marker)).toBe(false);
+    const r = await createExternalBackup({ repoRoot: repo, dest: path.join(usb, "marker"), diskOf, portInUse: noServer, now: new Date("2026-11-20T13:00:00Z") });
+    expect(JSON.parse(await readFile(marker, "utf8"))).toEqual({ at: "2026-11-20T13:00:00.000Z", folder: r.setDir, separate_disk: "yes", databases: ["development"] });
+  }, 180_000);
 
   it("warns that uncommitted changes are not in the backup", async () => {
     await writeFile(path.join(repo, "app.ts"), "export const x = 2; // not committed\n");

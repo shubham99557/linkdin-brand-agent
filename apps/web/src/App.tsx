@@ -4,6 +4,7 @@ import { ErrorText, StopBar } from "./components.tsx";
 import { ContentPage } from "./ContentPage.tsx";
 import { AgentPage, BrandBrainPage, CampaignPage, JobPage, WorkflowPage } from "./agentPages.tsx";
 import { UsersPage } from "./UsersPage.tsx";
+import { BackupsPage } from "./BackupsPage.tsx";
 import { PasswordPage } from "./PasswordPage.tsx";
 import { OnboardingWizard } from "./OnboardingWizard.tsx";
 import { AccountsPage, AuditPage, CalendarPage, CapabilitiesPage, ClaimsPage, MockPostsPage, NewContentPage, OAuthCompletePage, OutboxPage } from "./pages.tsx";
@@ -110,6 +111,7 @@ export function App() {
   else if (route === "/audit") page = <AuditPage />;
   else if (route === "/capabilities") page = <CapabilitiesPage />;
   else if (route === "/users") page = <UsersPage me={me} />;
+  else if (route === "/backups" && me.role === "admin") page = <BackupsPage />;
   else if (route === "/password") page = <PasswordPage forced={false} onDone={() => undefined} />;
   else page = <CalendarPage />;
 
@@ -122,7 +124,7 @@ export function App() {
       <nav className="side" aria-label="Main">
         <h1>LinkedIn Brand Engine</h1>
         <div className="sub">Phase 1 · mock publishing</div>
-        {[...NAV, ...(me.role === "admin" ? [["/users", "Users"] as [string, string]] : [])].map(([href, label]) => (
+        {[...NAV, ...(me.role === "admin" ? [["/users", "Users"], ["/backups", "Backups"]] as Array<[string, string]> : [])].map(([href, label]) => (
           <a key={href} href={`#${href}`} className={route === href ? "active" : ""}>{label}</a>
         ))}
         <div className="who">

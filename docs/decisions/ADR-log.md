@@ -643,3 +643,73 @@ automatically, with exponential backoff (30 s × 2ⁿ, max 1 h, max 5 attempts).
 malformed success responses and expired leases move the entry to `needs_reconciliation`. Only an admin can
 resolve it (`confirmed_published` with the post reference, `confirmed_not_published` to re-queue, or
 `abandon`), with a mandatory note, all audited. A late success reported after lease expiry is still recorded.
+
+## ADR-034 — Running on this PC: automatic backups while the server runs (P9-04, P9-01, owner decision D-13)
+**Context (2026-11-20).**
+- **Owner decision D-13:** code and data stay on the PC that runs the system; no cloud repository or hosting.
+- **Disk:** C: and D: on this laptop are one physical disk.
+- **The gap:** P0-07's USB copy (`backup:external`) needed the server stopped, because an embedded database that
+  is open cannot be copied from another process. A non-technical owner would rarely do that, so backups would
+  depend on memory.
+
+**Decision.**
+- **Automatic backups by the server itself** (`services/api/src/auto-backup.ts`, on by default):
+  - every `LBE_AUTO_BACKUP_HOURS` (default 24) the running server takes a snapshot (`Db.snapshot`):
+    `CHECKPOINT`, then PGlite `dumpDataDir` inside a transaction slot, so no other transaction can be half-way
+    through;
+  - it writes the archive to `backups/auto/<environment>/`;
+  - it **restore-tests it in a separate Node process** (`backup-drill-child.ts`), so the API stays responsive while
+    a second copy of the database loads;
+  - **only then** does it write the manifest (P1-01 format: SHA-256, migrations, row counts from the restored
+    copy).
+- **A failed backup is never kept:** an archive whose drill fails is deleted and gets no manifest, so it can never
+  be used by `db:restore` or the USB copy. The failure is recorded in `status.json` and logged as
+  `auto_backup_failed`.
+- **Retention:** the newest `LBE_AUTO_BACKUP_KEEP` (default 14) verified backups are kept. Only files this module
+  names are deleted.
+- **Schedule:** a backup is taken when the newest verified one is older than the interval, checked hourly; the
+  first check is one minute after start. A PostgreSQL server is backed up with `pg_dump` instead (no snapshot
+  method).
+- **USB copy while running:** for a running server, `backup:external` uses that server's newest automatic backup,
+  if it is at most 26 hours old (otherwise it refuses with instructions). It still proves the copy restores. Each
+  copy to a separate disk is recorded in `backups/last-external-copy.json`; a same-disk copy does not count.
+- **Owner visibility:** the admin-only **Backups** page (`GET /api/admin/backups`, read-only) shows:
+  - the newest automatic backup, the last attempt and how many are kept;
+  - the last USB copy;
+  - warnings for a failed backup, no or stale automatic backups, and a missing USB copy or one 7 or more days old.
+- **Operations guide:** `docs/local-operations.md` (P9-01) covers start/stop, both backup layers, restore, updates
+  and a 5-minute weekly routine.
+
+**Alternatives rejected.**
+- **Back up from a separate process while running:** unsafe with an embedded database.
+- **A Windows scheduled task that stops the server to back up:** interrupts work and changes system settings.
+- **Cloud backup:** against D-13.
+
+**Consequences.**
+- **Same disk:** automatic backups live on the same disk as the database (about 7 MB each today). They protect
+  against mistakes, corruption and bad updates, not against losing the PC; that remains the weekly USB copy's job,
+  now with a dashboard reminder.
+- **Pause:** the snapshot pauses database access for about a second once a day.
+- **Single process:** the backup status page is platform-level (one PC). If this ever becomes multi-tenant SaaS
+  (Phase 10), it must move behind a platform-operator role.
+
+**Evidence.**
+- `tests/integration/auto-backup.test.ts` 8/8:
+  - snapshot during continuous writes; restore matches; P1-01 restore accepts it;
+  - snapshot waits for an open transaction: both rows present, never one;
+  - retention keeps the newest N and leaves others' files;
+  - a failed drill leaves no archive and no manifest, and shows on the status page;
+  - the schedule backs up once per interval;
+  - status warnings;
+  - API admin-only (401/403/200);
+  - a damaged archive is refused by restore.
+- `tests/integration/external-backup.test.ts` +2: uses a recent automatic backup while the server runs, refuses
+  one 27 hours old; a same-disk copy is not recorded.
+- Playwright +1, and the Backups page is in the accessibility scan.
+- **Mutation checks**, each caught by ≥ 1 test: non-exclusive snapshot, failed drill leaving the archive, the
+  schedule ignoring the interval, the page not admin-only, any-age automatic backup accepted, a same-disk copy
+  recorded.
+- **Real runs on this PC:**
+  - the server made its first automatic backup one minute after start (231 rows, drill passed);
+  - `backup:external` ran while the server was running, used it, made a fresh staging backup, and verified the
+    set; the temporary copy was deleted.
