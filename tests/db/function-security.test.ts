@@ -10,14 +10,14 @@ const executable = async (role: string) => (await t.db.query<{ proname: string }
   `select distinct p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'lbe' and has_function_privilege($1, p.oid, 'execute') order by 1`, [role])).map((r) => r.proname);
 
-const AGENT = ["attach_media", "brain_load", "brain_propose", "create_content", "learning_inputs", "record_agent_run", "research_record",
+const AGENT = ["attach_media", "brain_load", "brain_propose", "connector_brain_get", "create_content", "learning_inputs", "record_agent_run", "research_record",
   "set_agent_metadata", "set_draft_output", "strategy_save", "submit_for_review", "whoami", "workflow_create", "workflow_finish", "workflow_get"];
 const WORKER = ["claim_outbox", "complete_outbox", "expire_credentials", "expire_stale_dispatches", "is_stopped",
   "job_claim", "job_finish", "job_heartbeat", "job_recover_expired", "worker_auto_stop",
   "worker_get_credential", "worker_mark_credential"];
 const API = ["admin_add_user", "admin_end_sessions", "admin_list_users", "admin_reset_password", "admin_set_approver",
   "admin_update_user", "attach_media", "begin_oauth", "brain_decide_proposal", "change_password", "brain_list_proposals", "brain_load", "brain_propose", "brain_retire_entry",
-  "brain_upsert_entry", "campaign_cancel", "campaign_create", "campaign_get", "campaign_list", "cancel_publication", "consume_oauth_state", "content_history", "create_claim", "create_content", "decide_content",
+  "brain_upsert_entry", "campaign_cancel", "campaign_create", "campaign_get", "campaign_list", "cancel_publication", "connector_create", "connector_revoke_all", "connector_status", "consume_oauth_state", "content_history", "create_claim", "create_content", "decide_content",
   "enqueue_publication", "is_stopped", "job_cancel", "job_enqueue", "job_get", "job_list", "job_resume", "job_retry", "learning_inputs", "login", "media_get", "media_list", "logout", "logout_all", "reconcile_publication", "record_agent_run",
   "release_publication", "research_list", "research_record", "research_review", "research_to_claim", "revoke_linkedin_credential",
   "set_agent_metadata", "set_claim_status", "set_draft_output", "set_account_display_name", "set_account_pillars", "set_live_publishing", "set_media_alt_text", "set_stop", "store_linkedin_credential",
@@ -59,7 +59,7 @@ describe("SECURITY DEFINER hygiene", () => {
     const rows = await t.db.query<{ proname: string }>(
       `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'lbe' and p.prosecdef and array_to_string(p.proconfig, ',') like '%public%' order by 1`);
-    expect(rows.map((r) => r.proname)).toEqual(["admin_create_user", "admin_reset_password", "begin_oauth", "change_password", "job_claim", "login"]);
+    expect(rows.map((r) => r.proname)).toEqual(["admin_create_user", "admin_reset_password", "begin_oauth", "change_password", "connector_create", "job_claim", "login"]);
   });
   it("no application role can create objects in the public schema (search_path hijack)", async () => {
     for (const role of ["lbe_api", "lbe_worker", "lbe_agent"]) {

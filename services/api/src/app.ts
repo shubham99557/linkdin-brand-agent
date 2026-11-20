@@ -28,6 +28,7 @@ import { DOC_LIMITS, DocumentError, extractDocument } from "./documents.ts";
 import { PdfBusyError } from "./pdf-text.ts";
 import { backupStatus, type BackupStatusConfig } from "./backup-status.ts";
 import { systemHealth, type RuntimeState } from "./system-health.ts";
+import { BRIDGE_SCRIPT, claudeDesktopEntry, connectorKeyPresent, removeConnectorKey, writeConnectorKey, type ConnectorConfig } from "./connector.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 
 export interface LinkedInDeps {
@@ -61,6 +62,8 @@ export interface AppDeps {
   environment?: string;
   /** P9-05: heartbeats and settings of the running server (System health page). */
   runtime?: RuntimeState;
+  /** P11-01a: read-only Claude connector (local MCP bridge); off unless LBE_CONNECTOR=on. */
+  connector?: ConnectorConfig;
 }
 
 interface SessionUser {
@@ -237,6 +240,18 @@ export function createApp(deps: AppDeps) {
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     if (!safeTokenEqual(token, deps.internalJobToken)) return c.json({ error: "unauthorized" }, 401);
     return c.json(await runPublisherTick(db, registry, { workerId: `${deps.workerId}-ext` }));
+  });
+
+  // P11-01a (ADR-036): the local Claude connector bridge reads approved Brand Brain entries here. It uses a
+  // connector key (Bearer), never the dashboard cookie, and runs as the lbe_agent role; the database function
+  // accepts only connector keys and nothing else accepts them. 404 unless LBE_CONNECTOR=on.
+  app.get("/api/connector/v1/brand-brain", async (c) => {
+    if (!deps.connector?.enabled) return c.json({ error: "not found" }, 404);
+    const auth = c.req.header("authorization") ?? "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+    if (!/^[0-9a-f]{64}$/.test(token)) return c.json({ error: "not authenticated" }, 401);
+    const rows = await db.tx("lbe_agent", (t) => t.query<{ r: unknown }>("select lbe.connector_brain_get($1) as r", [token]));
+    return c.json(rows[0]!.r);
   });
 
   // ---------------------------------------------------------------- authenticated
@@ -897,6 +912,36 @@ export function createApp(deps: AppDeps) {
   api.get("/admin/system", async (c) => {
     if (c.get("user").role !== "admin") throw new HTTPException(403, { message: "admin only" });
     return c.json(await systemHealth({ db: deps.db, runtime: deps.runtime, backups: deps.backups }));
+  });
+
+  // P11-01a: connector key management (admin). The key is written only to secrets\ for the local bridge; it is
+  // never sent to the browser.
+  const connectorAdmin = (c: Context<Env>) => {
+    if (c.get("user").role !== "admin") throw new HTTPException(403, { message: "admin only" });
+  };
+  api.get("/connector/status", async (c) => {
+    connectorAdmin(c);
+    const cfg = deps.connector;
+    const status = cfg?.enabled ? await one<Record<string, unknown>>("select lbe.connector_status($1)", [c.get("session")]) : { keys: [], recent_calls: [] };
+    return c.json({
+      enabled: !!cfg?.enabled, environment: cfg?.environment ?? null, key_file_present: cfg ? connectorKeyPresent(cfg) : false,
+      tools: ["get_brand_brain"], bridge: cfg ? { script: BRIDGE_SCRIPT, claude_desktop_entry: claudeDesktopEntry(cfg.environment) } : null,
+      ...status,
+    });
+  });
+  api.post("/connector/key", async (c) => {
+    connectorAdmin(c);
+    const cfg = deps.connector;
+    if (!cfg?.enabled) throw new HTTPException(409, { message: "the Claude connector is switched off (set LBE_CONNECTOR=on and restart)" });
+    const k = await one<{ id: string; token: string; expires_at: string }>("select lbe.connector_create($1, 8)", [c.get("session")]);
+    await writeConnectorKey(cfg, k);
+    return c.json({ id: k.id, expires_at: k.expires_at, key_file: `secrets\\claude-connector-${cfg.environment}.json` }, 201);
+  });
+  api.delete("/connector/key", async (c) => {
+    connectorAdmin(c);
+    const revoked = await one<number>("select lbe.connector_revoke_all($1)", [c.get("session")]);
+    if (deps.connector) await removeConnectorKey(deps.connector);
+    return c.json({ revoked });
   });
 
   // User management (admin only; every rule is enforced in the database functions).

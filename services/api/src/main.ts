@@ -8,6 +8,7 @@ import { createApp } from "./app.ts";
 import { startAutoBackup } from "./auto-backup.ts";
 import { autoBackupDir, EXTERNAL_MARKER } from "./backup-paths.ts";
 import { certificateInfo, type RuntimeState } from "./system-health.ts";
+import { connectorKeyFile } from "./connector.ts";
 import { assertSeparateDatabase, loadConfig, REPO_ROOT } from "./config.ts";
 import { startAgentRunner } from "./jobs/agent-runner.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
@@ -46,6 +47,11 @@ const app = createApp({
   backups: backups ?? { dir: autoBackupDir(cfg.LBE_ENV), externalMarker: EXTERNAL_MARKER, intervalHours: 0, keep: cfg.LBE_AUTO_BACKUP_KEEP },
   runtime,
   environment: cfg.LBE_ENV,
+  connector: {
+    enabled: cfg.LBE_CONNECTOR === "on", environment: cfg.LBE_ENV, keyFile: connectorKeyFile(REPO_ROOT, cfg.LBE_ENV),
+    baseUrl: `${tls ? "https" : "http"}://127.0.0.1:${cfg.LBE_PORT}`,
+    ...(runtime.tls && "fingerprint256" in runtime.tls ? { certSha256: runtime.tls.fingerprint256 } : {}),
+  },
 });
 if (backups) {
   startAutoBackup({ db, dir: backups.dir, environment: cfg.LBE_ENV, keep: backups.keep, intervalHours: backups.intervalHours, log: logLine });
@@ -103,5 +109,6 @@ serve({
   console.log(`  LinkedIn apps configured: ${linkedin ? Object.keys(linkedin.apps).filter((k) => linkedin.apps[k as "founder_app"]).join(", ") : "none"}`);
   console.log(`  in-process publisher worker: ${cfg.LBE_RUN_WORKER ? `every ${cfg.LBE_WORKER_INTERVAL_MS}ms` : "off"}`);
   console.log(`  agent job runner: ${cfg.LBE_RUN_AGENT_JOBS ? `every ${cfg.LBE_AGENT_JOB_INTERVAL_MS}ms` : "off (queued Branding Agent jobs will wait)"}`);
+  console.log(`  Claude connector (read-only): ${cfg.LBE_CONNECTOR === "on" ? "ON - one tool, get_brand_brain" : "off"}`);
   console.log(`  automatic backups: ${backups ? `every ${backups.intervalHours} h, keep ${backups.keep}, in ${path.relative(REPO_ROOT, backups.dir)}` : "off"}`);
 });

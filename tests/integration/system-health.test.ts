@@ -136,7 +136,7 @@ describe("Secrets, HTTPS and environment separation (P9-03)", () => {
   });
 
   it("HTTPS certificate: expired is a problem, under 30 days needs attention, otherwise fine; plain HTTP servers have no such check", async () => {
-    const cert = async (days: number) => check(await status({ tls: { validTo: new Date(NOW.getTime() + days * 86_400_000), names: "DNS:localhost" } }), "certificate");
+    const cert = async (days: number) => check(await status({ tls: { validTo: new Date(NOW.getTime() + days * 86_400_000), names: "DNS:localhost", fingerprint256: "AA:BB" } }), "certificate");
     expect(await cert(-1)).toMatchObject({ status: "bad", action: expect.stringMatching(/staging:renew-cert/) });
     expect(await cert(10)).toMatchObject({ status: "warn", detail: expect.stringMatching(/10 days/) });
     expect((await cert(200)).status).toBe("ok");

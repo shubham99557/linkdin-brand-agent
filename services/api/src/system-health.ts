@@ -21,7 +21,7 @@ export interface RuntimeState {
   publisher: { enabled: boolean; intervalMs: number; lastTickAt: Date | null; lastError: string | null };
   agentRunner: { enabled: boolean; intervalMs: number; lastTickAt: Date | null; busySince: Date | null; lastError: string | null };
   /** P9-03: the HTTPS certificate the server started with (staging); undefined when the server runs plain HTTP. */
-  tls?: { validTo: Date; names: string } | { error: string };
+  tls?: { validTo: Date; names: string; fingerprint256: string } | { error: string };
 }
 
 /** P9-03: Windows disk encryption and who can read the secret files. */
@@ -40,7 +40,7 @@ export function certificateInfo(pfx: Buffer, passphrase?: string): NonNullable<R
     const cert = socket.getCertificate() as tls.PeerCertificate | null;
     socket.destroy();
     if (!cert?.valid_to) return { error: "the file contains no certificate" };
-    return { validTo: new Date(cert.valid_to), names: cert.subjectaltname || String(cert.subject?.CN ?? "?") };
+    return { validTo: new Date(cert.valid_to), names: cert.subjectaltname || String(cert.subject?.CN ?? "?"), fingerprint256: cert.fingerprint256 };
   } catch (e) {
     return { error: (e as Error).message.slice(0, 200) };
   }

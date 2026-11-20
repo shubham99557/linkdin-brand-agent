@@ -765,7 +765,7 @@ They live in git-ignored `.env.staging` and `secrets\`. A probe (no admin rights
 - **Renewal tested end to end** in a scratch project: the new certificate is valid for one year for localhost, the
   old one is kept, and no certificate is left in the store.
 
-## ADR-036 — Chat-First connector: Claude Desktop with a local MCP bridge (P11) — PROPOSED, awaiting owner decision D-14
+## ADR-036 — Chat-First connector: Claude Desktop with a local MCP bridge (P11) — AGREED IN PRINCIPLE 2026-11-20; read-only proof of concept only
 **Context (2026-11-20).** The owner wants to use their Claude subscription for interactive research, strategy and
 writing, with the dashboard staying the system of record. Facts are from official Anthropic sources (details and
 URLs in `docs/chat-first-mcp-review.md`):
@@ -801,3 +801,43 @@ URLs in `docs/chat-first-mcp-review.md`):
   - one dependency (MCP SDK), reviewed under the ADR-029 gate.
 - **Limits:** the pilot is interactive only, and its throughput depends on subscription limits.
 - **Check first:** before relying on it for business work, the owner confirms the plan's terms (D-16).
+
+**Amendment 2026-11-20 (owner: "agree in principle; recheck two findings; read-only proof of concept first").**
+- **Rechecked surfaces** (official sources; details in `docs/chat-first-mcp-review.md` §6.1):
+  - **Claude Desktop chat:** a local server from `claude_desktop_config.json` is supported (stated).
+  - **Cowork:** not stated.
+  - **Desktop Extensions:** a packaging of local servers.
+  - **Claude Code CLI:** does not read the Desktop config.
+  - **claude.ai web:** remote connectors only.
+
+  The target is **Claude Desktop chat**. Support is stated, and it must still be proven on this PC.
+- **Corrected terms statement** (§6.2):
+  - **Scope:** the current Consumer Terms (effective 8 Oct 2025) are the UK consumer version, applying to someone
+    "acting wholly or mainly outside your trade, business, craft or profession".
+  - **Commercial use:** §11 *Non-commercial use only* says "You agree not to use our Services for any commercial or
+    business purposes". This ADR no longer states a blanket rule for a company's Pro or Max account; the page leaves
+    that open (D-16, legal).
+  - **Automated access:** a separate clause, §3(7), about bots or scripts driving Anthropic's apps. Design A does
+    not do that.
+- **Proof-of-concept decisions:**
+  1. **Connector key:**
+     - a new `connector` session kind, created only by an admin;
+     - ≤ 8 h, one per person, revocable, audited;
+     - the token is written only to `secrets\`.
+  2. **Exactly one database function accepts it** (`lbe.connector_brain_get`, `lbe_agent` only). To guarantee
+     this, `lbe.session_resolve` now names `agent_job` instead of accepting any non-interactive kind. This tightens
+     the existing rule and loosens nothing.
+  3. **API:** `GET /api/connector/v1/brand-brain`, Bearer key only, `lbe_agent`, `LBE_CONNECTOR=off` by default.
+  4. **The bridge implements MCP stdio itself** (about 200 lines, no dependencies) for the single read-only tool.
+     The `@modelcontextprotocol/sdk` gate (P11-02) waits until the read-only path is proven and write tools are
+     approved.
+  5. **The key goes only to 127.0.0.1 or localhost.** Over HTTPS, the server's certificate fingerprint (recorded
+     with the key) must match before anything is sent.
+- **Local finding:** this PC's Microsoft Store build of Claude Desktop (6.6395) reads
+  `%LOCALAPPDATA%\Claude-Data\claude_pzs8sxrjxfjjc\claude_desktop_config.json`, not the documented `%APPDATA%` path.
+- **Status:**
+  - **Built and verified with a real stdio client** against the development server: 10 approved entries returned,
+    the key never exposed, the call audited.
+  - **Pinning verified** against the real staging server.
+  - **Claude Desktop chat call:** pending the owner's test.
+  - **No write tools.** Staging is not enabled.

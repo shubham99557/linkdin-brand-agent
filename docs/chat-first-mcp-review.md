@@ -1,6 +1,6 @@
 # Chat-First Branding Agent: architecture review and recommendation (P11-00)
 
-_2026-11-20. Status: **recommendation, awaiting owner decision D-14**. Nothing has been built for this yet._
+_2026-11-20. Status: **design A agreed in principle by the owner; read-only proof of concept built (§7), awaiting the owner's Claude Desktop chat test**. No write tools exist._
 
 ## 0. Summary for the owner
 
@@ -18,10 +18,17 @@ _2026-11-20. Status: **recommendation, awaiting owner decision D-14**. Nothing h
 - **API credits depend on your plan.** Max ($100/month), Ultra ($200/month) and Team ($20 per standard seat,
   pooled up to $500/month) include monthly API credits. **Pro does not.** Your plan isn't confirmed yet. On Max
   or Team, the existing automated mode would likely cost you nothing extra: a weekly campaign is about $1–2.
-- **Check before relying on it for the business.** The Consumer Terms that cover Claude.ai and Claude Pro for
-  individuals say: *"You agree not to use our Services for any commercial or business purposes."* Business use
-  normally sits under a Team or Enterprise plan or the API, which use Anthropic's Commercial Terms. Please check
-  which plan and terms your account is on; this is a legal point, not a technical one.
+- **Check which terms cover your account before relying on it for the business** (corrected 2026-11-20; see §6).
+  - **What the current Consumer Terms say** (effective 8 Oct 2025): this is the UK consumer version. It applies
+    *"if you are a consumer who is resident in the United Kingdom"*, a consumer being someone *"acting wholly or
+    mainly outside your trade, business, craft or profession"*.
+  - **Where the business-use clause sits:** §11, *Non-commercial use only*: *"You agree not to use our Services for
+    any commercial or business purposes"*.
+  - **Whether that clause applies to a company using a Pro or Max account is not settled by this page.** It is a
+    question for Anthropic or a lawyer, not something this review concludes.
+  - **Clearly covered by the Commercial Terms:** Team, Enterprise and the API (when used for an organization).
+  - **Automated access is a separate clause.** §3(7) is about bots and scripts driving Anthropic's apps, which this
+    design does not do.
 - **Recommendation.**
   - **Design A** (Claude Desktop with a small local MCP connector) for a mock-safe internal pilot. It fits
     "everything stays on this PC" (D-13), reuses the existing permissions, and adds no running cost.
@@ -37,12 +44,12 @@ Quotes were taken from the live pages by a fetching tool. Spot-check the wording
 |---|---|---|---|
 | 1 | Claude chat custom connectors | Available on Free, Pro, Max, Ultra, Team and Enterprise (Free: one connector). **"Your MCP server must be reachable over the public internet from Anthropic's IP ranges"**, on HTTPS port 443. Streamable HTTP (legacy SSE being deprecated). Auth: OAuth 2.0, a request-header credential (beta), or none | support.claude.com/en/articles/11175166 · claude.com/docs/connectors/building · claude.com/docs/connectors/custom/add-unlisted |
 | 1b | Private networks | MCP tunnels are a research preview, *Enterprise only, by request*, for RFC 1918 addresses. Not an option for this PC | claude.com/docs/connectors/mcp-tunnels/overview |
-| 2 | Claude Desktop local MCP on Windows | Supported: config at `%APPDATA%\Claude\claude_desktop_config.json`, or desktop extensions (`.mcpb`) under Settings → Extensions. "A desktop extension … runs on your device inside Claude Desktop", "with your user permissions", available "when you're signed in to claude.ai". **Plan eligibility for personal plans isn't stated** (Team/Enterprise admins can restrict it) | modelcontextprotocol.io/docs/develop/connect-local-servers · claude.com/docs/connectors/custom/add-unlisted · support.claude.com/en/articles/10949351 |
+| 2 | Claude Desktop local MCP on Windows (rechecked per surface, §6) | **Desktop chat: supported (stated):** "A server you define in claude_desktop_config.json is available in both the Desktop chat surface and local Code tab sessions." **Cowork: not stated** (it loads the connectors enabled for the claude.ai account). **Claude Code CLI: does not read** `claude_desktop_config.json`. **claude.ai web: remote connectors only.** The documented path is `%APPDATA%\Claude\claude_desktop_config.json`, but **this PC's Microsoft Store build (6.6395) uses `%LOCALAPPDATA%\Claude-Data\claude_pzs8sxrjxfjjc\`** (found locally; see §7). Full quit and restart after editing. Plan eligibility for personal plans: not stated | code.claude.com/docs/en/desktop · claude.com/docs/cowork · modelcontextprotocol.io/docs/develop/connect-local-servers · support.claude.com/en/articles/10949351 |
 | 3 | Claude Code MCP | stdio and HTTP servers; scopes local / project (`.mcp.json`) / user; permission prompts for MCP tools, allow rules `mcp__<server>__<tool>`; runs stdio servers as local processes on Windows | code.claude.com/docs/en/mcp · code.claude.com/docs/en/permissions |
 | 4 | Subscription vs API billing | "A paid Claude subscription enhances your chat experience, and the Claude API is billed separately." Claude Code on Pro/Max shares the same usage limits as Claude chat. An `ANTHROPIC_API_KEY` in the environment switches Claude Code to API billing | support.claude.com/en/articles/9876003 · support.claude.com/en/articles/11145838 · code.claude.com/docs/en/authentication |
 | 5 | Monthly API credits | "Claude Max, Ultra, and Team plans include monthly credits for the Claude API." Max $100, Ultra $200, Team $20 per standard seat ($100 per premium seat), pooled up to $500. **"Free, Pro, and Enterprise plans aren't eligible."** They cover the Claude API, Agent SDK, Managed Agents and Playground, **not Claude Code**. Claimed by linking a Console organization; "Unused credits expire at the end of each billing cycle … and don't roll over" | platform.claude.com/docs/en/about-claude/api-credits-for-subscribers |
 | 6 | Routing subscription credentials through other apps | "Anthropic does not permit third-party developers to offer Claude.ai login into their own applications, or to route requests through Free, Pro, Max, or Ultra plan credentials on behalf of their users." "Developers building products or services … including those using the Agent SDK, should use API key authentication." Consumer Terms §3(7): no access "through automated or non-human means … Except when you are accessing our Services via an Anthropic API Key". The AUP forbids "Resell, proxy, or otherwise provide access to Claude through unauthorized means" | code.claude.com/docs/en/legal-and-compliance · anthropic.com/legal/consumer-terms · anthropic.com/legal/aup |
-| 6b | Business use on consumer plans | Consumer Terms §11, *Non-commercial use only*: "You agree not to use our Services for any commercial or business purposes". These terms cover "Claude.ai, Claude Pro, and other products and services … for individuals" (effective 8 Oct 2025). Organization use of the API and Console is under the Commercial Terms | anthropic.com/legal/consumer-terms |
+| 6b | Business use on consumer plans (rechecked, §6) | The UK consumer version (effective 8 Oct 2025, *Audience: Individual*) applies "if you are a consumer who is resident in the United Kingdom". §11 *Non-commercial use only*: "You agree not to use our Services for any commercial or business purposes", followed by a liability limitation for lost profit or business. §2 *Evaluation*: evaluation use is "for your personal, non-commercial use only". The preamble sends organization use of the API, Console and other offerings to the Commercial Terms, "For clarity, this does not include Claude.ai or Claude Pro use for individuals or entities." **Applicability to a company's Pro or Max account: not settled by the page** | anthropic.com/legal/consumer-terms |
 | 7 | Connector permissions and security | Claude asks before tool calls; "only click 'Allow always' when using a server and tool that you trust to run unsupervised"; individual tools can be set to Blocked. Read-only tools can run without per-call confirmation and destructive tools always prompt (stated in the directory review criteria). "Malicious MCP servers may include hidden instructions…"; "Only connect Claude to servers built and hosted by organizations … you trust" | support.claude.com/en/articles/11175166 · claude.com/docs/connectors/building/review-criteria · modelcontextprotocol.io spec (annotations are untrusted unless from trusted servers) |
 | 8 | Can chat write into our app? | Yes: tools "can read data …, create, modify, or delete data, and take actions on your behalf". Limits in Claude chat and Desktop: tool result about 150,000 characters, 240 s per call (Claude Code: 25,000 tokens) | claude.com/docs/connectors/custom/add-unlisted · claude.com/docs/connectors/building |
 | 9 | Background and scheduled execution | **Claude chat scheduling: not found.** Claude Code *scheduled tasks* run on Anthropic's cloud on subscription usage, so they **cannot reach a 127.0.0.1 server**. Desktop scheduled tasks "only run while the desktop app is running and your computer is awake". Headless `claude -p` uses the subscription login unless `--bare`. "Advertised usage limits … assume ordinary, individual usage". No sentence explicitly permits unattended automation on subscription credentials (**grey area**) | code.claude.com/docs/en/routines · /desktop-scheduled-tasks · /headless · /legal-and-compliance |
@@ -158,7 +165,9 @@ Quotes were taken from the live pages by a fetching tool. Spot-check the wording
 - **Monthly API credits:** only on **Max, Ultra or Team** (not Pro, Free or Enterprise). Please confirm your plan.
 - **Suitable for internal use?** Yes, as a mock-safe, owner-present pilot (design A), subject to two checks:
   - local MCP is available in your Claude Desktop;
-  - your plan's terms allow business use. Consumer terms exclude it; Team and Enterprise are commercial.
+  - the terms covering your account fit business use. The UK consumer version has a non-commercial clause whose
+    application to a company's Pro or Max account the page leaves open; Team, Enterprise and the API are under the
+    Commercial Terms.
 - **Commercial SaaS would additionally need:**
   - hosted infrastructure (OA-9);
   - a remote MCP server on public HTTPS with OAuth 2.0 per customer;
@@ -168,3 +177,100 @@ Quotes were taken from the live pages by a fetching tool. Spot-check the wording
   - a security review and connector directory review criteria.
 
   Customers would connect their own Claude accounts; the product never handles their Claude credentials.
+
+## 6. Recheck on owner request (2026-11-20)
+
+**6.1 Which Claude surface can call a local MCP tool?** Each surface was checked on its own, with no inference
+from one to another.
+
+| Surface | Verdict | Evidence (official) |
+|---|---|---|
+| **Claude Desktop chat** (a normal conversation) | **Supported: stated** | code.claude.com/docs/en/desktop: "A server you define in claude_desktop_config.json is available in both the Desktop chat surface and local Code tab sessions." modelcontextprotocol.io/docs/develop/connect-local-servers uses Claude Desktop as the example; "All actions require your explicit approval before execution." |
+| **Cowork** | **Not stated** | claude.com/docs/cowork: "Cowork loads the ones enabled for your claude.ai account, synced at session start, and doesn't read the Claude Code CLI's ~/.claude directory on your machine." No mention of local servers or desktop extensions (outside admin-managed third-party set-ups) |
+| **Desktop Extensions (.mcpb)** | Packaging of a local server; in chat: supported | claude.com/docs/connectors/building/mcpb: "a zip archive containing a local MCP server and a manifest.json, which Claude Desktop installs in a single click … runs on the user's machine over stdio." Cowork and Claude Code: not stated. Directory listings for MCPB are deprecated |
+| **Claude Code CLI** | **Does not read the Desktop config** | code.claude.com/docs/en/desktop: "The standalone CLI does not read claude_desktop_config.json." It uses its own config (`claude mcp add`, `.mcp.json`, `~/.claude.json`) |
+| **Claude Code tab in Claude Desktop** | Supported: stated | same page: "The Desktop app loads MCP servers from claude_desktop_config.json into local Code tab sessions" |
+| **claude.ai in a browser** | Remote connectors only | claude.com/docs/connectors/getting-started: "claude.ai on the web: remote connectors"; desktop extensions work in "The Claude desktop app, signed in to claude.ai" |
+
+**Conclusion:** the intended interface is **Claude Desktop chat**. Support there is stated, but stated is not the
+same as tested here. The proof of concept below checks it on this PC (§7).
+
+**6.2 Consumer Terms (current text, read 2026-11-20).** anthropic.com/legal/consumer-terms, effective 8 Oct 2025,
+*Audience: Individual*.
+- **Scope:**
+  - "These Terms apply to you if you are a consumer who is resident in the United Kingdom";
+  - a consumer is someone "acting wholly or mainly outside your trade, business, craft or profession";
+  - covers "Claude.ai, Claude Pro, and other products and services that we may offer for individuals";
+  - governing law: English.
+- **Commercial use:**
+  - §11 *Non-commercial use only*: "You agree not to use our Services for any commercial or business purposes". It
+    is an obligation on the user, in the same paragraph as a limitation of liability for lost profit or business.
+  - §2 *Evaluation*: "Use of our Services for evaluation purposes are for your personal, non-commercial use only."
+  - Preamble: organization use of "any Anthropic API key, the Anthropic Console, or any other Anthropic offerings"
+    is governed by the Commercial Terms. "For clarity, this does not include Claude.ai or Claude Pro use for
+    individuals or entities."
+- **Automated access (separate):** §3, "You may not access or use … our Services in the following ways:", item 7:
+  "Except when you are accessing our Services via an Anthropic API Key or where we otherwise explicitly permit it,
+  to access the Services through automated or non-human means, whether through a bot, script, or otherwise."
+- **What this review does and does not conclude:**
+  - **Concludes:**
+    - The automated-access clause rules out bots or scripts driving Claude.ai or Claude Desktop. Design A does not
+      do that: the owner talks to Claude, and Claude calls our tool.
+    - The API (design C) is the permitted route for automation.
+  - **Does not conclude:** whether a UK company may use a Pro or Max account for business work. The current page
+    applies the non-commercial clause to *consumers*, and it does not settle which terms govern a business user of
+    Claude.ai or Pro. That stays an owner and legal question (D-16). Team, Enterprise and the API are unambiguous
+    business routes.
+
+## 7. Read-only proof of concept (P11-01a)
+
+**What was built** (only `get_brand_brain`; no write tools):
+- **Connector key:** a new session kind, created by an **admin** in the dashboard (*System health → Claude
+  connector*).
+  - **Lifetime:** 1–8 hours; one per person; revocable with one click.
+  - **Storage:** the token is written only to `secrets\claude-connector-<env>.json` and never returned to the
+    browser.
+  - **Audit:** creation, revocation and every call (`connector.key_created`, `connector.keys_revoked`,
+    `connector.tool_called`).
+- **Database boundary:**
+  - **The key works in exactly one function,** `lbe.connector_brain_get`, executable only by `lbe_agent`. It returns
+    the organization's *approved* entries (not retired ones, not the logo data).
+  - **Tightening found and fixed:** `lbe.session_resolve` used to accept *any* non-interactive session kind where
+    job sessions are allowed. It now names `agent_job` explicitly, so a connector key is refused by every other
+    function (tested on sign-in, Brand Brain read and write, drafts, key creation and STOP).
+- **API:** `GET /api/connector/v1/brand-brain`, with a Bearer key only (the dashboard cookie and dashboard sessions
+  are refused). It runs as `lbe_agent` and returns 404 unless `LBE_CONNECTOR=on`, which is **off by default**.
+  Admin routes create, revoke and show status.
+- **Bridge** (`services/api/src/connector-bridge.ts`): the process Claude Desktop starts.
+  - **Footprint:** plain Node, **no dependencies, no database access**; MCP over stdio (JSON-RPC 2.0; versions
+    2024-11-05 to 2025-11-25).
+  - **Tool:** exactly one, `readOnlyHint: true`, no arguments accepted.
+  - **Key handling:** sent only to 127.0.0.1 or localhost. Over HTTPS it is sent only after the server's
+    certificate matches the fingerprint stored with the key. It never appears in output or logs.
+  - **Why no SDK yet:** the MCP SDK dependency gate (P11-02) is deferred until the read-only path is proven.
+
+**Evidence:**
+- **Tests:**
+  - `tests/db/connector.test.ts`: 7 tests;
+  - `tests/integration/connector.test.ts`: 9 tests, including the real bridge process spoken to over stdio, and a
+    silent server answered with a plain message and no crash;
+  - the privilege snapshot is updated.
+- **Mutation checks**, each caught: key accepted by other functions, read function accepting any session kind,
+  route ignoring the off switch, key returned to the browser, tool not marked read-only.
+- **Full regression:** Vitest 496, Playwright 21, PostgreSQL 11/11, audit 0.
+- **Real runs on this PC:**
+  - **Development** (connector on, test data): a key was created through the admin route (the key is not in the
+    browser response). The bridge, started exactly as Claude Desktop starts it, completed initialize and tools/list
+    (one tool, read-only) and returned **10 approved entries**. The key was absent from the output and logs, and the
+    audit recorded the call.
+  - **Staging, HTTPS pinning with a dummy key** (connector still off there):
+    - with a matching certificate, the request reached the server;
+    - with a wrong certificate, nothing was sent.
+
+    This run found and fixed two bugs: the pinned connection was being bypassed, and a timeout crashed the bridge.
+- **Claude Desktop on this PC:** the Microsoft Store build 6.6395 keeps its config at
+  `%LOCALAPPDATA%\Claude-Data\claude_pzs8sxrjxfjjc\claude_desktop_config.json`, not the documented `%APPDATA%` path.
+  - A first attempt at the documented path was not read. It was found by local inspection and corrected.
+  - The entry was added next to the existing preferences, with a backup kept.
+  - The app was restarted.
+  - **The chat call itself needs the owner at the screen** (P11-01a acceptance).

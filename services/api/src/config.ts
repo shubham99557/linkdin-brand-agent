@@ -35,6 +35,8 @@ const EnvSchema = z.object({
   // P9-04: automatic backups of the embedded database while the server runs (0 = off). Kept in backups/auto/<env>.
   LBE_AUTO_BACKUP_HOURS: z.coerce.number().min(0).max(168).default(24),
   LBE_AUTO_BACKUP_KEEP: z.coerce.number().int().min(1).max(365).default(14),
+  // P11-01a: read-only Claude connector (local MCP bridge for Claude Desktop). Off unless explicitly switched on.
+  LBE_CONNECTOR: z.enum(["on", "off"]).default("off"),
   // ---- Phase 2: live LinkedIn (all optional; live publishing is OFF unless explicitly enabled) ----
   LBE_LIVE_PUBLISHING: z.enum(["on", "off"]).default("off"),
   LBE_TOKEN_ENC_KEY: z.string().optional(),
