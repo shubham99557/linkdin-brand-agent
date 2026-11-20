@@ -37,6 +37,7 @@
     "render:demo": "tsx scripts/render-demo.ts",
     "setup:staging": "node scripts/setup-staging.mjs",
     "staging:init": "node scripts/run-staging.mjs services/api/src/cli/staging-init.ts",
+    "staging:renew-cert": "node scripts/renew-staging-cert.mjs",
     "staging:user": "node scripts/run-staging.mjs services/api/src/cli/create-user.ts",
     "start:staging": "node scripts/run-staging.mjs services/api/src/main.ts",
     "pilot:preflight": "node scripts/run-staging.mjs services/api/src/cli/pilot-preflight.ts",

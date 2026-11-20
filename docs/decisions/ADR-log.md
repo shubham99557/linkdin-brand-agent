@@ -713,3 +713,54 @@ resolve it (`confirmed_published` with the post reference, `confirmed_not_publis
   - the server made its first automatic backup one minute after start (231 rows, drill passed);
   - `backup:external` ran while the server was running, used it, made a fresh staging backup, and verified the
     set; the temporary copy was deleted.
+
+## ADR-035 — Secrets, HTTPS and environment separation on this PC (P9-03, D-13)
+**Context (2026-11-20).** Everything runs on, and stays on, one Windows laptop (D-13). The secrets:
+- the Anthropic key;
+- the LinkedIn app secrets;
+- the LinkedIn token-encryption key;
+- the HTTPS certificate passphrase.
+
+They live in git-ignored `.env.staging` and `secrets\`. A probe (no admin rights needed) found:
+- the files are private to the owner's account, SYSTEM and Administrators;
+- **drive C: is not BitLocker-encrypted**;
+- the staging certificate is valid until 2027-11-19, and nothing could renew it (`setup:staging` stops once
+  `.env.staging` exists).
+
+**Decision.**
+- **Secrets stay as files, protected by Windows permissions and disk encryption.** They are not encrypted with a
+  further key: that key would have to live on the same PC, which adds failure modes (a lost key = a broken
+  server) without stopping an attacker who already controls the account. Theft of the laptop is covered by
+  BitLocker, an owner action (**OA-11**, high priority, before real data is entered).
+- **System health gains three checks:**
+  - **Disk encryption:** Windows *BitLocker protection* property, readable without admin. Off, suspended or
+    decrypting → needs attention, with the steps.
+  - **Secret file access:** ACLs read by well-known SIDs, so it works in any Windows language. Everyone,
+    Authenticated Users, Users or Guests → problem.
+  - **HTTPS certificate:** expiry read at start by the server from its own PFX, so the passphrase never leaves the
+    process. Fewer than 30 days → needs attention; expired or unreadable → problem.
+
+  The Windows probe runs PowerShell with its inputs in environment variables, and is cached for 10 minutes.
+- **Renewal:** `npm run staging:renew-cert` uses the same recipe as `setup:staging`. It keeps the existing
+  passphrase, keeps the old file as `-replaced-<date>.pfx`, restores it if renewal fails, and removes the
+  temporary certificate-store entry.
+- **Environment separation at start-up:** a server refuses to start if the development and staging settings point
+  at the same embedded database folder (`assertSeparateDatabase`). This joins the existing rules: live publishing
+  is staging-only, `staging:init` refuses the development database, and `brain:reset-dev` refuses staging.
+- **Owner guide:** `docs/local-operations.md` → *Secrets*. Every secret, where it is, when and how to replace it.
+
+**Not done (on purpose).** Rotating the LinkedIn token-encryption key needs re-encrypting stored tokens. It stays
+"ask your developer, disconnect meanwhile" until a live connection exists (pilot, P6-02).
+
+**Evidence.**
+- `tests/integration/system-health.test.ts` +5:
+  - encryption states;
+  - broad access → problem;
+  - certificate thresholds, unreadable certificate, none on HTTP;
+  - a real probe on this PC: the project's secret files are private, and a temporary file granted to Everyone is
+    detected;
+  - shared database folders refused both ways, with this PC's real settings accepted.
+- **Mutation checks**, each caught: BitLocker off treated as fine, open files ignored, Everyone missing from the
+  probe, an expiring certificate not flagged, a shared database allowed.
+- **Renewal tested end to end** in a scratch project: the new certificate is valid for one year for localhost, the
+  old one is kept, and no certificate is left in the store.

@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { parseEnv } from "node:util";
 import { z } from "zod";
 
 export const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -53,6 +54,26 @@ export type Config = z.infer<typeof EnvSchema> & {
   liveEnabled: boolean;
   linkedinApps: { founder_app?: { clientId: string; clientSecret: string }; company_app?: { clientId: string; clientSecret: string } };
 };
+
+/**
+ * P9-03 environment separation: development and staging must never open the same embedded database folder (two
+ * servers on one PGlite folder can damage it, and test data would mix with real data). Reads the other settings
+ * file without loading it. Throws with a plain explanation when they collide.
+ */
+export function assertSeparateDatabase(cfg: Pick<Config, "LBE_ENV" | "LBE_DATABASE_URL" | "pgliteDir">, root = REPO_ROOT): void {
+  if (cfg.LBE_DATABASE_URL !== "pglite") return;
+  for (const file of [".env", ".env.staging"]) {
+    const full = path.join(root, file);
+    if (!existsSync(full)) continue;
+    const other = parseEnv(readFileSync(full, "utf8"));
+    const otherEnv = other.LBE_ENV || (file === ".env" ? "development" : "staging");
+    if (otherEnv === cfg.LBE_ENV || (other.LBE_DATABASE_URL || "pglite") !== "pglite") continue;
+    if (path.resolve(root, other.LBE_PGLITE_DIR || ".data/pglite") === path.resolve(cfg.pgliteDir)) {
+      throw new Error(`Refusing to start: the ${cfg.LBE_ENV} settings use the same database folder as ${otherEnv} (${file}: ${other.LBE_PGLITE_DIR}). `
+        + "Each environment needs its own LBE_PGLITE_DIR.");
+    }
+  }
+}
 
 /** Load `.env` (if present) then validate. Phase 1/2.1 deliberately has no "production" mode. */
 /** Which env file to load: `.env` by default, or LBE_ENV_FILE (must be a `.env*` file in the repo root, e.g. `.env.staging`). */

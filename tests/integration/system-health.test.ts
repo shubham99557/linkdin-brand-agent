@@ -1,15 +1,17 @@
 // P9-05: System health checks for running on this PC (disk, database, backups, workers, secrets), the overall
 // verdict that drives the admin banner, and admin-only access.
+import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MockDrafter } from "@lbe/drafting";
 import { MockLinkedInProvider } from "@lbe/publishing";
 import { createApp } from "../../services/api/src/app.ts";
-import { REPO_ROOT } from "../../services/api/src/config.ts";
+import { assertSeparateDatabase, REPO_ROOT } from "../../services/api/src/config.ts";
 import { dbMockStore } from "../../services/api/src/jobs/publisher.ts";
-import { systemHealth, type RuntimeState } from "../../services/api/src/system-health.ts";
+import { certificateInfo, probeWindowsSecurity, systemHealth, type RuntimeState } from "../../services/api/src/system-health.ts";
 import { freshDb, TEST_PASSWORDS, type TestDb } from "../helpers/db.ts";
 
 const NOW = new Date("2026-11-20T12:00:00Z");
@@ -25,7 +27,7 @@ const runtime = (over: Partial<RuntimeState> = {}): RuntimeState => ({
   agentRunner: { enabled: true, intervalMs: 2_000, lastTickAt: ago(1_000), busySince: null, lastError: null },
   ...over,
 });
-const healthy = { freeBytes: async () => 50 * GB, trackedSecrets: async () => [] as string[] };
+const healthy = { freeBytes: async () => 50 * GB, trackedSecrets: async () => [] as string[], windowsSecurity: async () => ({ bitlocker: 1, broadAccess: [] as string[] }) };
 const status = async (over: Partial<RuntimeState> = {}, extra: Partial<Parameters<typeof systemHealth>[0]> = {}) =>
   systemHealth({ db: t.db, runtime: runtime(over), backups, now: NOW, ...healthy, ...extra });
 const check = (h: Awaited<ReturnType<typeof systemHealth>>, id: string) => h.checks.find((c) => c.id === id)!;
@@ -49,7 +51,7 @@ describe("System health (P9-05)", () => {
   it("everything fine → overall ok; informational items (live publishing, uptime) never raise the alarm", async () => {
     const h = await status();
     expect(h.overall).toBe("ok");
-    expect(h.checks.map((c) => c.id)).toEqual(["database", "disk", "backups", "publisher", "agent_runner", "live", "secrets", "uptime"]);
+    expect(h.checks.map((c) => c.id)).toEqual(["database", "disk", "backups", "publisher", "agent_runner", "live", "secrets", "secret_access", "encryption", "uptime"]);
     expect(h.checks.filter((c) => c.status !== "ok" && c.status !== "info")).toEqual([]);
   });
 
@@ -83,7 +85,7 @@ describe("System health (P9-05)", () => {
   it("secret files tracked by Git are a problem; on the real project none are", async () => {
     const leaked = await status({}, { trackedSecrets: async () => [".env.staging"] });
     expect(check(leaked, "secrets")).toMatchObject({ status: "bad", detail: expect.stringMatching(/\.env\.staging/) });
-    const real = await systemHealth({ db: t.db, runtime: runtime({ repoRoot: REPO_ROOT }), backups, now: NOW, freeBytes: healthy.freeBytes });
+    const real = await systemHealth({ db: t.db, runtime: runtime({ repoRoot: REPO_ROOT }), backups, now: NOW, freeBytes: healthy.freeBytes, windowsSecurity: healthy.windowsSecurity });
     expect(check(real, "secrets").status).toBe("ok");                         // asks Git about this repository
   });
 
@@ -96,7 +98,7 @@ describe("System health (P9-05)", () => {
   });
 
   it("real free-space reading works on this computer", async () => {
-    const h = await systemHealth({ db: t.db, runtime: runtime({ dataPath: REPO_ROOT }), backups, now: NOW, trackedSecrets: healthy.trackedSecrets });
+    const h = await systemHealth({ db: t.db, runtime: runtime({ dataPath: REPO_ROOT }), backups, now: NOW, trackedSecrets: healthy.trackedSecrets, windowsSecurity: healthy.windowsSecurity });
     expect(check(h, "disk").detail).toMatch(/GB free/);
   });
 
@@ -113,6 +115,60 @@ describe("System health (P9-05)", () => {
     expect((await get(await login("editor@lbe.test", TEST_PASSWORDS.editor))).status).toBe(403);
     const res = await get(await login("admin@lbe.test", TEST_PASSWORDS.admin));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { checks: unknown[] }).checks.length).toBe(8);
+    expect(((await res.json()) as { checks: Array<{ id: string }> }).checks.map((c) => c.id)).toEqual(expect.arrayContaining(["database", "disk", "backups", "secrets"]));
+  });
+});
+
+describe("Secrets, HTTPS and environment separation (P9-03)", () => {
+  it("disk encryption: off or suspended needs attention with what to do; on is fine; unknown is information", async () => {
+    const enc = async (bitlocker: number | null) => check(await status({}, { windowsSecurity: async () => ({ bitlocker, broadAccess: [] }) }), "encryption");
+    expect(await enc(2)).toMatchObject({ status: "warn", action: expect.stringMatching(/Turn on BitLocker/) });
+    expect((await enc(5)).status).toBe("warn");
+    expect((await enc(1)).status).toBe("ok");
+    expect((await enc(6)).status).toBe("ok");
+    expect((await enc(null)).status).toBe("info");
+  });
+
+  it("secret files that other Windows users can open are a problem", async () => {
+    const h = await status({}, { windowsSecurity: async () => ({ bitlocker: 1, broadAccess: ["C:\\p\\.env.staging (Everyone)"] }) });
+    expect(check(h, "secret_access")).toMatchObject({ status: "bad", detail: expect.stringMatching(/\.env\.staging \(Everyone\)/) });
+    expect(h.overall).toBe("bad");
+  });
+
+  it("HTTPS certificate: expired is a problem, under 30 days needs attention, otherwise fine; plain HTTP servers have no such check", async () => {
+    const cert = async (days: number) => check(await status({ tls: { validTo: new Date(NOW.getTime() + days * 86_400_000), names: "DNS:localhost" } }), "certificate");
+    expect(await cert(-1)).toMatchObject({ status: "bad", action: expect.stringMatching(/staging:renew-cert/) });
+    expect(await cert(10)).toMatchObject({ status: "warn", detail: expect.stringMatching(/10 days/) });
+    expect((await cert(200)).status).toBe("ok");
+    expect(check(await status({ tls: { error: "bad password" } }), "certificate").status).toBe("bad");
+    expect(check(await status(), "certificate")).toBeUndefined();
+    expect(certificateInfo(Buffer.from("not a certificate"), "x")).toMatchObject({ error: expect.any(String) });
+  });
+
+  it.runIf(process.platform === "win32")("real probe on this PC: reads BitLocker, finds the project's secret files private, and detects a file opened to Everyone", async () => {
+    const files = [".env", ".env.staging", "secrets"].map((p) => path.join(REPO_ROOT, p));
+    const real = await probeWindowsSecurity(REPO_ROOT, files);
+    expect(real).not.toBeNull();
+    expect(real!.broadAccess).toEqual([]);
+    expect(real!.bitlocker === null || Number.isInteger(real!.bitlocker)).toBe(true);
+    const open = path.join(work, "shared-secret.txt");
+    await writeFile(open, "x");
+    await promisify(execFile)("icacls", [open, "/grant", "*S-1-1-0:R"]);
+    const probed = await probeWindowsSecurity(work, [open]);
+    expect(probed!.broadAccess.join(" ")).toMatch(/shared-secret\.txt/);
+  }, 60_000);
+
+  it("development and staging may never use the same database folder", async () => {
+    const root = path.join(work, "envsep");
+    await mkdir(root, { recursive: true });
+    await writeFile(path.join(root, ".env"), "LBE_ENV=development\nLBE_PGLITE_DIR=.data/pglite\n");
+    await writeFile(path.join(root, ".env.staging"), "LBE_ENV=staging\nLBE_PGLITE_DIR=.data/pglite\n");
+    const staging = { LBE_ENV: "staging" as const, LBE_DATABASE_URL: "pglite", pgliteDir: path.join(root, ".data", "pglite") };
+    expect(() => assertSeparateDatabase(staging, root)).toThrow(/same database folder as development/);
+    expect(() => assertSeparateDatabase({ ...staging, LBE_ENV: "development" }, root)).toThrow(/same database folder as staging/);
+    await writeFile(path.join(root, ".env.staging"), "LBE_ENV=staging\nLBE_PGLITE_DIR=.data/staging\n");
+    expect(() => assertSeparateDatabase({ ...staging, pgliteDir: path.join(root, ".data", "staging") }, root)).not.toThrow();
+    expect(() => assertSeparateDatabase({ ...staging, LBE_DATABASE_URL: "postgres://x" }, root)).not.toThrow();
+    expect(() => assertSeparateDatabase({ LBE_ENV: "development", LBE_DATABASE_URL: "pglite", pgliteDir: path.join(REPO_ROOT, ".data", "pglite") })).not.toThrow();   // this PC's real settings
   });
 });

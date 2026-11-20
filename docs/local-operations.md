@@ -95,10 +95,42 @@ Claude commits every change in Git on this PC, and the USB copy includes the ful
 2. Stop the server.
 3. Run `npm ci`, then start the server again.
 
+## Secrets: where they are and how to replace them (P9-03)
+
+All secrets live in two places on this PC:
+- `.env` (development) and `.env.staging` (your real work);
+- the `secrets\` folder.
+
+Only your Windows account and administrators can open them (System health checks this). They are never in Git
+(checked) and never in backups (on purpose). **Turn on BitLocker** for C: (OA-11) so a stolen laptop doesn't
+expose them.
+
+| Secret | Where | Replace it when | How |
+|---|---|---|---|
+| Anthropic API key | `.env.staging` → `ANTHROPIC_API_KEY` | It may have been seen by someone else | Delete it in the Anthropic Console, create a new one, paste it into the file yourself, restart |
+| LinkedIn app secret | `.env.staging` → `LBE_LINKEDIN_*_CLIENT_SECRET` | Same | Regenerate it in the LinkedIn Developer Portal, update the file, restart, reconnect the accounts |
+| LinkedIn connection key | `.env.staging` → `LBE_TOKEN_ENC_KEY` | The file leaked | Ask your developer to rotate it. Meanwhile **Disconnect** the accounts (*Accounts & voices*) |
+| HTTPS certificate + passphrase | `secrets\localhost.pfx`, `.env.staging` → `LBE_TLS_PFX_PASSPHRASE` | Every year (System health warns 30 days before) | `npm run staging:renew-cert`, then restart; the old file is kept |
+| Development passwords | `.env` → `LBE_DEV_*_PASSWORD` | Not needed (test logins only) | — |
+
+Never paste these values into chat, email or tickets. The incident runbook says what to do if one leaks.
+
+**Environment separation:**
+- **Different databases:** development (`.data\pglite`, port 8787) and staging (`.data\staging`, port 8443) use
+  different databases. A server refuses to start if both settings files point at the same database folder.
+- **Staging only:** live LinkedIn publishing can only be switched on in staging.
+- **Development only:** `brain:reset-dev` only ever touches development.
+
 ## Health and emergencies
 
-- **System health page** (admin menu) checks the database, disk space, backups, the background workers, live
-  publishing and that secret files stay out of Git. Every check says what to do.
+- **System health page** (admin menu) checks:
+  - the database, disk space, backups and the background workers;
+  - live publishing;
+  - that secret files stay out of Git and are private to your account;
+  - disk encryption (BitLocker);
+  - the HTTPS certificate (staging).
+
+  Every check says what to do.
 - **Banner:** while anything needs attention, admins see a banner at the top of every page.
 - **Emergencies** (lost PC, suspected break-in, wrong post, leaked key): follow `docs/incident-runbook.md`.
   Incidents involving LinkedIn data must be reported to LinkedIn within 24 hours.

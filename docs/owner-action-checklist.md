@@ -13,6 +13,7 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 | # | Action | Unblocks | Priority |
 |---|---|---|---|
 | OA-1 | Backup copy on a USB drive (everything stays on this PC, D-13): plug in a drive, run `npm run backup:external` | P0-07 (laptop-loss risk) | **High** |
+| OA-11 | Turn on BitLocker for drive C: (found off on 2026-11-20) | P9-03 (stolen-laptop risk) | **High** (before entering real data) |
 | OA-2 | Create your real staging user | P2-06, pilot, real Brand Brain | **High** |
 | OA-3 | Enter real Brand Brain knowledge | P2-08 → AI evaluation, Creative templates | **High** |
 | OA-4 | Create the founder LinkedIn app | P6-01 → pilot | Medium |
@@ -50,6 +51,26 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
   After a restore on a new PC you enter those again and reconnect LinkedIn. Each backup folder contains a
   `READ-ME-restore.txt` with the restore steps.
 - **Cost:** a USB drive, if you don't have one. No cloud service, no account.
+
+## OA-11 — Turn on BitLocker for drive C: (disk encryption)
+- **What:** encrypt this laptop's disk with BitLocker (built into Windows 11 Pro).
+- **Why:** on 2026-11-20 the System health page found drive C: **not encrypted**. Anyone who steals the laptop
+  could read the database (your Brand Brain, users' password hashes), the LinkedIn app secret and the key that
+  protects LinkedIn connections straight from the disk, without your Windows password. Everything stays on this
+  PC (D-13), so this is the main protection against theft.
+- **Steps** (needs your administrator rights; the PC stays usable while it encrypts):
+  1. Start menu → type **Manage BitLocker** → open it.
+  2. Next to **C:**, click **Turn on BitLocker**.
+  3. **Back up the recovery key** to your Microsoft account, or print it, or save it on the USB backup drive.
+     **Never** save it only on this laptop. Without it, a Windows or firmware update could lock you out of your own
+     data.
+  4. Choose **Encrypt used disk space only** (fastest on a laptop that is already in use) and
+     **New encryption mode**. Then continue and restart if asked.
+  5. Encryption runs in the background (an hour or so). D: is on the same disk; turn it on there too if you keep
+     work files on D:.
+- **Check:** the System health page shows **Disk encryption: OK — BitLocker is on for this drive**.
+- **Tell Claude:** "OA-11 done". No key or password is needed.
+- **Cost:** none.
 
 ## OA-2 — Create your real staging user
 - **What:** an admin account for you in the staging database, marked as approver for the founder profile.

@@ -7,13 +7,14 @@ import { redactForLog } from "@lbe/security";
 import { createApp } from "./app.ts";
 import { startAutoBackup } from "./auto-backup.ts";
 import { autoBackupDir, EXTERNAL_MARKER } from "./backup-paths.ts";
-import type { RuntimeState } from "./system-health.ts";
-import { loadConfig, REPO_ROOT } from "./config.ts";
+import { certificateInfo, type RuntimeState } from "./system-health.ts";
+import { assertSeparateDatabase, loadConfig, REPO_ROOT } from "./config.ts";
 import { startAgentRunner } from "./jobs/agent-runner.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 import { buildDrafter, buildLinkedIn, buildProvider, buildRegistry, buildSpecialists, openConfiguredDb, VOICE_DIR, WEB_DIST } from "./runtime.ts";
 
 const cfg = loadConfig();
+assertSeparateDatabase(cfg);                       // P9-03: development and staging never share a database folder
 const db = await openConfiguredDb(cfg);
 const provider = buildProvider(cfg, db);
 const linkedin = buildLinkedIn(cfg, db);
@@ -32,6 +33,8 @@ const runtime: RuntimeState = {
   dataPath: cfg.LBE_DATABASE_URL === "pglite" ? cfg.pgliteDir : REPO_ROOT, repoRoot: REPO_ROOT,
   publisher: { enabled: cfg.LBE_RUN_WORKER, intervalMs: cfg.LBE_WORKER_INTERVAL_MS, lastTickAt: null, lastError: null },
   agentRunner: { enabled: cfg.LBE_RUN_AGENT_JOBS, intervalMs: cfg.LBE_AGENT_JOB_INTERVAL_MS, lastTickAt: null, busySince: null, lastError: null },
+  // P9-03: the certificate this server serves (checked once at start; the passphrase stays in this process).
+  ...(tls ? { tls: certificateInfo(readFileSync(path.resolve(REPO_ROOT, cfg.LBE_TLS_PFX!)), cfg.LBE_TLS_PFX_PASSPHRASE) } : {}),
 };
 const app = createApp({
   db, drafter, provider, linkedin, specialists,
