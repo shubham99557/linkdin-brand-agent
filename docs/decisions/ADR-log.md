@@ -765,7 +765,7 @@ They live in git-ignored `.env.staging` and `secrets\`. A probe (no admin rights
 - **Renewal tested end to end** in a scratch project: the new certificate is valid for one year for localhost, the
   old one is kept, and no certificate is left in the store.
 
-## ADR-036 — Chat-First connector: Claude Desktop with a local MCP bridge (P11) — AGREED IN PRINCIPLE 2026-11-20; read-only proof of concept only
+## ADR-036 — Chat-First connector: Claude (Desktop, now Claude Code + Remote Control) with a local MCP bridge (P11) — AGREED IN PRINCIPLE 2026-11-20; read-only proof of concept verified with Claude Code
 **Context (2026-11-20).** The owner wants to use their Claude subscription for interactive research, strategy and
 writing, with the dashboard staying the system of record. Facts are from official Anthropic sources (details and
 URLs in `docs/chat-first-mcp-review.md`):
@@ -841,3 +841,27 @@ URLs in `docs/chat-first-mcp-review.md`):
   - **Pinning verified** against the real staging server.
   - **Claude Desktop chat call:** pending the owner's test.
   - **No write tools.** Staging is not enabled.
+**Amendment 2026-11-20 (2) — owner: "instead of claude desktop can we use claude code in browser".**
+- **Client changed** from Claude Desktop chat to **Claude Code with Remote Control**: Claude Code runs on this PC and
+  claude.ai/code in the browser only shows the session.
+  - **Rejected alternative:** Claude Code *cloud* sessions run in an Anthropic VM, would upload the code (D-13), and
+    cannot reach a tool on this PC.
+  - Evidence and quotes: `docs/chat-first-mcp-review.md` §6.1 and §8.
+- **Least privilege moves into a permission file**, because Claude Code (unlike Desktop chat) has shell and file
+  tools.
+  - **Location:** `scripts/start-brand-chat.ps1` writes `%LOCALAPPDATA%\ActTrident\brand-chat\settings.json`, passed
+    with `--settings` and outside the chat folder.
+  - **Allowed:** `get_brand_brain`, WebSearch, WebFetch.
+  - **Denied:** shell, every file tool, scheduled and cloud agents, workflows, plugin publishing, and the owner's
+    personal claude.ai connectors.
+  - **Connector registration:** local scope for the chat folder only.
+- **Plan:** `claude auth status` reports a **Team** subscription, so business use runs under the Commercial Terms
+  (D-16 largely settled). Remote Control on Team needs an organization Owner to switch it on (observed: "disabled
+  by your organization's policy").
+- **Status:**
+  - **Verified with a real Claude Code session on this PC (11:51):** Read and Bash were absent from the model's
+    tools; `get_brand_brain` returned 10 approved entries; the call was audited.
+  - **Pending:** the browser view, waiting on the organization toggle.
+  - **No write tools yet.** P11-01b (research findings) comes next, after the owner has seen the read-only chat.
+- **Claude Desktop config entry:** left in place (harmless, read-only). Remove it in *Settings → Developer* if
+  unused.

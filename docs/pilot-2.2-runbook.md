@@ -54,12 +54,18 @@ If the founder is a different person, create them with `--role approver --approv
 (That ID is the staging founder account. `npm run staging:init` prints it again.)
 
 ### D. Pre-flight, start, connect (owner + me)
-1. `npm run pilot:preflight` → must show **NO BLOCKING FAILURES**.
+_Owner decision 2026-11-20: "i want to use normal linkdin account". Connect the founder's normal LinkedIn account
+directly, without a test profile. Connecting and the read-only check post nothing; every live post still needs
+steps E–G with the owner present._
+1. With the staging server **stopped**, run `npm run pilot:preflight` → must show **NO BLOCKING FAILURES**.
+   The embedded database admits one program at a time; with the server running, the check refuses.
 2. `npm run start:staging`, then open **https://localhost:8443**. Accept the browser warning for the self-signed
    certificate (local only), and sign in as admin.
-3. *Accounts & voices* → founder account → **Connect LinkedIn**. On LinkedIn, sign in as the **test profile** and allow.
-4. Back in the dashboard, confirm the connected name is the test profile.
-5. `npm run pilot:verify -- --yes-call-linkedin` (read-only). Record the userinfo URN and introspection scopes in the log.
+3. *Accounts & voices* → founder account → **Connect LinkedIn**. On LinkedIn, sign in to the founder's account and
+   allow.
+4. Back in the dashboard, confirm the connected name is the founder.
+5. Stop the server, run `npm run pilot:verify -- --yes-call-linkedin` (read-only), then start it again. Claude does
+   this step. Record the userinfo URN and introspection scopes in the log.
    **If the URN does not match, stop here.**
 
 ### E. Go/no-go #1 — switch live on (owner)

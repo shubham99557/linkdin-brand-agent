@@ -128,6 +128,29 @@ Never paste these values into chat, email or tickets. The incident runbook says 
 - **Staging only:** live LinkedIn publishing can only be switched on in staging.
 - **Development only:** `brain:reset-dev` only ever touches development.
 
+## Brand research chat (Claude Code in the browser)
+
+- **Start:** `powershell -ExecutionPolicy Bypass -File scripts\start-brand-chat.ps1`, then open https://claude.ai/code
+  and pick **ActTrident brand chat**.
+- **Keep the window open.** Claude runs on this PC; the browser only shows it, and nothing becomes reachable from
+  outside.
+- **What the chat can use:**
+  - the approved Brand Brain (read-only, `get_brand_brain`);
+  - web search and web fetch.
+- **What it cannot do:** use a shell, read or change files, use your mail, calendar or drive connectors, change the
+  Brand Brain, approve or publish.
+- **Needs:**
+  - a connector key (dashboard: *System health → Claude connector*, valid up to 8 h);
+  - on the Team plan, *Remote Control* switched on once (claude.ai → Admin settings → Claude Code).
+- **Stop:** close the window. **Revoke access:** *Revoke all keys* on the same dashboard panel.
+
+## One program per database
+
+The embedded database may be open in only one program at a time. Commands such as `pilot:preflight`,
+`pilot:verify`, `db:backup` and `staging:user` therefore refuse while the server runs:
+*already open in program N … stop the server*. Stop the server, run the command, then start it again. If the server
+crashed, the next start takes over its leftover lock automatically.
+
 ## Health and emergencies
 
 - **System health page** (admin menu) checks:

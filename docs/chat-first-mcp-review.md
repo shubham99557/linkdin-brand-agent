@@ -191,6 +191,8 @@ from one to another.
 | **Claude Code CLI** | **Does not read the Desktop config** | code.claude.com/docs/en/desktop: "The standalone CLI does not read claude_desktop_config.json." It uses its own config (`claude mcp add`, `.mcp.json`, `~/.claude.json`) |
 | **Claude Code tab in Claude Desktop** | Supported: stated | same page: "The Desktop app loads MCP servers from claude_desktop_config.json into local Code tab sessions" |
 | **claude.ai in a browser** | Remote connectors only | claude.com/docs/connectors/getting-started: "claude.ai on the web: remote connectors"; desktop extensions work in "The Claude desktop app, signed in to claude.ai" |
+| **Claude Code on the web** (cloud sessions, claude.ai/code) | **Not usable for this design** (added 2026-11-20, §8) | code.claude.com/docs/en/cloud-environments: "Cloud sessions start from a fresh clone of your repository. Anything you've installed or configured only on your own machine isn't available in the session." A repository without a remote "is bundled … and uploaded" (claude-code-on-the-web). Code would leave the PC (D-13) |
+| **Claude Code Remote Control** (browser at claude.ai/code, session on this PC) | **Supported: stated; verified locally except the browser view** (§8) | code.claude.com/docs/en/remote-control: "Claude keeps running locally the entire time"; "your filesystem, MCP servers, tools, and project configuration all stay available"; "makes outbound HTTPS requests only and never opens inbound ports". Team/Enterprise: an Owner must enable the Remote Control toggle |
 
 **Conclusion:** the intended interface is **Claude Desktop chat**. Support there is stated, but stated is not the
 same as tested here. The proof of concept below checks it on this PC (§7).
@@ -274,3 +276,50 @@ same as tested here. The proof of concept below checks it on this PC (§7).
   - The entry was added next to the existing preferences, with a backup kept.
   - The app was restarted.
   - **The chat call itself needs the owner at the screen** (P11-01a acceptance).
+  - **Rerun 2026-11-20 11:29:** Claude Desktop had not started the connector because it was **signed out**
+    (main.log: "User is logged out"). Superseded by §8.
+
+## 8. Owner switch: Claude Code in the browser (2026-11-20)
+
+**Owner:** "instead of claude desktop can we use claude code in browser".
+
+**What "Claude Code in the browser" can mean** (official docs, quotes in §6.1):
+- **Cloud sessions** run in an Anthropic VM from a clone or upload of the code. A tool on this PC is unreachable,
+  and the code would leave the PC. **Rejected** (D-13, no internet exposure).
+- **Remote Control:** Claude Code runs **on this PC** and claude.ai/code only shows the session.
+  - **Network:** outbound HTTPS only, routed through Anthropic; no inbound ports.
+  - **Local tools:** the local connector and settings apply.
+  - **Chosen.**
+
+**Plan and terms:** `claude auth status` on this PC reports `subscriptionType: team` (claude.ai sign-in). A Team plan
+is a business plan under the Commercial Terms, which largely settles D-16. Remote Control on Team is **off until an
+organization Owner switches it on**. Observed: "Remote Control is disabled by your organization's policy."
+
+**Set-up** (`scripts/start-brand-chat.ps1`):
+- **Chat folder:** a dedicated folder outside the project, `%USERPROFILE%\acttrident-brand-chat`, with instructions
+  in `tools/claude-brand-chat/CLAUDE.md`. They cover: approved facts only, sources with dates, untrusted web pages,
+  and no posting.
+- **Connector:** registered for that folder only (`claude mcp add --scope local`, same bridge and key as P11-01a).
+- **Permission file:** kept outside the folder and passed with `--settings`, so sessions can't change it.
+  - **Allowed without asking:** `get_brand_brain`, WebSearch, WebFetch.
+  - **Denied:** Bash, PowerShell, Read, Glob, Grep, Edit, Write, NotebookEdit; scheduled and cloud agents, workflows,
+    plugin publishing, worktrees; and the owner's personal claude.ai connectors (Gmail, Calendar, Drive, Docs and
+    others).
+  - **Why:** the chat reads untrusted web pages, so it must not reach mail, files or a shell.
+- **Retry:** the window retries Remote Control every 30 s until the organization toggle is on.
+
+**Evidence (2026-11-20 11:51, Claude Code 2.1.329, real session in the chat folder with that permission file):**
+- **Connector registered:** `claude mcp list` shows `acttrident-brand-brain … √ Connected`.
+- **Tools offered to the model:** `get_brand_brain`, WebSearch and harness tools. **No Read, Bash, Edit or Write.**
+  Deny rules remove the tools rather than prompting.
+- **Model answer:**
+  - "The get_brand_brain tool returned 10 approved entries. The first is titled 'Audience problems'";
+  - reading `.env.example`: "DENIED. No file-reading tool is available";
+  - shell: "DENIED. No shell tool is available".
+- **Audit (development):** `connector.tool_called {"tool":"get_brand_brain","entries":10}` at 11:51:05, same key.
+- **Not yet seen:** the same session viewed from the owner's browser. It waits on the organization toggle; the
+  browser is only a view of the same local session.
+
+**Comparison with Claude Desktop chat:** Desktop chat has no shell or file tools at all. Claude Code has them, and
+they are removed by a permission file rather than absent by design. With the deny list above, the reachable surface
+is the same: one read-only tool plus web research.

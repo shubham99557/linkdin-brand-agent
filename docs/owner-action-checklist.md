@@ -92,6 +92,13 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 - **Meanwhile:** independent engineering tasks (P1-xx, P4-xx).
 
 ## OA-12 — Chat-First (Claude Desktop) decision
+- **Update 2026-11-20:**
+  - **Your plan:** this PC is signed in to a **Claude Team** plan. Team is a business plan, so the terms question is
+    largely settled.
+  - **Your choice:** Claude Code in the browser, through Remote Control.
+  - **The one click needed:** claude.ai → **Admin settings → Claude Code → Remote Control: on**.
+  - **Then:** open https://claude.ai/code and pick *ActTrident brand chat*. The window from
+    `scripts\start-brand-chat.ps1` must stay open.
 - **What:** three quick checks, then a choice:
   1. In Claude (Settings → **Billing** or **Plan**), see which plan you have: Pro, Max, Ultra or Team.
   2. In **Claude Desktop** on this PC, check that **Settings → Extensions** (or **Settings → Developer → Edit
