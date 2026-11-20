@@ -394,4 +394,4 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-19 | P2-04 DONE (owner renames accounts; validated, audited, approvals unaffected; migration 2100) | `1ad9319` |
 | 2026-11-19 | P2-03 DONE for .txt/.md (upload → review → grounded proposals); PDF split out as P2-03b, blocked on OA-10 (ADR-032: `unpdf` reviewed statically, running it needs owner approval) | `6aaef5f` |
 | 2026-11-19 | P4-05 DONE (pipelined drafting, same results and budget decisions; ADR-033) — no READY engineering tasks left; everything open waits on owner actions | `c664605` |
-| 2026-11-20 | P2-03b DONE: PDF upload after owner approval OA-10 (`unpdf` 2.1.0 in a permission-locked child process; ADR-032 amendment: separate process instead of worker thread) | P2-03b commit |
+| 2026-11-20 | P2-03b DONE: PDF upload after owner approval OA-10 (`unpdf` 2.1.0 in a permission-locked child process; ADR-032 amendment: separate process instead of worker thread) | `67467cb` |
