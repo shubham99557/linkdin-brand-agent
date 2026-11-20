@@ -37,6 +37,18 @@ This log records corrections and Phase 1 decisions. Where an ADR conflicts with 
 | 029 | Render dependencies: satori, resvg-wasm, pdfkit, Inter (P5-00 gate) | Accepted | selective-reuse-plan "resvg-js" → resvg-wasm |
 | 030 | Visuals are part of the approved publication package | Accepted | ADR-005 (extends) |
 | 031 | Monthly campaigns are sequential weekly agent jobs | Accepted | ADR-028 (extends) |
+| 032 | Document upload; PDF text extraction dependency | Accepted (owner, OA-10) | — |
+| 033 | Pipelined drafting with the same results and budget decisions | Accepted | ADR-028 (extends) |
+| 034 | Running on this PC: automatic backups while the server runs | Accepted | ADR-024 (extends) |
+| 035 | Secrets, HTTPS and environment separation on this PC | Accepted | — |
+| 036 | Chat-First connector with a local MCP bridge | Agreed in principle; read-only PoC verified | — |
+| 037 | GTM engine scope: reference blueprint as requirements, one system of record, milestones M0–M8 | Proposed (D-17) | ADR-027 milestone names |
+| 038 | Brand Brain v2: buyer ICP vs ideal follower, founder story, exemplars, style rules | Accepted for P2-09; rest Proposed | ADR-018 (extends) |
+| 039 | Content jobs (Attract/Teach/Prove/Convert), configurable mix, topic tree | Proposed | ADR-031 (extends) |
+| 040 | Lead intelligence data: first-party only, normalized, provenance, verified-identifier dedup, suppression | Proposed | integration-contracts §1 lead side |
+| 041 | Fit and intent scoring: deterministic, versioned, explainable; UNKNOWN is not zero; human gate | Proposed | — |
+| 042 | External messages: human approval bound to the text, manual sending, no LinkedIn automation | Proposed | ADR-004 (extends) |
+| 043 | Lead capture while the system runs only on this PC (D-13) | Proposed (D-18) | — |
 
 ---
 
@@ -865,3 +877,134 @@ URLs in `docs/chat-first-mcp-review.md`):
   - **No write tools yet.** P11-01b (research findings) comes next, after the owner has seen the read-only chat.
 - **Claude Desktop config entry:** left in place (harmless, read-only). Remove it in *Settings → Developer* if
   unused.
+
+## ADR-037 — GTM engine scope: reference blueprint as requirements, one system of record, milestones M0–M8 — PROPOSED (owner decision D-17)
+**Context (2026-11-20).** The owner's master prompt extends the product from branding to an inbound GTM engine
+(lead magnets, signals, fit/intent, conversations, meetings, attribution, weekly learning). It names a third-party
+blueprint (OneGTMLab *LinkedIn Personal Brand Engine*, plus a Claude + Prospeo supplement) as the business
+requirements source. The document is not on this PC. Gap analysis: `docs/reference-gap-analysis.md`.
+
+**Proposed decision.**
+1. **Requirements, not implementation.** The blueprint defines what the business needs. Its tools (Notion,
+   Supabase, n8n, LangGraph, Prospeo) and its text, prompts and templates are not adopted or copied.
+2. **One system of record:** the existing database, dashboard, durable jobs, approval package, outbox, STOP and
+   audit. New capabilities are new tables and functions in the existing `lbe` schema (forward-only migrations,
+   business rules in the database), new pages in the existing dashboard and new specialists in the existing agent
+   layer. External tools are optional **adapters** behind an interface, added only for a demonstrated need with
+   owner approval.
+3. **Milestones M0–M8** replace the earlier M1–M6 names (mapping in `plan.md` §E2). Existing task IDs are kept;
+   new IDs only for missing capabilities.
+4. **A milestone is done only when its business workflow has been demonstrated** (synthetic first, then real),
+   not when tests pass.
+
+**Consequences.** Phase 8 (leads) moves from "after the pilot, separately scoped" to M2–M4, but on **synthetic
+data and mock providers** until the privacy gate (OA-8, OA-11) and D-18 are cleared. No new framework or database.
+
+## ADR-038 — Brand Brain v2: buyer ICP vs ideal follower, founder story, exemplars, style rules — ACCEPTED for P2-09 (owner master prompt §5, 2026-11-20); remainder PROPOSED
+**Context.** The Brand Brain has 13 sections (ADR-018). One section, `icp`, mixes the people who **buy** with the
+people who **follow** the content. These are different audiences: content for followers builds reach and trust;
+the buyer ICP drives qualification. The owner's prompt: "The buyer and follower are not interchangeable."
+
+**Decision (P2-09, now).**
+- `icp` keeps its key (no data migration, existing entries and proposals stay valid). It is relabelled **Buyer
+  ICP**, with six guided questions: company characteristics, decision-maker roles, buying problems, geography,
+  verified buying criteria, exclusions.
+- New **required** section `ideal_follower`: who finds the content valuable, topics they follow, their language and
+  questions, and how they relate to or influence buyers.
+- Agents receive both under separate, labelled headings, with an explicit note that they differ.
+- Same rules as every section: owner-approved, versioned, audited; agents propose only (`lbe.brain_propose`).
+
+**Proposed (later tasks).**
+- `founder_story`: P2-10, owner-written or proposed only with a verbatim quote.
+- `exemplar_posts`: P2-10, one entry per authentic post, with provenance; used as a style reference with an
+  overlap guard.
+- Structured `style_rules` per account, enforced deterministically: P2-11.
+- Rejection-reason categories: P2-12.
+
+**Consequences.**
+- Staging's Brand Brain is still empty, so no real content is affected.
+- Development's synthetic Brand Brain gains a synthetic `ideal_follower` entry.
+- `brain:audit` and the onboarding wizard show the new section.
+
+## ADR-039 — Content jobs (Attract/Teach/Prove/Convert), configurable mix, topic tree — PROPOSED
+**Proposed decision.**
+- **Content job.** Every plan item and post carries one `content_job` (`attract`, `teach`, `prove`, `convert`),
+  one objective, a target audience (`buyer` or `follower`) and a subtopic from an owner-approved **topic tree**
+  (pillar → topic → subtopic).
+- **Mix.** The campaign stores the owner's **content mix** (counts or percentages per job). No default house
+  strategy is hard-coded; the dashboard suggests one, and the owner sets it.
+- **Rules in the database and validators:**
+  - `prove` needs at least one verified claim;
+  - `convert` needs a call to action pointing at an approved lead magnet or booking link;
+  - the mix is honoured to within one post;
+  - a subtopic repeated within the owner's look-back window is flagged.
+- **Shared contract.** The strategy schema becomes v3, used by both the API mode and the Chat-First connector.
+
+## ADR-040 — Lead intelligence data: first-party only, normalized, provenance, verified-identifier dedup, suppression — PROPOSED
+**Proposed decision.**
+- **Tables** in `lbe`: `people`, `companies`, `person_identifiers` (email, phone, company number, domain;
+  `verified` flag), `leads`, `signals`, `lead_magnets` and versions, `lead_requests`, `consent_records`,
+  `suppressions` (hashed identifier, reason, scope), `conversations`, `messages`, `meetings`, `opportunities`,
+  `attribution_touches`.
+- **Every personal-data row** records its source, collection permission or lawful basis, collected-at date and
+  retention date.
+- **Allowed signal sources.** Signals come only from an allow-list of first-party sources. LinkedIn member data
+  from the API, scraping or browser tools cannot be stored: there is no source value for it. This follows the
+  capability register `engagement_to_leads: prohibited`.
+- **Deduplication** merges only on a verified identifier. Weaker matches (names, unverified emails) create a merge
+  **review** item, never an automatic merge. A person can have many signals, but one active workflow.
+- **Suppression** is checked inside every function that drafts, approves, imports or exports.
+- **Roles.** The agent role can read minimal lead fields and propose; it cannot approve, mark as sent, export or
+  delete. Subject export and deletion are admin functions; deletion keeps only the hashed suppression entry.
+- **Real data waits for the privacy gate.** Until the gate (OA-8 privacy notice and lawful basis, OA-11 disk
+  encryption) is passed, the server refuses real personal data in staging: `LBE_LEAD_DATA=synthetic` by default.
+  Development uses synthetic people only.
+
+## ADR-041 — Fit and intent scoring: deterministic, versioned, explainable; UNKNOWN is not zero; human gate — PROPOSED
+**Proposed decision.**
+- **Two separate scores.** FIT is checked against the approved Buyer ICP (ADR-038). INTENT is computed from
+  allow-listed signals with recency decay.
+- **Rubrics** are versioned rows: criteria, weights, a 0–10 scale as the starting point. A version is proposed by
+  Claude or the owner and approved by the owner (D-24).
+- **What each score stores:** per-criterion value, evidence reference, missing information, evaluation time,
+  rubric version, confidence, and a plain-English reason built from the evidence.
+- **Unknown stays unknown.** An unknown criterion is `UNKNOWN`, not 0, and counts against confidence.
+- **Verdicts** are deterministic: Act now, Warm first, Nurture, Enrich first, Disqualified. Exclusions and
+  suppression are applied first.
+- **Role of AI.** AI may summarize evidence and propose classifications as proposals. It never sets a score or a
+  verdict.
+- **Human gate.** Moving a lead into the outreach queue is a human action, enforced in the database.
+
+## ADR-042 — External messages: human approval bound to the text, manual sending, no LinkedIn automation — PROPOSED
+**Proposed decision.**
+- **Drafts.** Reply and follow-up drafts are `messages` with status
+  `draft → approved → sent_manually | sent_by_provider`.
+- **Approval** binds the exact text and recipient by hash, as ADR-004 does for posts. Any edit needs a new
+  approval. The agent role can only create drafts.
+- **Sending.**
+  - **LinkedIn and other unsupported channels:** the approved text is shown copy-ready. The owner sends it
+    personally and records "sent".
+  - **Nothing is ever sent through browser automation, cookies or unofficial tools.**
+  - **Future providers** (email, an official inbox or CRM API) go through the existing outbox and STOP. Each
+    provider is switched on by its own environment gate and owner decision, like `LBE_LIVE_PUBLISHING`.
+- **PECR.** Email to individual subscribers (sole traders, partnerships) needs recorded consent. Corporate
+  subscribers need an opt-out in every message. Rules are enforced on approval.
+- **Conversation stages:** OPEN → QUALIFY → PIVOT → BOOK, plus closed states. Each change is audited, with an
+  owner and a next-action date.
+
+## ADR-043 — Lead capture while the system runs only on this PC (D-13) — PROPOSED (owner decision D-18)
+**Context.** The server answers only on this PC (D-13, ADR-035). A lead-magnet request page on the public internet
+therefore cannot post to it.
+
+**Options.**
+- **(a) Website form, imported (recommended first).** ActTrident's website or a form service collects the request
+  with the privacy notice and consent wording. Entries are imported into the system (CSV upload, later a mailbox or
+  provider adapter), keeping the consent text version and time.
+- **(b) Small hosted capture endpoint.** It only stores requests and is pulled by this PC. This needs hosting
+  (OA-9), its own security review and a processor agreement.
+- **(c) Expose this PC.** Not recommended: inbound exposure, MFA (P9-02) and uptime.
+
+**Proposed decision.**
+- Build the request page and the capture function inside the existing server for **test mode** (synthetic test
+  user, same database rules), plus the **import path** for (a).
+- Real intake starts only after D-18 and the privacy gate (ADR-040).

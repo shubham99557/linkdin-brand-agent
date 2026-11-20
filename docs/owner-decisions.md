@@ -39,3 +39,12 @@ _Updated 2026-11-19 (Phase 1)._
 | D-14 | Chat-First connector design (P11): A = Claude Desktop + local MCP bridge (this PC only), B = remote connector on the internet, C = existing API mode only. | **Recommended: A for interactive work, keep C for automation; B only for future SaaS** (`docs/chat-first-mcp-review.md`, ADR-036) | Phase 11 |
 | D-15 | May the connector's write tools save research, weekly plans, drafts, visuals and Brand Brain *proposals*? (Approval, publishing and Brand Brain writes stay manual regardless.) | Recommended: yes | P11-04 |
 | D-16 | Which Claude plan is the account on, and do its terms allow business use? Max/Ultra/Team include monthly API credits (Pro does not); the Consumer Terms for Claude.ai/Pro say "You agree not to use our Services for any commercial or business purposes." | Owner to confirm (plan page in Claude settings); Team or the API (Commercial Terms) are the business routes | P11-01, D-06 |
+| D-17 | Adopt the *LinkedIn Personal Brand Engine* blueprint as a **requirements source** (not copied) and the GTM milestones M0–M8, with one system of record (ADR-037). | Recommended: yes | Plan |
+| D-18 | How do real lead-magnet requests reach a system that answers only on this PC (D-13)? (a) website form, entries imported; (b) small hosted capture endpoint; (c) expose this PC. | **Recommended: (a) first**; (b) later if volume needs it; not (c) (ADR-043) | Real intake (M2) |
+| D-19 | Same as D-11: privacy notice, lawful basis (consent vs legitimate interests), LIA, retention periods — before any real personal data. | Privacy adviser; Claude prepares drafts for review | Real lead data |
+| D-20 | Email delivery for resources and follow-ups. | Manual copy-ready messages first; a transactional provider later | Automatic delivery |
+| D-21 | May the owner enter, by hand, people who asked ActTrident directly (DM or email) for a resource or a conversation? | Yes, with source and lawful basis recorded; never from LinkedIn API data or scraping | Manual imports (M2/M4) |
+| D-22 | Prospect-data vendor (e.g. Prospeo): licensing, DPA, cost, lawful basis. | Not now; mock interface only | P8-13 |
+| D-23 | Default content mix (Attract/Teach/Prove/Convert) and style rules per account. | Owner sets them; no built-in house style | M2 |
+| D-24 | Fit/intent rubric v1 and weights. | Claude proposes from the Buyer ICP; owner approves the version | M3 |
+| D-25 | Booking link, calendar or CRM adapters (Calendly, HubSpot …). | Booking link only first | M4 |

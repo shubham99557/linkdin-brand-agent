@@ -21,7 +21,9 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 | OA-5 | Create company-page app + apply for Community Management | P6-07 (review takes weeks) | Medium (start early) |
 | OA-6 | Authorize a budget-capped paid AI evaluation — **you chose "not yet" (2026-11-20)**; say "enable real AI with a cap of $N/month" when ready | P3-04 | Medium (after OA-3) |
 | OA-7 | Legal question on scheduled posting | P6-06 | Low |
-| OA-8 | Privacy documents for leads | Phase 8 | Low (later) |
+| OA-8 | Privacy documents for leads (D-11/D-19) | Real lead data (M2 real intake onward; synthetic data works without it) | Medium (before real leads) |
+| OA-13 | Put the reference PDF (*LinkedIn Personal Brand Engine*) in the project's `private-reference` folder (never uploaded to GitHub) | Recheck of the gap analysis | Low |
+| OA-14 | Decide D-17 (adopt the M0–M8 plan) and D-18 (how real lead-magnet requests reach this PC) | M2 real intake | Medium |
 | OA-9 | Hosting choice for internal production | Phase 9 | Low (later) |
 | ~~OA-10~~ | ~~Approve (or decline) the PDF reader library for document upload~~ **Done: approved 2026-11-20; PDF upload is live (P2-03b)** | P2-03b | Done |
 
@@ -181,8 +183,24 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 - **Why:** until answered, every live post needs a manual "Publish now" click.
 - **Confirm:** a written answer. **Meanwhile:** manual release works fine.
 
-## OA-8 — Privacy documents (only before lead features)
-- Privacy notice, legitimate-interest assessment, retention policy (D-11). Needed before Phase 8. Nothing to do yet.
+## OA-8 — Privacy documents (before real lead data)
+- Privacy notice, legitimate-interest assessment, retention policy (D-11/D-19).
+- **Updated 2026-11-20:** lead features are now built from M2 onwards, but only with made-up test people until these
+  documents exist. Claude can prepare drafts for a privacy adviser to check. Also turn on BitLocker (OA-11) first.
+
+## OA-13 — Reference document for the plan (optional, 2 minutes)
+- **What:** save the *LinkedIn Personal Brand Engine* PDF into the project folder `private-reference` (create it if
+  it is missing).
+- **Why:** the gap analysis (`docs/reference-gap-analysis.md`) was built from the page list in your master prompt,
+  because the PDF is not on this PC. With the PDF, Claude rechecks every row.
+- **Privacy:** that folder is excluded from Git, so the document never goes to GitHub. Its text is not copied into
+  the product.
+
+## OA-14 — Two plan decisions
+- **D-17:** use the blueprint as the requirements source and follow milestones M0–M8 (`plan.md` §E2). Say "D-17 yes".
+- **D-18:** how real lead-magnet requests reach a system that only runs on this PC. Recommended: your website's own
+  form, with entries imported into the dashboard. Say "D-18 website form", or ask for the options.
+- Neither blocks current work; D-18 is needed before real requests are collected.
 
 ## OA-9 — Hosting choice (only before production)
 - Where the internal production system runs (D-09). Claude will prepare options and costs at Phase 9; no spending without your approval.

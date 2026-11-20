@@ -37,3 +37,6 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 *.log
+
+# Third-party reference material (OA-13): never committed
+private-reference/

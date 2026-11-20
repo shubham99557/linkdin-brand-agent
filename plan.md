@@ -15,16 +15,16 @@
 
 | Item | Value |
 |---|---|
-| Current phase | **Phase 5 engineering complete; Phase 9 for this PC done** (P9-01, P9-03, P9-04, P9-05 DONE 2026-11-20; P9-02 deferred until remote access) (Phases 0–1, 4 (incl. P4-05), 5 DONE; Phase 2 engineering done — real content = owner OA-3; Phase 3 waits on OA-3/OA-6; Phase 6 waits on OA-2/OA-4) |
-| Active task | P11-01a read-only connector — **verified with a real Claude Code session on this PC (2026-11-20 11:51: 10 entries, audited; no file or shell tools)**; owner chose Claude Code in the browser (Remote Control) — waiting for the Team-plan organization toggle ∥ P6-01 founder LinkedIn app — clipboard helper window open (owner clicks LinkedIn's copy buttons) |
-| Next READY tasks | **Owner (clicks only):** claude.ai → Admin settings → Claude Code → Remote Control on, then chat at claude.ai/code; LinkedIn copy buttons for Client ID + Secret; later Connect LinkedIn + LinkedIn sign-in. **Claude, automatically:** pre-flight (server stopped) → start → owner connects → read-only `pilot:verify`. **Then:** P11-01b research tool (D-15 research). Live posting stays off |
-| First safe milestone | **M1 Technical prototype hardened — REACHED 2026-11-19** (P1-01..06, P2-01/02; gate §H met: all suites green, restore proven, no open critical/high) |
+| Current milestone | **GTM scheme M0–M8 adopted 2026-11-20 (§E2, ADR-037, owner decision D-17).** **M0 Audit & alignment DONE** (`docs/reference-gap-analysis.md`, R-01…R-61). **M1 Real Brand Intelligence IN PROGRESS** (engineering; real content = OA-3). Foundation (former "M1 Technical prototype hardened") reached 2026-11-19 |
+| Active task | **P2-09 Buyer ICP vs ideal follower** (ADR-038), branch `develop` |
+| Next READY tasks | **Claude:** P2-10 founder story + exemplar posts → P2-11 owner style rules → P5-08 content jobs + mix → P5-09 topic tree; P0-09 policy check before any lead code. **Owner:** OA-3 real Brand Brain; D-17/D-18 decisions; OA-13 reference PDF. **Paused by the owner ("we will do it later"):** P6-01 LinkedIn app details, P11 Remote Control toggle. Live posting stays off |
+| First safe milestone | **Foundation (former M1 Technical prototype hardened) — REACHED 2026-11-19** (P1-01..06, P2-01/02; all suites green, restore proven, no open critical/high) |
 | Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate · P5-01 render service · P5-02 brand templates & previews · P5-03 visuals in approval · P5-06 accessibility · P5-04 history · P5-05 monthly campaigns · P3-01 pricing verified · P3-03 prompt review · P3-02 realistic mock drafts · P2-04 account names · P2-03 document upload (txt/md) · P4-05 pipelined drafting · P2-03b PDF upload (2026-11-20, after OA-10) · P0-07 backup to a separate device (2026-11-20, D-13) · P9-04 automatic backups + Backups page · P9-01 local operations guide · P9-05 System health + incident runbook · P2-05 brain:reset-dev · P9-03 secrets/TLS/environment separation · P5-07 branded dashboard |
 | Blocked (owner) | **OA-11 turn on BitLocker (C: found unencrypted)** · P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · OA-1 first backup copy to a USB drive (tool ready: `npm run backup:external`) |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9 and OA-11 open; OA-10 done 2026-11-20) |
-| Latest passing tests | 2026-11-20: typecheck ✅ · Vitest 503 ✅ (11 PG skipped there) · `test:pg:embedded` 11/11 ✅ · Playwright 21 ✅ (incl. axe a11y) · secret scan ✅ · npm audit 0 ✅ · signatures verified ✅ |
-| Latest commit | see `git log -1` |
-| Next milestone | **M3 Internal MVP — engineering gate met** (durable jobs with kill/resume test, real visuals approved with posts, monthly campaigns); remaining M3 criterion is a person: **the owner completes one campaign end-to-end in the dashboard** (needs OA-2 user; best with OA-3 Brand Brain + brand colours). ∥ **M2 AI intelligence evaluation** (blocked on OA-3 + OA-6) |
+| Latest passing tests | 2026-11-20 M0 baseline at `4a2b5ca`: typecheck ✅ · Vitest 503 ✅ (11 PG skipped there) · `test:pg:embedded` 11/11 ✅ · Playwright 21/21 ✅ (incl. axe a11y) · secret scan 246 files ✅ · npm audit 0 ✅ |
+| Latest commit | see `git log -1` (work branch `develop`; `main` = shared GitHub copy) |
+| Next milestone | **M1 Real Brand Intelligence** (§E2): Brand Brain v2 (P2-09…P2-12) + real content (OA-3) + one quality-reviewed campaign, via the Chat-First connector at zero API spend (P11) or a capped API budget (OA-6) |
 
 No completion percentage is reported (no agreed weighting method).
 
@@ -38,6 +38,17 @@ campaigns; writes company-page and founder content in distinct voices; produces 
 documents; routes every external action through **human approval**; publishes via **authorized LinkedIn
 integrations**; reports permitted performance; and proposes improvements — never inventing facts or silently
 rewriting the brand. Later it supports an **inbound-first** lead journey using first-party data only.
+
+**GTM engine (owner master prompt, 2026-11-20; ADR-037 proposed).** The product grows into an AI-native branding
+**and** lead-intelligence platform:
+
+brand knowledge → market intelligence → content → qualified interest → conversations → meetings → measurable
+outcomes → improved brand knowledge.
+
+The third-party *LinkedIn Personal Brand Engine* blueprint is the business requirements source, not an
+implementation to copy. Gap analysis: [`docs/reference-gap-analysis.md`](docs/reference-gap-analysis.md).
+Milestones: §E2. Lead features use **first-party data only**, synthetic data until the privacy gate, and human
+approval for every external message.
 
 **Strategy (ADR-001, confirmed by owner 2026-11-19): internal ActTrident launch first (Customer Zero),
 commercial multi-tenant SaaS later.** Keep SaaS boundaries (organizations, isolation, budgets) but do not build
@@ -150,6 +161,9 @@ ADR-022 (STOP levels), ADR-023 (isolation status).
 | G11 | Production deployment | Local only | Hosted internal production with monitoring | Repeatable use without Claude session | OA-9 | L | Secrets, TLS, backups | Ops runbook + acceptance test |
 | G12 | Tenant RLS & memberships | API filters + definer checks | RLS second layer, memberships | SaaS | Phase 10 | L | Core isolation | Multi-tenant security tests |
 
+**GTM gaps (2026-11-20):** the reference-based gap analysis (R-01…R-61, with statuses, dependencies and acceptance
+tests) is in [`docs/reference-gap-analysis.md`](docs/reference-gap-analysis.md). G9 and G10 are refined there.
+
 ---
 
 ## E. Implementation phases & milestones
@@ -171,6 +185,78 @@ ADR-022 (STOP levels), ADR-023 (isolation status).
 
 Dependency order: 0 → 1 → 2 → (3 ∥ 4) → 5 → 6 → 7 → 9; 8 after 6 (+privacy); 10 after 9. Phases 3 and 4 can
 proceed in parallel because the evaluation harness runs from the CLI, not the dashboard.
+**Superseded for milestones by §E2 (2026-11-20):** phases stay as task groups; Phase 8 work now runs in M2–M4 on
+synthetic data, before the live pilot.
+
+---
+
+## E2. GTM milestones M0–M8 (adopted 2026-11-20 — ADR-037, owner decision D-17)
+
+Vertical slices, built and demonstrated in this order. **A milestone is done only when its business workflow has
+been demonstrated** (first with synthetic data and mock providers, then for real where stated), never on passing
+tests alone. Gap references (R-xx) point to `docs/reference-gap-analysis.md`; the dependency map and user journey
+are in its §4–§5.
+
+| Milestone | Goal | Earlier milestone it absorbs | Status |
+|---|---|---|---|
+| Foundation | Hardened prototype | former M1 Technical prototype hardened | **REACHED 2026-11-19** |
+| **M0** Audit & alignment | Gaps, baseline, plan, ADRs, decisions | — | **DONE 2026-11-20** |
+| **M1** Real Brand Intelligence | Brand Brain v2 + real content + one quality-reviewed campaign | former M2 AI evaluation; former M3 owner walkthrough | IN PROGRESS |
+| **M2** Content Funnel | Content jobs, topic tree, lead magnets, request capture, attribution | — | NOT_STARTED |
+| **M3** Lead Intelligence | People/companies/signals with provenance, fit + intent | — | NOT_STARTED |
+| **M4** Conversation & Conversion | Desk, approved messages, follow-ups, meetings, opportunities | — | NOT_STARTED |
+| **M5** Learning | Weekly scoreboard, reports, approved Brain improvements | — | NOT_STARTED |
+| **M6** Live Integrations | LinkedIn pilot, permitted analytics, optional adapters | former M4 Internal pilot | BLOCKED (owner paused LinkedIn) |
+| **M7** Internal Production Readiness | Hosting, security, backups, auth, monitoring, acceptance | former M5 | Partly done (Phase 9 for this PC) |
+| **M8** Future SaaS | Multi-tenant, onboarding, billing, legal, external review | former M6 | DEFERRED |
+| Parallel | Chat-First connector (Phase 11) | — | P11-01a verified; P11-01b next |
+
+### Acceptance checklist per milestone
+
+**M0 — Audit & alignment**
+- [x] `docs/reference-gap-analysis.md`: required table, statuses, compliance redesigns, dependency map, user journey, decisions (P0-08)
+- [x] Baseline re-verified at `4a2b5ca` (typecheck, Vitest 503, PG 11/11, Playwright 21/21, secret scan, audit 0)
+- [x] ADR-037…043 proposed; plan updated with backlog and acceptance criteria
+- [ ] Owner confirms D-17 (scheme) and supplies the reference PDF (OA-13) for a recheck — not blocking engineering
+
+**M1 — Real Brand Intelligence** (tasks in order: P2-09 → P2-10 → P2-11 → P2-12; owner P2-08; then P3-04/05 or P11-08)
+- [ ] Brand Brain separates Buyer ICP and ideal follower; agents receive both, labelled (P2-09)
+- [ ] Founder story and ≥ 3 authentic exemplar posts approved; owner style rules per account enforced (P2-10, P2-11)
+- [ ] Real Brand Brain + 3–5 real verified claims in staging; `brain:audit:staging` clean (OA-3)
+- [ ] One campaign (≥ 1 week, both accounts) from the real Brand Brain, reviewed in the dashboard, human-scored for accuracy and voice, no fabricated facts; issues logged (Chat-First P11-08 at zero API spend, or P3-04/05 with OA-6)
+- [ ] Owner runs it from the dashboard without a Claude Code session
+
+**M2 — Content Funnel** (P5-08 → P5-09 → P8-07 → P0-09 → P8-03a → P8-02 → P7-03; P5-10 optional)
+- [ ] A campaign honours an owner-set content mix; PROVE without a verified claim and CONVERT without a CTA are refused
+- [ ] Plan items reference topic-tree nodes; a repeated subtopic in the look-back window is flagged
+- [ ] A lead magnet is generated from approved material, approved per version, downloadable as PDF
+- [ ] A mock-published CONVERT post links (with UTM) to the request page; a synthetic test user requests the magnet → request stored with consent text version and first touch
+- [ ] Real intake stays off until D-18 and the privacy gate (OA-8, OA-11)
+
+**M3 — Lead Intelligence** (P8-03b → P8-04 → P8-08; P8-09 mock provider)
+- [ ] A synthetic request creates person, company, lead and signal with provenance and retention date
+- [ ] Same verified email → one person; name-only match → merge-review item, never merged
+- [ ] Fit and intent show per-criterion evidence, UNKNOWN (not 0), rubric version, date and a plain-English reason
+- [ ] Suppressed → Disqualified everywhere; agent role cannot move a lead to the outreach queue (DB test); LinkedIn-derived signal sources impossible (DB test)
+
+**M4 — Conversation & Conversion** (P8-10 → P8-05 → P8-11 → P8-06)
+- [ ] Request → conversation (OPEN) → AI reply suggestion with evidence → owner approves → copy-ready → "sent manually" recorded → stage QUALIFY/PIVOT/BOOK
+- [ ] A meeting is recorded and attributed to the originating campaign, post and lead magnet; an opportunity is created
+- [ ] No external message can be approved or marked sent by the agent role; editing approved text needs re-approval (DB tests)
+
+**M5 — Learning** (P7-05 → P7-02 → P7-04)
+- [ ] Weekly report matches the recorded synthetic outcomes exactly; every number labelled verified / imported / estimated; missing metrics shown as unavailable
+- [ ] The agent proposes ≥ 1 Brand Brain improvement citing meetings or objections; owner approves or rejects; verified claims untouched
+- [ ] **Acceptance scenario steps 1–19 demonstrated end to end on synthetic data and mocks** (recorded run)
+
+**M6 — Live Integrations** (P6-01…07, P7-01, P8-12/13 optional)
+- [ ] Pilot log signed: authorized founder post, URN, audit, STOP, reconciliation (former M4 gate)
+- [ ] Real owner-approved pilot of the scenario with authorized providers only
+
+**M7 — Internal Production Readiness** (P9-06, P9-07, P9-08; P9-02 if remote access; OA-1, OA-11)
+- [ ] Former M5 gate (§H) passed with the GTM features included; privacy retention and subject requests tested
+
+**M8 — Future SaaS** — Phase 10 complete + external security review (former M6 gate).
 
 ---
 
@@ -188,6 +274,8 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 | P0-05 | Create `docs/owner-action-checklist.md` | P0-03 | P0 | DONE | C | docs/ | OA-1…9 with steps | commit |
 | P0-06 | Reconcile ADRs with internal-first/SaaS-later; mark superseded docs | P0-03 | P1 | DONE | C | ADR-log, owner-decisions | ADR-027 recorded; D-04 answered | commit |
 | P0-07 | Off-machine backup — **rescoped 2026-11-20 (owner: code and data stay on this PC, no cloud repository)**: one command copies the code (full Git history) and the databases to a **separate physical device** (USB drive) and proves the copy restores | — | P0 | DONE 2026-11-20 (tool); first copy = OA-1 | C (+O: plug in a drive) | services/api/src/external-backup.ts, cli/backup-external.ts | Refuses same physical disk and running servers; copy verified by restoring it; secrets not copied | **Evidence 2026-11-20:** `npm run backup:external -- --to E:\LBE-backups` writes a dated folder: `code.bundle` (all refs, full history), `databases/` (each embedded DB in `.env`/`.env.staging`, P1-01 format), `backup-set.json` (SHA-256 per file), `READ-ME-restore.txt`. It then **proves the copy restores** (clone → same latest commit; every DB restored with matching migrations and row counts) and fails loudly otherwise. `npm run backup:verify -- --set <folder>` re-checks checksums and restores again. Refuses: same physical disk (Windows `Get-Partition` disk number; **this laptop's C: and D: are both disk 0**, so D: is refused, confirmed by a real run), a folder inside the project, a running server; `--same-disk-ok` overrides (warning: deletion protection only). Secrets (`.env*`, `secrets/`) never copied; uncommitted changes warned. Tests: `tests/integration/external-backup.test.ts` 7/7 (full set + restore + no secrets; untouched passes / damaged caught; same-disk / inside-project refusals and override; damaged-while-writing reported as failure; running server refused; uncommitted warning; disk detection). Mutation checks: removing the same-disk refusal, the running-server refusal or the restore proof, or bundling only recent history, each fails ≥ 1 test. Real run on this project (to a temporary folder with `--same-disk-ok`, then deleted): 47 commits, development DB 231 rows, staging DB 13 rows, restored and matched; `backup:verify` passed. **Remaining (owner, OA-1):** first copy to a real USB drive. |
+| P0-08 | **M0: reference gap analysis and alignment** (owner master prompt 2026-11-20): audit code against the GTM blueprint, baseline, milestone scheme M0–M8, ADR proposals, backlog, decisions | — | P0 | DONE 2026-11-20 | C | docs/reference-gap-analysis.md, plan.md §E2, ADR-log | Required table with statuses; facts from code, not reports | **Evidence:** schema read from migrations (24 tables; none for people, companies, leads, signals, consent, suppression, conversations, meetings, opportunities or attribution); Brand Brain 13 sections with one combined `icp`; strategy item `objective` free text, no content job or topic tree; capability register marks engagement-to-leads and scraping prohibited. Baseline at `4a2b5ca`: typecheck ✅, Vitest 503 ✅, PG 11/11 ✅, Playwright 21/21 ✅, secret scan ✅, audit 0 ✅. Reference PDF not on this PC (searched the user profile) → OA-13 |
+| P0-09 | Verify current LinkedIn API Terms / User Agreement / product permissions and UK GDPR + PECR rules for every lead feature against official sources (URL + date); update the capability register and ADR-040…042 | P0-08 | P1 | READY | C | packages/domain/src/capabilities.ts, docs | Each rule cited; register updated; no lead code before this | review + register test |
 
 ### Phase 1 — Security & engineering foundation
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
@@ -211,6 +299,10 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 | P2-06 | Staging bootstrap for real use (`staging:init` + admin user) | — | P1 | DONE 2026-11-20 | O+C | scripts/create-staging-admin.ps1 | Pre-flight passes user checks | **Evidence:** staging backed up first (`backups/lbe-staging-2026-11-20T06-57-37-171Z`, 13 rows), migrated 6 → 21 (forward-only), accounts present (company page, founder profile). The owner's admin login was created in a window Claude opened (`scripts/create-staging-admin.ps1`: name, email, password typed hidden twice, ≥ 12 characters, password only in memory for the one command; approver for both accounts). Staging started (https://localhost:8443, environment badge "Staging · real data"); first automatic backup OK (17 rows, drill passed). OA-2 done |
 | P2-07 | Import brand/voice files decision (keep or replace placeholders) | — | P3 | DONE | C | — | Placeholder files flagged by audit | ADR-018 |
 | P2-08 | **Owner enters real Brand Brain + 3–5 verified claims** in staging | P2-06 | P0 | BLOCKED | O | — | `brain:audit:staging` shows no UNKNOWN required / no synthetic | OA-3 |
+| P2-09 | **Buyer ICP vs ideal follower** (M1, R-02/R-03, ADR-038): `icp` relabelled *Buyer ICP* with six guided questions; new required section `ideal_follower`; agents get both under separate labelled headings | — | P0 | IN_PROGRESS | C | migration, packages/domain/src/brain.ts, agents, web, seed | Owner can enter both; agents see both distinct; DB and domain section lists match; tests | DB + unit + e2e |
+| P2-10 | Founder story + authentic exemplar posts (R-04, R-07): `founder_story` (proposals need a verbatim quote) and `exemplar_posts` (one entry per post with provenance; writer style reference with overlap guard) | P2-09 | P1 | READY | C | migration, domain, agents | Exemplars reach the writer; a draft copying one (> 0.25 overlap) is held | unit + integration |
+| P2-11 | Owner style rules, structured and enforced per account (R-15): word range, hashtag and emoji limits, banned punctuation and phrases; no built-in house style | — | P1 | READY | C | domain, drafting validators, web | Breaking a rule flags the draft naming the rule | unit + e2e |
+| P2-12 | Rejection-reason categories → writer "avoid" input and learning evidence (R-08) | — | P2 | NOT_STARTED | C | migration, agents, web | Category stored; next writer call receives it | integration |
 
 ### Phase 3 — Real AI intelligence validation
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
@@ -242,6 +334,9 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 | P5-05 | Monthly planning & campaign objectives | P4-04 | P2 | DONE | C | migration 2000, api `/agent/campaigns`, web planner + campaign page | Month plan without duplicates | **Evidence 2026-11-19:** ADR-031 — campaign = sequential weekly durable jobs (objective, pillar-rotating focus); `job_claim` enforces week order (DB test + real-PostgreSQL race: 8 runners → only week 1; mutation → failures in both); one active campaign per org, outside the ad-hoc limit; retries keep their week; honest "partially completed"; integration: 3 weeks × 3 posts via API + runner → 9 distinct topics, all pairwise similarity < 0.5, dates inside their week; e2e: plan 2 weeks in UI → completed → 12 posts, 6 distinct topics (17/17); mock strategist has 12 angles; Vitest 395, PG 11/11 |
 | P5-06 | Accessibility (alt text required for visuals — editable by the reviewer; keyboard nav check; axe would be a new dev dependency → review first) | P5-03 | P2 | DONE | C | migration 1800, web, tests/e2e/a11y.spec.ts | axe checks pass | **Evidence 2026-11-19:** `alt_text_problem` blocks review without real alt text; `set_media_alt_text` → new immutable copy → re-approval; `tests/db/alt-text` 4/4; reviewer alt-text editor; agent drafts failing a DB rule are held, not failed; skip link + focus outline; `@axe-core/playwright` 4.14.0 reviewed (axe-core pinned 4.14.0, cooldown); a11y e2e 4/4 — keyboard-only path, 0 serious/critical WCAG A/AA violations on sign-in + 8 pages (mutation: image without alt → image-alt critical); Vitest 380, e2e 16/16 ×2, PG 10/10 |
 | P5-07 | Dashboard look & feel with ActTrident branding (owner request 2026-11-20): official logo (from the company website, owner-approved use), brand-coloured theme, grouped navigation, environment badge (development vs staging), branded sign-in page and browser icon | P5-06 | P2 | DONE 2026-11-20 | C | apps/web | Accessibility unchanged (axe, keyboard); all e2e pass | **Evidence:** logo found via web search (only ActTrident site found: acttrident-site.pages.dev, header links to acttrident.ai; UK IPO journal confirms ACTTRIDENT LTD); original PNG verified (signature, 2048×1365, SHA-256 recorded in THIRD_PARTY_NOTICES), cropped to the shield and resized with Windows' built-in imaging (32/64/96/192 px, 3–90 KB). Colours sampled from the logo (navy #01040f, shield blue #046fc5 = 5.1:1 on white). Navy sidebar with logo, grouped menu (Create / Review & publish / Govern / Admin; link names unchanged; `aria-current`), environment badge from `/api/health` (`environment` added) incl. "LIVE LinkedIn publishing on" warning, branded sign-in page, favicon + title. Visual check by screenshots (sign-in background bug found and fixed). Playwright 21/21 incl. axe (no serious/critical) and keyboard test; Vitest 481 |
+| P5-08 | **Content jobs + configurable mix** (M2, R-18/R-19, ADR-039): `content_job` (attract/teach/prove/convert), audience (buyer/follower), single objective, CTA on plan items and posts; owner mix per campaign; PROVE needs a verified claim, CONVERT a CTA; strategy schema v3 shared with the connector | P2-09 | P0 | NOT_STARTED | C | migration, agents schemas/validate, web | Mix honoured ± 1; rule violations refused; fields shown in review | DB + integration + e2e |
+| P5-09 | Topic tree (pillar → topic → subtopic, owner-approved) + subtopic repetition check (R-10, R-20) | P2-01 | P1 | NOT_STARTED | C | migration, agents, web | Plan items reference tree nodes; repeats flagged | DB + integration |
+| P5-10 | Hook options (2–3 per post; reviewer picks; part of the approved package) (R-21) | P5-08 | P2 | NOT_STARTED | C | drafting, web | Changing the hook needs re-approval | integration + e2e |
 
 ### Phase 6 — LinkedIn connection & safe publishing
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
@@ -258,19 +353,28 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 | ID | Task | Deps | Pri | Status | Who | Acceptance |
 |---|---|---|---|---|---|---|
 | P7-01 | Aggregate post metrics ingest (company page via CM; founder if permitted) | P6-07 / U-checks | P1 | NOT_STARTED | C | Metrics stored ≤1 yr, aggregates only |
-| P7-02 | Weekly branding report (facts vs hypotheses labelled) | P7-01 | P1 | NOT_STARTED | C | Report generated from stored data only |
-| P7-03 | UTM links on posts + site analytics (Umami) | P8-01 | P2 | NOT_STARTED | C | Clicks attributed |
-| P7-04 | Learning proposals from metrics (extends existing review-based learning) | P7-02 | P2 | NOT_STARTED | C | Evidence-linked proposals |
+| P7-02 | **Weekly scoreboard** (M5, R-45; rescoped 2026-11-20): posts by job, available engagement, magnet requests, deliveries, inbound/qualified leads, conversations, positive replies, meetings, opportunities, verified revenue; every number labelled verified / imported / estimated; missing = "not available"; trend vs previous weeks | P7-05, P8-06 | P1 | NOT_STARTED | C | Report generated from stored data only; matches recorded outcomes |
+| P7-03 | **UTM links + first-touch attribution** (M2, R-46; rescoped): UTM on CTA links, `attribution_touches`; optional multi-touch later; site analytics tool only after a separate decision (not required) | P8-02 | P1 | NOT_STARTED | C | Request via UTM link → first touch = that post |
+| P7-04 | **Learning proposals** (M5, R-47; extended): inputs = content results, buyer questions, objections, lost opportunities, meeting outcomes; targets = lessons, communication rules, ICP, follower, audience language, pillars (proposals only; verified claims never changed) | P7-02 | P1 | NOT_STARTED | C | Evidence-linked proposals; owner approves each |
+| P7-05 | Manual metrics import (owner types totals from LinkedIn's own UI; labelled *imported*, with date and who) (R-32) | — | P2 | NOT_STARTED | C | Imported numbers labelled; never shown as verified |
 
-### Phase 8 — Inbound lead intelligence (separately scoped; after Phase 6)
-| ID | Task | Deps | Status | Who |
-|---|---|---|---|---|
-| P8-01 | Privacy notice, LIA, retention policy | OA-8 | BLOCKED | O/X |
-| P8-02 | Lead-magnet landing page + consented capture | P8-01 | NOT_STARTED | C |
-| P8-03 | Leads/companies/consent/suppression schema + dedup | P8-02 | NOT_STARTED | C |
-| P8-04 | Explainable fit/intent scoring (first-party evidence only) | P8-03 | NOT_STARTED | C |
-| P8-05 | Follow-up drafts with approval + suppression trigger | P8-04 | NOT_STARTED | C |
-| P8-06 | Meetings/opportunities + attribution | P8-03 | NOT_STARTED | C |
+### Phase 8 — Lead intelligence & conversion (now M2–M4; synthetic data and mocks until the privacy gate, ADR-040)
+| ID | Task | Deps | Pri | Status | Who | Acceptance |
+|---|---|---|---|---|---|---|
+| P8-01 | Privacy notice, lawful basis, LIA, retention policy (needed before **real** personal data only) | OA-8 | P0 for real data | BLOCKED | O/X | Documents approved; versions referenced by consent records |
+| P8-07 | **Lead Magnet Studio** (M2, R-23/R-24): magnets + immutable versions generated from approved material via the PDF renderer; owner approval per version; linked to campaigns and CONVERT items | P5-08 | P1 | NOT_STARTED | C | Approved version downloadable; edit → new version needing approval |
+| P8-03a | Lead data core (M2, ADR-040): people, verified identifiers, consent records, suppressions, magnet requests; provenance + retention on every row; `LBE_LEAD_DATA=synthetic` gate | P0-09 | P0 | NOT_STARTED | C | Refuses rows without source/permission; synthetic-only gate tested |
+| P8-02 | Request page + capture in **test mode** + website-form **import path** (M2, R-25/R-26, ADR-043) | P8-07, P8-03a | P1 | NOT_STARTED | C | Synthetic test user requests → stored with consent text version; real intake only after D-18 + P8-01 |
+| P8-03b | Companies, leads, signals (allow-listed first-party sources), merge-review queue (M3, R-31/R-33) | P8-03a | P0 | NOT_STARTED | C | Verified-identifier dedup; name-only → review; prohibited source impossible |
+| P8-04 | Fit + intent scoring, deterministic and versioned (M3, R-34…R-36, ADR-041) | P8-03b, P2-09 | P0 | NOT_STARTED | C | UNKNOWN ≠ 0; evidence per criterion; suppressed → Disqualified; human gate to outreach |
+| P8-08 | Qualification dashboard (lead list, explanations, missing info, verdicts, move-to-outreach by a person) | P8-04 | P1 | NOT_STARTED | C | Playwright incl. axe |
+| P8-09 | Prospect provider interface + mock fixtures (R-50, no real vendor) | P8-03b | P2 | NOT_STARTED | C | Mock companies enter the review queue with fit explanation; nothing contacted |
+| P8-10 | **Conversation desk** (M4, R-40): stages OPEN → QUALIFY → PIVOT → BOOK, owner, next action, source, stop/suppression, manual import (labelled) | P8-03b | P1 | NOT_STARTED | C | Stage changes audited; suppressed → no new drafts |
+| P8-05 | **Message drafts + approval bound to the text** (M4, R-37/R-41, ADR-042): AI suggestions with evidence and uncertainty; copy-ready output; "sent manually" recorded by a person; PECR rules | P8-10 | P0 | NOT_STARTED | C | Agent cannot approve/mark sent; edit → re-approval |
+| P8-11 | Follow-up tasks and next-action reminders | P8-10 | P2 | NOT_STARTED | C | Overdue follow-ups shown |
+| P8-06 | Meetings, opportunities, attribution to campaign/post/magnet (M4, R-42/R-43) | P8-10, P7-03 | P1 | NOT_STARTED | C | Meeting attributed to the originating campaign; revenue only when verified |
+| P8-12 | Optional CRM / calendar adapters (Calendly, HubSpot …) | D-25 | P3 | DEFERRED | C | Adapter behind its own gate |
+| P8-13 | Optional compliant enrichment provider | D-22, P8-09 | P3 | BLOCKED | O/X | Licensing, DPA, cost approved first |
 
 ### Phase 9 — Internal production readiness
 | ID | Task | Deps | Status | Who |
@@ -394,6 +498,15 @@ Chat-created drafts remain ordinary drafts. The API mode is unaffected.
 | Connector write tools (drafts, research, proposals) | **Open** — recommended yes, approval stays manual | D-15 |
 | Claude plan and terms (API credits only on Max/Ultra/Team; Consumer Terms §11 non-commercial clause; applicability to a company account unresolved, review §6.2) | **Largely settled 2026-11-20:** `claude auth status` shows a **Team** subscription (business plan, Commercial Terms); owner to confirm | D-16 |
 | Docker Desktop licence | Moot for now (Docker not needed) | D-10 |
+| Reference blueprint as requirements source; GTM milestones M0–M8; one system of record | **Open — recommended yes** (owner master prompt 2026-11-20) | D-17, ADR-037 |
+| How real lead-magnet requests reach a this-PC-only system | **Open** — recommended: website form + import first; hosted capture endpoint later; exposing this PC not recommended | D-18, ADR-043 |
+| Privacy notice, lawful basis, LIA, retention (before real personal data) | **Open** (legal) | D-11 = D-19, OA-8 |
+| Email delivery for resources and follow-ups | **Open** — manual copy-ready first | D-20 |
+| Entering people who asked directly (DM/email) by hand | **Open** — recommended yes with source and lawful basis; never from LinkedIn API data or scraping | D-21 |
+| Prospect-data vendor (e.g. Prospeo) | **Open** — not now; mock interface only | D-22 |
+| Default content mix and style rules per account | **Open** — owner sets; no built-in house style | D-23 |
+| Fit/intent rubric v1 and weights | **Open** — Claude proposes from the Buyer ICP; owner approves | D-24 |
+| Booking link / calendar or CRM adapters | **Open** — booking link only first | D-25 |
 | Where code and data live; backups | **Decided** (owner, 2026-11-20): everything stays on this PC; regular verified copy on a USB drive | D-13, P0-07, OA-1 |
 
 ---
@@ -404,14 +517,20 @@ Chat-created drafts remain ordinary drafts. The API mode is unaffected.
 **DB-affecting tasks:** also `npm run test:pg:embedded` and the privilege snapshot (`function-security`) updated deliberately.
 **UI-affecting tasks:** `npm run test:e2e`.
 
-| Gate | Must pass |
-|---|---|
-| M1 Technical prototype hardened | All suites green; P1-01..05 done; backup restore proven; no open critical/high |
-| M2 AI intelligence evaluation | P2-08 done; paid run within budget; human scores recorded for accuracy & voice; no fabricated facts found |
-| M3 Internal MVP | Durable jobs (kill/resume test); visual assets; owner completes a campaign end-to-end in the UI |
-| M4 Internal pilot | Pilot log signed: live post, URN, audit, STOP demonstrated, reconciliation path tested |
-| M5 Production internal launch | Deployment, backups drill, monitoring, real-user auth, acceptance test, owner approval |
-| M6 SaaS readiness | Phase 10 complete + external security review |
+**Milestone gates are the acceptance checklists in §E2** (M0–M8, adopted 2026-11-20). The earlier gates, kept
+for traceability:
+
+| Earlier gate | Must pass | Now part of |
+|---|---|---|
+| M1 Technical prototype hardened | All suites green; P1-01..05 done; backup restore proven; no open critical/high | Foundation (reached) |
+| M2 AI intelligence evaluation | P2-08 done; paid run within budget; human scores recorded for accuracy & voice; no fabricated facts found | M1 (paid run or Chat-First) |
+| M3 Internal MVP | Durable jobs (kill/resume test); visual assets; owner completes a campaign end-to-end in the UI | M1 |
+| M4 Internal pilot | Pilot log signed: live post, URN, audit, STOP demonstrated, reconciliation path tested | M6 |
+| M5 Production internal launch | Deployment, backups drill, monitoring, real-user auth, acceptance test, owner approval | M7 |
+| M6 SaaS readiness | Phase 10 complete + external security review | M8 |
+
+**Lead-data tasks (P8-xx) also:** DB tests prove that the agent role cannot approve, send, export or delete, and that
+suppression is enforced in every function that drafts, approves, imports or exports.
 
 Failure handling: record → classify (product vs test defect) → fix root cause → re-run → regression → update plan.
 
@@ -435,11 +554,18 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | Renderer fetching remote assets (SSRF) | Security | data-URI only, no network hook, no-fetch tests (ADR-029 condition 2) |
 | Single-process in-memory rate limiting | Security | Acceptable internal; revisit at P9 |
 | Docker licence | Licensing | Not used currently |
-| UK GDPR/PECR for leads | Privacy | Phase 8 gated on P8-01 |
+| UK GDPR/PECR for leads | Privacy | Real personal data gated on P8-01 + OA-11 (`LBE_LEAD_DATA=synthetic` by default, ADR-040); synthetic data until then |
+| LinkedIn member data used for prospecting (reference page 03) | Platform/legal | Not built; first-party signal allow-list enforced in the database (ADR-040); P0-09 rechecks current terms |
+| Public lead form cannot reach a this-PC-only server | Architecture | Website form + import first (ADR-043, D-18) |
 
 ---
 
 ## K. Definition of Done
+
+**From 2026-11-20 the milestone Definition of Done is the §E2 acceptance checklist** (M0–M8). The final internal
+GTM goal is the 19-step acceptance scenario (`docs/reference-gap-analysis.md` §5), first on synthetic data and mocks
+(M5), then as a real owner-approved pilot with authorized providers (M6). The list below is the earlier definition,
+kept for traceability.
 
 1. **Technical prototype (M1):** all automated suites green incl. real-PostgreSQL concurrency; security findings
    closed or listed; backups restorable; plan current.
@@ -498,3 +624,4 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-20 | P11-01a re-run OK against development (10 entries, key hidden, audited). Claude Desktop found **signed out** (main.log: "User is logged out"), which is why it had not started the connector; owner asked to sign in. Guided window `scripts/set-linkedin-app.ps1` for the LinkedIn app details (hidden secret, writes only `.env.staging`, UTF-8 without BOM, original line endings; tested on a dummy file). P11-01b research tool planned (owner request; after P11-01a). Leftover blanket business-use wording corrected in plan §F/§G and OA-12 | (this commit) |
 | 2026-11-20 | **Incident + fix:** pre-flight opened the staging database while the server ran → server stopped, database restored from the backup taken 2 min earlier (verified), suspect copy kept; P9-09 lock added (6 tests, mutation-checked; Vitest 503, PG 11/11). Owner switched the chat client to **Claude Code in the browser**: cloud sessions rejected (code would leave the PC), **Remote Control** chosen; `scripts/start-brand-chat.ps1` + `tools/claude-brand-chat/CLAUDE.md` (only get_brand_brain + web research; shell, files and personal connectors denied); real Claude Code session got 10 entries, audited. Team plan detected (D-16). Remote Control waits on the org toggle. LinkedIn: owner chose the normal account (runbook D updated), clipboard helper window for the app details; staging on today's code (connector off) | (this commit) |
 | 2026-11-20 | Code pushed to a **private** GitHub repository, https://github.com/shubham99557/linkdin-brand-agent (owner request; GitHub CLI 2.105 installed via winget, hash-verified; owner signed in via the browser). Verified after push: private, 69 commits = local HEAD, `.env*`, `secrets/`, `.data/`, `backups/`, `eval-results/` absent (404). Data and secrets stay on this PC | (this commit) |
+| 2026-11-20 | **M0 (P0-08) DONE:** owner master prompt (GTM engine). Reference gap analysis `docs/reference-gap-analysis.md` (R-01…R-61, compliance redesigns, dependency map, user journey, decisions D-17…D-25, OA-13). Milestones M0–M8 adopted in §E2 with acceptance checklists (earlier M1–M6 mapped). New tasks P0-09, P2-09…P2-12, P5-08…P5-10, P7-05, P8-03a/b, P8-07…P8-13; P7-02/03/04 rescoped. ADR-037…043 proposed. Baseline at `4a2b5ca` all green. Work moves to branch `develop` | (this commit) |
