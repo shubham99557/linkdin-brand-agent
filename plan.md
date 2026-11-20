@@ -402,3 +402,4 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-20 | P2-05 DONE (`brain:reset-dev`: fresh development database without the synthetic example knowledge; refuses staging) | `905cfc3` |
 | 2026-11-20 | P9-03 DONE (disk-encryption, secret-file-access and certificate checks; certificate renewal; shared-database start-up guard; secrets inventory; ADR-035). OA-11 added: C: not encrypted | `7f27b6f` |
 | 2026-11-20 | P9-02 DEFERRED (dashboard is this-PC-only under D-13; restart when remote access is decided). No unblocked engineering tasks remain: open items wait on owner actions (OA-1 USB copy, OA-11 BitLocker, OA-2/OA-3, OA-6, OA-4/OA-5, OA-7) or on the pilot | (this commit) |
+| 2026-11-20 | P5-07 DONE (ActTrident logo and brand colours, grouped navigation, environment badge, branded sign-in) | `4894330` |
