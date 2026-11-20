@@ -86,8 +86,16 @@ Claude commits every change in Git on this PC, and the USB copy includes the ful
 2. Stop the server.
 3. Run `npm ci`, then start the server again.
 
+## Health and emergencies
+
+- **System health page** (admin menu) checks the database, disk space, backups, the background workers, live
+  publishing and that secret files stay out of Git. Every check says what to do.
+- **Banner:** while anything needs attention, admins see a banner at the top of every page.
+- **Emergencies** (lost PC, suspected break-in, wrong post, leaked key): follow `docs/incident-runbook.md`.
+  Incidents involving LinkedIn data must be reported to LinkedIn within 24 hours.
+
 ## Weekly routine (5 minutes)
 
-1. Open the **Backups** page and check there is no warning.
+1. Open **System health** and the **Backups** page and check there is no warning.
 2. Plug in the USB drive, run `npm run backup:external -- --to E:\LBE-backups`, and unplug the drive.
 3. If the Backups page ever shows "failed", tell Claude the time it shows. Don't delete anything.

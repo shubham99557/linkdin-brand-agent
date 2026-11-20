@@ -33,6 +33,21 @@ test("sign out everywhere ends other browser sessions, which then see the sign-i
   await other.context().close();
 });
 
+test("P9-05: the owner sees System health with what to do, and a banner on other pages while something needs attention", async ({ page }) => {
+  await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
+  await expect(page.getByRole("link", { name: "System health" })).toHaveCount(0);
+  await expect(page.getByTestId("attention-bar")).toHaveCount(0);
+  await signOut(page);
+  await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
+  // The test server has no backups configured, so the banner points the owner to System health.
+  await expect(page.getByTestId("attention-bar")).toContainText("Backups");
+  await page.getByTestId("attention-bar").getByRole("link", { name: "Open System health" }).click();
+  await expect(page.getByRole("heading", { name: "System health", level: 2 })).toBeVisible();
+  await expect(page.getByTestId("health-database")).toContainText("OK");
+  await expect(page.getByTestId("health-backups")).toContainText("Needs attention");
+  await expect(page.getByTestId("health-backups")).toContainText("What to do");
+  await expect(page.getByTestId("attention-bar")).toHaveCount(0);       // not repeated on the page itself
+});
 test("P9-04: the owner sees backup status and what to do; editors don't see Backups", async ({ page }) => {
   await signIn(page, "editor@lbe.test", TEST_PASSWORDS.editor);
   await expect(page.getByRole("link", { name: "Backups" })).toHaveCount(0);

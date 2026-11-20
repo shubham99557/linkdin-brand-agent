@@ -7,6 +7,7 @@ import { redactForLog } from "@lbe/security";
 import { createApp } from "./app.ts";
 import { startAutoBackup } from "./auto-backup.ts";
 import { autoBackupDir, EXTERNAL_MARKER } from "./backup-paths.ts";
+import type { RuntimeState } from "./system-health.ts";
 import { loadConfig, REPO_ROOT } from "./config.ts";
 import { startAgentRunner } from "./jobs/agent-runner.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
@@ -25,6 +26,13 @@ const logLine = (msg: string, extra?: Record<string, unknown>) => console.log(JS
 const backups = cfg.LBE_DATABASE_URL === "pglite" && cfg.LBE_AUTO_BACKUP_HOURS > 0
   ? { dir: autoBackupDir(cfg.LBE_ENV), externalMarker: EXTERNAL_MARKER, intervalHours: cfg.LBE_AUTO_BACKUP_HOURS, keep: cfg.LBE_AUTO_BACKUP_KEEP }
   : undefined;
+// P9-05: what the System health page reports; the workers below update their heartbeats here.
+const runtime: RuntimeState = {
+  startedAt: new Date(), environment: cfg.LBE_ENV, livePublishing: cfg.liveEnabled,
+  dataPath: cfg.LBE_DATABASE_URL === "pglite" ? cfg.pgliteDir : REPO_ROOT, repoRoot: REPO_ROOT,
+  publisher: { enabled: cfg.LBE_RUN_WORKER, intervalMs: cfg.LBE_WORKER_INTERVAL_MS, lastTickAt: null, lastError: null },
+  agentRunner: { enabled: cfg.LBE_RUN_AGENT_JOBS, intervalMs: cfg.LBE_AGENT_JOB_INTERVAL_MS, lastTickAt: null, busySince: null, lastError: null },
+};
 const app = createApp({
   db, drafter, provider, linkedin, specialists,
   appOrigins: cfg.appOrigins,
@@ -33,6 +41,7 @@ const app = createApp({
   workerId: cfg.LBE_WORKER_ID,
   internalJobToken: cfg.LBE_INTERNAL_JOB_TOKEN,
   backups: backups ?? { dir: autoBackupDir(cfg.LBE_ENV), externalMarker: EXTERNAL_MARKER, intervalHours: 0, keep: cfg.LBE_AUTO_BACKUP_KEEP },
+  runtime,
 });
 if (backups) {
   startAutoBackup({ db, dir: backups.dir, environment: cfg.LBE_ENV, keep: backups.keep, intervalHours: backups.intervalHours, log: logLine });
@@ -52,13 +61,16 @@ if (cfg.LBE_RUN_WORKER) {
     running = true;
     try {
       const s = await runPublisherTick(db, registry, { workerId: cfg.LBE_WORKER_ID });
+      runtime.publisher.lastError = s.errors.length ? `${s.errors.length} error(s) in the last round` : null;
       if (s.claimed || s.expired || s.credentialsExpired || s.errors.length) {
         console.log(JSON.stringify({ at: new Date().toISOString(), msg: "publisher_tick", ...s }));
       }
     } catch (err) {
       console.error(JSON.stringify({ at: new Date().toISOString(), msg: "publisher_tick_failed", error: redactForLog(err) }));
+      runtime.publisher.lastError = redactForLog(err).slice(0, 200);
     } finally {
       running = false;
+      runtime.publisher.lastTickAt = new Date();
     }
   }, cfg.LBE_WORKER_INTERVAL_MS);
 }
@@ -67,6 +79,10 @@ if (cfg.LBE_RUN_AGENT_JOBS) {
   startAgentRunner({
     db, specialists, writer: drafter, voiceDir: VOICE_DIR, workerId: `${cfg.LBE_WORKER_ID}-agent`, intervalMs: cfg.LBE_AGENT_JOB_INTERVAL_MS,
     log: (msg, extra) => console.log(JSON.stringify({ at: new Date().toISOString(), msg, ...extra })),
+    onTick: (phase, error) => {
+      if (phase === "start") runtime.agentRunner.busySince = new Date();
+      else Object.assign(runtime.agentRunner, { busySince: null, lastTickAt: new Date(), lastError: error ?? null });
+    },
   });
 }
 

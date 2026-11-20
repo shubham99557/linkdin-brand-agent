@@ -113,11 +113,17 @@ export function visualAttacher(db: Db, session: string) {
 }
 
 /** Run ticks on an interval in this process (skips while a job is still running). Returns a stop function. */
-export function startAgentRunner(deps: AgentRunnerDeps & { intervalMs: number }): () => void {
+export function startAgentRunner(deps: AgentRunnerDeps & {
+  intervalMs: number;
+  /** P9-05 heartbeat: called when a round starts and ends (with a redacted error, if any). */
+  onTick?: (phase: "start" | "end", error?: string) => void;
+}): () => void {
   let busy = false;
   const t = setInterval(async () => {
     if (busy) return;
     busy = true;
+    deps.onTick?.("start");
+    let error: string | undefined;
     try {
       // Drain the queue: keep going while jobs are available.
       for (;;) {
@@ -125,9 +131,11 @@ export function startAgentRunner(deps: AgentRunnerDeps & { intervalMs: number })
         if (!r.job) break;
       }
     } catch (err) {
+      error = String(redactForLog(err)).slice(0, 200);
       deps.log?.("agent_job_tick_failed", { error: redactForLog(err) });
     } finally {
       busy = false;
+      deps.onTick?.("end", error);
     }
   }, deps.intervalMs);
   return () => clearInterval(t);

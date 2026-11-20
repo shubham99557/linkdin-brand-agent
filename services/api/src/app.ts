@@ -27,6 +27,7 @@ import { dbErrorStatus, type Db } from "./db.ts";
 import { DOC_LIMITS, DocumentError, extractDocument } from "./documents.ts";
 import { PdfBusyError } from "./pdf-text.ts";
 import { backupStatus, type BackupStatusConfig } from "./backup-status.ts";
+import { systemHealth, type RuntimeState } from "./system-health.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 
 export interface LinkedInDeps {
@@ -56,6 +57,8 @@ export interface AppDeps {
   log?: (msg: string, extra?: Record<string, unknown>) => void;
   /** P9-04: where automatic backups and the last USB-copy record live (status page only). */
   backups?: BackupStatusConfig;
+  /** P9-05: heartbeats and settings of the running server (System health page). */
+  runtime?: RuntimeState;
 }
 
 interface SessionUser {
@@ -887,6 +890,11 @@ export function createApp(deps: AppDeps) {
   api.get("/admin/backups", async (c) => {
     if (c.get("user").role !== "admin") throw new HTTPException(403, { message: "admin only" });
     return c.json(await backupStatus(deps.backups));
+  });
+  // P9-05: health checks for running on this PC (admin only, read-only).
+  api.get("/admin/system", async (c) => {
+    if (c.get("user").role !== "admin") throw new HTTPException(403, { message: "admin only" });
+    return c.json(await systemHealth({ db: deps.db, runtime: deps.runtime, backups: deps.backups }));
   });
 
   // User management (admin only; every rule is enforced in the database functions).
