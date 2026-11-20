@@ -398,4 +398,4 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-20 | Owner decision D-13 (code and data stay on this PC, no cloud repository); P0-07 rescoped and DONE: `backup:external` / `backup:verify` copy code + databases to a separate physical device and prove the copy restores; first USB copy = OA-1 | `d9aced7` |
 | 2026-11-20 | P9-04 DONE (automatic backups while the server runs, restore drill per backup, Backups page; ADR-034) and P9-01 DONE (local operations guide, D-13) — owner asked for end-to-end work through the plan | `4543344` |
 | 2026-11-20 | P9-05 DONE (System health page + admin attention banner; incident runbook with the LinkedIn 24-hour rule verified at the source) | `3ddb040` |
-| 2026-11-20 | P2-05 DONE (`brain:reset-dev`: fresh development database without the synthetic example knowledge; refuses staging) | P2-05 commit |
+| 2026-11-20 | P2-05 DONE (`brain:reset-dev`: fresh development database without the synthetic example knowledge; refuses staging) | `905cfc3` |
