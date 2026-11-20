@@ -4,9 +4,10 @@
 # backed up), and the clipboard is cleared afterwards. Nothing is sent to LinkedIn from here; this script does not
 # drive the LinkedIn website, it only opens the page in the owner's browser.
 # Usage (Claude opens this window for you):
-#   powershell -ExecutionPolicy Bypass -File scripts\set-linkedin-app.ps1 [-Done <marker file>] [-Type]
+#   powershell -ExecutionPolicy Bypass -File scripts\set-linkedin-app.ps1 [-Done <marker file>] [-Type] [-Minutes 60] [-NoBrowser]
 #   -Type: type or paste the values at hidden prompts instead of using the clipboard.
-param([string]$Done = "", [switch]$Type)
+#   -Minutes: how long to wait for each copied value (default 60). -NoBrowser: don't open the LinkedIn page again.
+param([string]$Done = "", [switch]$Type, [int]$Minutes = 60, [switch]$NoBrowser)
 $ErrorActionPreference = "Stop"
 $Host.UI.RawUI.WindowTitle = "ActTrident LinkedIn Branding - LinkedIn app details"
 Set-Location (Join-Path $PSScriptRoot "..")
@@ -21,8 +22,8 @@ function Get-ClipText { try { return [string][System.Windows.Forms.Clipboard]::G
 function Clear-Clip { try { [System.Windows.Forms.Clipboard]::Clear() } catch { } }
 
 # Waits until the clipboard changes to a value that passes $valid (and is not $notThis). Never prints the value.
-function Wait-Clipboard([scriptblock]$valid, [string]$notThis, [int]$minutes = 15) {
-  $deadline = (Get-Date).AddMinutes($minutes)
+function Wait-Clipboard([scriptblock]$valid, [string]$notThis) {
+  $deadline = (Get-Date).AddMinutes($script:Minutes)
   $last = Get-ClipText
   while ((Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 400
@@ -71,7 +72,8 @@ Write-Host "  Nothing is sent to LinkedIn from this window. Posting stays OFF."
 Write-Host ""
 if (-not (Test-Path $EnvFile)) { Write-Host "  .env.staging is missing - tell Claude." -ForegroundColor Red; Write-Done "failed: no .env.staging"; Read-Host "  Press Enter to close"; exit 1 }
 
-Start-Process "https://www.linkedin.com/developers/apps"
+if (-not $NoBrowser) { Start-Process "https://www.linkedin.com/developers/apps" }
+Write-Host "  LinkedIn developer page: https://www.linkedin.com/developers/apps (this window waits up to $Minutes minutes)"
 try { [System.Windows.Forms.Clipboard]::SetText($Redirect) } catch { }
 Write-Host "  1. In the browser: log in to LinkedIn, open your FOUNDER app, then the 'Auth' tab." -ForegroundColor White
 Write-Host "     If 'Authorized redirect URLs' does not list $Redirect"
