@@ -8,6 +8,7 @@ import { createApp } from "../../services/api/src/app.ts";
 import { dbMockStore, runPublisherTick } from "../../services/api/src/jobs/publisher.ts";
 import { runAgentJobTick } from "../../services/api/src/jobs/agent-runner.ts";
 import { expectCode, freshDb, TEST_PASSWORDS, type TestDb } from "../helpers/db.ts";
+import { makePdf } from "../helpers/pdf.ts";
 
 const ORIGIN = "http://localhost:5173";
 const GOAL = "Create a one-week LinkedIn strategy for ActTrident about phishing awareness for UK businesses.";
@@ -462,19 +463,49 @@ describe("document upload (P2-03: file → reviewed text → grounded proposals)
     }
   });
 
-  it("refuses PDFs (not switched on yet), other types and binary files with a clear message", async () => {
+  it("P2-03b: an editor uploads a PDF; its text comes back for review and the proposals quote it word for word", async () => {
     const editor = await login("editor");
-    const pdf = await upload(editor, "guide.pdf", new TextEncoder().encode("%PDF-1.7\n1 0 obj"));
-    expect(pdf.status).toBe(422);
-    expect(pdf.body.error).toMatch(/PDF upload is not switched on yet/);
+    const pdf = makePdf({ pages: [md.split("\n\n")[0]!.split("\n"), md.split("\n\n")[1]!.split("\n")] });
+    const r = await upload(editor, "Brand guide.pdf", pdf);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body).toMatchObject({ name: "Brand guide.pdf", kind: "pdf", pages: 2, text: md, truncated: false });
+    expect(r.body.warnings.join(" ")).toMatch(/Check it before creating proposals/);
+    const ing = await call(editor, "POST", "/api/brain/ingest", { name: r.body.name, text: r.body.text });
+    expect(ing.status).toBe(200);
+    expect(ing.body.proposalIds.length).toBe(2);
+    const proposals = (await call(editor, "GET", "/api/brain/proposals?status=pending")).body as Array<{ id: string; evidence: Array<{ quote: string; source: string }> }>;
+    for (const id of ing.body.proposalIds as string[]) {
+      const p = proposals.find((x) => x.id === id)!;
+      expect(p.evidence[0]!.source).toBe("Brand guide.pdf");
+      expect(r.body.text).toContain(p.evidence[0]!.quote);
+    }
+  });
+
+  it("refuses fake or protected PDFs, other types and binary files with a clear message", async () => {
+    const editor = await login("editor");
+    const fake = await upload(editor, "guide.pdf", new TextEncoder().encode("<html>not a pdf</html>"));
+    expect(fake.status).toBe(422);
+    expect(fake.body.error).toMatch(/doesn't look like a PDF/);
+    const locked = await upload(editor, "locked.pdf", makePdf({ pages: [["Confidential pricing notes for partners."]], encryption: "password" }));
+    expect(locked.status).toBe(422);
+    expect(locked.body.error).toMatch(/password-protected/);
     expect((await upload(editor, "deck.docx", new TextEncoder().encode(md))).status).toBe(422);
     expect((await upload(editor, "fake.txt", new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]))).status).toBe(422);
   });
 
-  it("enforces size, sign-in and same-origin", async () => {
+  it("enforces size (5 MB for this route only, 256 KB for text files and every other route), sign-in and same-origin", async () => {
     const editor = await login("editor");
-    expect((await upload(editor, "big.txt", new Uint8Array(300 * 1024).fill(0x61))).status).toBe(413);
+    const bigText = await upload(editor, "big.txt", new Uint8Array(300 * 1024).fill(0x61));
+    expect(bigText.status).toBe(422);
+    expect(bigText.body.error).toMatch(/larger than 256 KB/);
+    const tooBig = new Uint8Array(5 * 1024 * 1024 + 1); tooBig.set(new TextEncoder().encode("%PDF-1.4\n"));
+    expect((await upload(editor, "huge.pdf", tooBig)).status).toBe(413);
+    // Every other route keeps the 256 KB limit.
+    const ingestBig = await app.request("/api/brain/ingest", { method: "POST", body: JSON.stringify({ name: "x", text: "a".repeat(300 * 1024) }),
+      headers: { cookie: editor, origin: ORIGIN, "content-type": "application/json" } });
+    expect(ingestBig.status).toBe(413);
     expect((await upload(null, "notes.md", new TextEncoder().encode(md))).status).toBe(401);
+    expect((await upload(null, "guide.pdf", makePdf({ pages: [["Signed-out uploads are never read."]] }))).status).toBe(401);
     expect((await upload(editor, "notes.md", new TextEncoder().encode(md), "https://evil.example")).status).toBe(403);
   });
 });

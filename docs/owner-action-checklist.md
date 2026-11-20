@@ -21,7 +21,7 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 | OA-7 | Legal question on scheduled posting | P6-06 | Low |
 | OA-8 | Privacy documents for leads | Phase 8 | Low (later) |
 | OA-9 | Hosting choice for internal production | Phase 9 | Low (later) |
-| OA-10 | Approve (or decline) the PDF reader library for document upload | P2-03b | Low (copy/paste or .txt works today) |
+| ~~OA-10~~ | ~~Approve (or decline) the PDF reader library for document upload~~ **Done: approved 2026-11-20; PDF upload is live (P2-03b)** | P2-03b | Done |
 
 ---
 
@@ -123,7 +123,8 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 ## OA-9 — Hosting choice (only before production)
 - Where the internal production system runs (D-09). Claude will prepare options and costs at Phase 9; no spending without your approval.
 
-## OA-10 — PDF reader library for document upload (optional)
+## OA-10 — PDF reader library for document upload — DONE (approved 2026-11-20)
+- **Result:** PDFs (up to 5 MB and 50 pages) can now be uploaded on the Brand Brain page under *Add knowledge from a document*. The text is shown for you to check before any proposal is made. Password-protected and scanned PDFs get a clear message to paste the text instead. Details: ADR-032 amendment.
 - **What:** decide whether Claude may add the open-source PDF reader `unpdf` 2.1.0 (MIT; bundles Mozilla's pdf.js)
   so PDFs can be uploaded on the Brand Brain page. `.txt` and `.md` uploads already work without it.
 - **Why ask:** it is new third-party code that reads untrusted files. It was reviewed without running it (no install

@@ -357,7 +357,9 @@ function ProposalsPanel({ isOwner, onChange }: { isOwner: boolean; onChange: () 
   );
 }
 
-const UPLOAD_MAX_BYTES = 256 * 1024;   // matches the API limit (services/api/src/documents.ts)
+// Match the API limits (services/api/src/documents.ts, pdf-text.ts).
+const UPLOAD_MAX_TEXT_BYTES = 256 * 1024;
+const UPLOAD_MAX_PDF_BYTES = 5 * 1024 * 1024;
 
 function IngestPanel({ onDone }: { onDone: (n: number, dropped: number) => void }) {
   const [name, setName] = useState("brand-notes.md");
@@ -368,21 +370,28 @@ function IngestPanel({ onDone }: { onDone: (n: number, dropped: number) => void 
   const upload = async (file: File | undefined) => {
     setError(null); setNotes([]);
     if (!file) return;
-    if (file.size > UPLOAD_MAX_BYTES) { setError(`“${file.name}” is larger than 256 KB. Split it into smaller files or paste the relevant parts.`); return; }
+    const isPdf = /\.pdf$/i.test(file.name);
+    const max = isPdf ? UPLOAD_MAX_PDF_BYTES : UPLOAD_MAX_TEXT_BYTES;
+    if (file.size > max) {
+      setError(`“${file.name}” is larger than ${isPdf ? "5 MB" : "256 KB"}. Split it into smaller files or paste the relevant parts.`);
+      return;
+    }
     setBusy(true);
+    if (isPdf) setNotes([`Reading “${file.name}”…`]);
     try {
-      const r = await api<{ name: string; text: string; chars: number; warnings: string[] }>(
+      const r = await api<{ name: string; text: string; chars: number; pages?: number; warnings: string[] }>(
         `/brain/extract-text?name=${encodeURIComponent(file.name)}`, { method: "POST", raw: file });
       setName(r.name); setText(r.text);
-      setNotes([`Read ${r.chars.toLocaleString("en-GB")} characters from “${r.name}”. Check the text below, remove anything that shouldn't be used, then create proposals.`, ...r.warnings]);
-    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+      const pages = r.pages ? ` (${r.pages} page${r.pages === 1 ? "" : "s"})` : "";
+      setNotes([`Read ${r.chars.toLocaleString("en-GB")} characters from “${r.name}”${pages}. Check the text below, remove anything that shouldn't be used, then create proposals.`, ...r.warnings]);
+    } catch (e) { setNotes([]); setError((e as Error).message); } finally { setBusy(false); }
   };
   return (
     <details className="panel">
       <summary><strong>Add knowledge from a document</strong> (website copy, pitch deck notes, brand guide)</summary>
       <p className="small muted">The agent extracts entries that are supported by a verbatim quote from your text and creates <strong>proposals</strong> for the owner to review. Nothing is approved automatically.</p>
-      <label htmlFor="ingest-file">Upload a file (.txt or .md, up to 256 KB) — or paste text below</label>
-      <input id="ingest-file" type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" disabled={busy}
+      <label htmlFor="ingest-file">Upload a file (PDF up to 5 MB and 50 pages, or .txt / .md up to 256 KB) — or paste text below</label>
+      <input id="ingest-file" type="file" accept=".pdf,.txt,.md,.markdown,application/pdf,text/plain,text/markdown" disabled={busy}
         onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ""; }} />
       {notes.length > 0 && <div className="notice small" role="status">{notes.map((n) => <div key={n}>{n}</div>)}</div>}
       <label htmlFor="ingest-name">Document name</label><input id="ingest-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} />

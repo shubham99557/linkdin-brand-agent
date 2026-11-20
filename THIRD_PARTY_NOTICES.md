@@ -29,6 +29,18 @@ Installed from npm and listed with exact versions in `package-lock.json`. Licenc
 | harfbuzzjs, @shuding/opentype.js and the other Satori dependencies | MIT / ISC / Apache-2.0 | |
 | Inter font (@fontsource/inter 5.3.0), © The Inter Project Authors | SIL Open Font License 1.1 | Embedded in rendered images and PDFs. Licence text: `node_modules/@fontsource/inter/LICENSE`, https://openfontlicense.org |
 
+### Document upload: PDF text reader (`services/api`, ADR-032, owner approval OA-10)
+
+| Package | Licence | Notes |
+|---|---|---|
+| unpdf 2.1.0, © 2023-present Johann Schopplich | MIT | Used unmodified. Source: https://github.com/unjs/unpdf. Text extraction only, in a locked-down child process |
+| Mozilla pdf.js (bundled inside unpdf) | Apache-2.0 | Unmodified. Source: https://github.com/mozilla/pdf.js. Licence text: `node_modules/unpdf/dist/licenses/LICENSE_PDFJS` |
+| pdf.js JBIG2 decoder: Mozilla wrapper (© 2026 Mozilla Foundation) and decoder from PDFium (© 2014 The PDFium Authors) | Apache-2.0 (wrapper); BSD-3-Clause and the further notices in the licence file (decoder) | Bundled; not loaded for text extraction. Licence texts: `dist/licenses/LICENSE_PDFJS_JBIG2`, `LICENSE_JBIG2` |
+| pdf.js OpenJPEG decoder: Mozilla wrapper (© 2024 Mozilla Foundation) and OpenJPEG (© 2002-2014 Université catholique de Louvain and contributors) | BSD-2-Clause | Bundled; not loaded for text extraction. Licence texts: `dist/licenses/LICENSE_PDFJS_OPENJPEG`, `LICENSE_OPENJPEG` |
+
+If the product is ever distributed outside ActTrident, include these licence texts (Apache-2.0 §4, BSD
+attribution clauses).
+
 ### Test-only (not shipped)
 
 | Package | Licence | Notes |

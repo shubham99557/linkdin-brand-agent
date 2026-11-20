@@ -33,8 +33,8 @@ describe("extractDocumentText", () => {
     for (const n of ["deck.pptx", "doc.docx", "page.html", "script.js", "noextension", ""]) expect(err(n, enc(doc)), n).toBeInstanceOf(DocumentError);
   });
 
-  it("a PDF gets a clear 'not switched on yet' message (parser dependency awaits owner approval, ADR-032)", () => {
-    expect(() => extractDocumentText({ name: "brand-guide.pdf", bytes: enc("%PDF-1.7\n...") })).toThrow(/PDF upload is not switched on yet/);
+  it("PDFs are not handled by the synchronous text reader (uploads go through extractDocument, P2-03b)", () => {
+    expect(() => extractDocumentText({ name: "brand-guide.pdf", bytes: enc("%PDF-1.7\n...") })).toThrow(/extractDocument\(\)/);
   });
 
   it("caps text at the ingest limit on a paragraph boundary, with a warning", () => {

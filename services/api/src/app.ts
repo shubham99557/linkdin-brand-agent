@@ -24,7 +24,8 @@ import {
   validateIdentity, VISUAL_IDENTITY_KEY, type VisualBrief,
 } from "@lbe/render";
 import { dbErrorStatus, type Db } from "./db.ts";
-import { DocumentError, extractDocumentText } from "./documents.ts";
+import { DOC_LIMITS, DocumentError, extractDocument } from "./documents.ts";
+import { PdfBusyError } from "./pdf-text.ts";
 import { runPublisherTick } from "./jobs/publisher.ts";
 
 export interface LinkedInDeps {
@@ -136,7 +137,11 @@ export function createApp(deps: AppDeps) {
     referrerPolicy: "no-referrer",
     xFrameOptions: "DENY",
   }));
-  app.use("/api/*", bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json({ error: "request too large" }, 413) }));
+  // 256 KB for every request, except document upload, which accepts a PDF of up to 5 MB (P2-03b; text files are
+  // still held to 256 KB in documents.ts). The body is only read after sign-in and the role check.
+  const defaultBodyLimit = bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json({ error: "request too large" }, 413) });
+  const documentBodyLimit = bodyLimit({ maxSize: DOC_LIMITS.maxPdfBytes, onError: (c) => c.json({ error: "request too large" }, 413) });
+  app.use("/api/*", (c, next) => (c.req.path === "/api/brain/extract-text" ? documentBodyLimit : defaultBodyLimit)(c, next));
   app.use("/api/*", async (c, next) => {
     c.header("Cache-Control", "no-store");
     await next();
@@ -580,16 +585,19 @@ export function createApp(deps: AppDeps) {
 
   // P2-03: uploaded file (raw bytes, name in ?name=) → plain text for the user to review in the paste box before
   // "Create proposals". Nothing is stored and no AI call is made. Same roles as ingest. The access log records the
-  // route pattern only, so file names are not logged.
+  // route pattern only, so file names are not logged. P2-03b: PDFs are read in an isolated worker (pdf-text.ts).
   api.post("/brain/extract-text", async (c) => {
     if (!["editor", "approver", "admin"].includes(c.get("user").role)) {
       throw new HTTPException(403, { message: "your role cannot add documents" });
     }
     const bytes = new Uint8Array(await c.req.arrayBuffer());
     try {
-      return c.json(extractDocumentText({ name: c.req.query("name") ?? "", bytes }));
+      return c.json(await extractDocument({ name: c.req.query("name") ?? "", bytes }, {
+        onSandboxBlocked: (attempts) => log("pdf_reader_blocked", { request_id: c.get("requestId"), user_id: c.get("user").id, attempts }),
+      }));
     } catch (e) {
       if (e instanceof DocumentError) throw new HTTPException(422, { message: e.message });
+      if (e instanceof PdfBusyError) throw new HTTPException(429, { message: e.message });
       throw e;
     }
   });

@@ -487,7 +487,7 @@ duplicate-topic rule unchanged.
 **Consequence.** A month's plan is produced over several runs rather than all at once. That makes it slower,
 but each step is resumable and cheaper to retry.
 
-## ADR-032 — Document upload; PDF text extraction dependency (P2-03) — PDF part PROPOSED, awaiting owner approval
+## ADR-032 — Document upload; PDF text extraction dependency (P2-03) — ACCEPTED (PDF approved by the owner, OA-10, 2026-11-20; implemented in P2-03b, see the amendment at the end)
 **Decision (2026-11-19).**
 - **Done, no new dependency:** `.txt` and `.md` uploads become plain text (`services/api/src/documents.ts`). The
   user reviews the text in the paste box, and it then goes through the existing ingest. Every proposal must quote
@@ -534,6 +534,64 @@ but each step is resumable and cheaper to retry.
 
 **Alternative without a dependency:** the owner copies text out of the PDF (or saves it as `.txt`) and uploads or
 pastes it. This works today.
+
+**Amendment 2026-11-20 (P2-03b, after owner approval OA-10).**
+- **Installed:** `unpdf` 2.1.0 (exact pin, `--ignore-scripts`). The lockfile integrity hash matches the tarball
+  reviewed above. 1 package; no native binaries; neither `@napi-rs/canvas` nor `pdfjs-dist` is installed;
+  `npm audit` 0; signatures verified. 2.2.x is still inside the 14-day cooldown.
+- **Condition 1 changed: separate process, not a worker thread.** The first implementation used a worker thread
+  with `resourceLimits`. Its memory test crashed the *whole* test process ("Fatal JavaScript out of memory"):
+  V8 can abort the entire process when a worker runs out of memory, so a worker thread does not contain a
+  hostile PDF. The reader now runs as a separate Node process (`services/api/src/pdf-child.ts`, started by
+  `pdf-text.ts`):
+  - **Node permission model (`--permission`).** The child may read only its own two source files, the API
+    `package.json` and the `unpdf` folder. It has no network, no other files, no writes, no child processes, no
+    worker threads, no addons and no WASI.
+  - **No code generation:** `--disallow-code-generation-from-strings`, so `eval` and `new Function` are blocked.
+  - **Memory and time:** 256 MB V8 heap (`--max-old-space-size`), 15 s, then the process is killed.
+  - **Environment:** none of the API's environment. Only `SystemRoot`, plus the operating-system variables that
+    Windows' process launcher always adds; no keys or database address.
+  - **Output:** stdout is discarded and stderr is read only to recognise "out of memory". Nothing from a
+    document reaches the logs.
+  - **Concurrency:** at most 2 PDFs are read at once (a third upload gets HTTP 429, "try again").
+  - **Crash containment:** a crash of the reader, including running out of memory, ends only the child. This is
+    tested: the test process survives.
+- **Condition 2 met.**
+  - **No URLs:** PDF.js gets no URL options (fonts, CMaps, ICC, WASM).
+  - **PDF.js options:** `useSystemFonts: false`, `disableFontFace: true`, `useWasm: false`, `enableXfa: false`,
+    no canvas or image decoding, `verbosity: 0`.
+  - **`isEvalSupported`:** this PDF.js build has no such option and no eval font path (0 occurrences of
+    `new Function(`); code generation is also disabled for the whole process.
+  - **Two independent layers, each tested:**
+    1. the permission model, tested by starting a probe with the reader's exact options: reading `.env`, reading
+       other files, writing, `fetch`, sockets, child processes, threads, `eval` and `new Function` are all
+       refused;
+    2. JavaScript guards in the child (`pdf-sandbox.ts`), which refuse and *record* any network or file call so
+       the API can log `pdf_reader_blocked`.
+  - **Network test:** a PDF with a URL link, an open action and a remote file reference produces no attempt at all.
+  - **Known gap:** removing the guard installation is not detected by a test, because the permission model, which
+    is tested, already refuses everything. The guards only add the log entry.
+- **Condition 3 met.**
+  - **Size:** 5 MB through a route-specific body limit. Every other route keeps 256 KB, and text files are still
+    held to 256 KB.
+  - **Header:** the file must start with `%PDF-`.
+  - **Pages:** at most 50; 51 is refused.
+  - **Encryption:** encrypted PDFs are refused, both those needing a password and those that only restrict
+    copying.
+  - **Scans:** a PDF with no text layer gets "No readable text … paste it below".
+- **Condition 4 met:** the text is shown in the review box, with a warning that PDF text can have broken lines or
+  jumbled columns. It then goes through the normal ingest, where proposals must quote it word for word (tested
+  end to end).
+- **Condition 5 met:** pdf.js, JBIG2 (PDFium) and OpenJPEG notices are in `THIRD_PARTY_NOTICES.md`. The JBIG2
+  decoder is BSD-3-Clause (PDFium); only its Mozilla wrapper is Apache-2.0.
+- **Residual risk (accepted).** Memory that PDF.js allocates outside the V8 heap (decompressed streams in typed
+  arrays) is not capped by `--max-old-space-size`. A decompression bomb could use several GB for up to 15 s in the
+  child before it is killed. This is bounded by:
+  - the time limit and the 2-reader limit;
+  - uploads being open only to signed-in editors, approvers and admins;
+  - the child being the only process that can fail.
+
+  Revisit before any external-facing hosting (OA-9).
 
 ## ADR-033 — Pipelined drafting: faster, with the same results and budget decisions (P4-05)
 **Decision (2026-11-19).** Drafting is pipelined, not fully parallel.
