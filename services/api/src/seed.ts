@@ -13,15 +13,23 @@ export interface SeedResult {
   claims: string[];
 }
 
+const oneId = (db: Db) => async (sql: string, params: unknown[]) => {
+  const rows = await db.query<{ id: string }>(sql, params);
+  return rows[0]!.id;
+};
+
 /**
  * Synthetic development data only. No real people, customers or LinkedIn identities.
  * Emails use the reserved `.test` TLD so they can never be delivered.
  */
 export async function seed(db: Db, pw: SeedPasswords): Promise<SeedResult> {
-  const one = async (sql: string, params: unknown[]) => {
-    const rows = await db.query<{ id: string }>(sql, params);
-    return rows[0]!.id;
-  };
+  const base = await seedUsersAndAccounts(db, pw);
+  return { ...base, claims: await seedSyntheticClaims(db, base.users) };
+}
+
+/** Development logins (`.test` emails) and the two DEV accounts with their approvers — no knowledge or claims (P2-05). */
+export async function seedUsersAndAccounts(db: Db, pw: SeedPasswords): Promise<Omit<SeedResult, "claims">> {
+  const one = oneId(db);
   const user = (email: string, name: string, role: string, password: string) =>
     one("select lbe.admin_create_user($1, $2, $3, $4) as id", [email, name, role, password]);
 
@@ -46,7 +54,13 @@ export async function seed(db: Db, pw: SeedPasswords): Promise<SeedResult> {
     `insert into lbe.account_approvers(account_id, user_id) values ($1, $2), ($1, $3), ($4, $5)`,
     [company, approver, admin, founderAcct, founder],
   );
+  return { users: { admin, approver, founder, editor }, accounts: { company, founder: founderAcct } };
+}
 
+/** The [SYNTHETIC] example claims (three verified, one unverified to demonstrate the gate). */
+export async function seedSyntheticClaims(db: Db, users: SeedResult["users"]): Promise<string[]> {
+  const one = oneId(db);
+  const { approver, editor } = users;
   const claimRows: Array<[string, string, string | null, string]> = [
     ["[SYNTHETIC] ActTrident is a UK-registered cybersecurity company.", "company_fact", null,
       "Synthetic development claim — replace with Companies House evidence."],
@@ -70,10 +84,5 @@ export async function seed(db: Db, pw: SeedPasswords): Promise<SeedResult> {
     `insert into lbe.claims(statement, category, evidence_note, created_by)
      values ('[SYNTHETIC] ActTrident blocks 99% of ransomware.', 'security_effectiveness',
              'UNVERIFIED example — must never be published without evidence.', $1) returning id`, [editor]));
-
-  return {
-    users: { admin, approver, founder, editor },
-    accounts: { company, founder: founderAcct },
-    claims,
-  };
+  return claims;
 }

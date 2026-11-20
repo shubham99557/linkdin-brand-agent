@@ -29,6 +29,7 @@
     "demo": "tsx scripts/demo-flow.ts",
     "demo:agent": "tsx scripts/demo-agent.ts",
     "brain:audit": "tsx services/api/src/cli/brain-audit.ts",
+    "brain:reset-dev": "tsx services/api/src/cli/brain-reset-dev.ts",
     "brain:audit:staging": "node scripts/run-staging.mjs services/api/src/cli/brain-audit.ts",
     "brain:export": "tsx services/api/src/cli/brain-export.ts",
     "brain:export:staging": "node scripts/run-staging.mjs services/api/src/cli/brain-export.ts",

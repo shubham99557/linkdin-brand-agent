@@ -24,6 +24,15 @@ copy. This guide is the day-to-day manual. Commands are typed in PowerShell, in 
 - **Secrets stay in two places.** `.env.staging` and `secrets\` (API key, LinkedIn app secret, token key,
   certificate) are on this PC only, are never copied by backups, and must never be pasted into chat or email.
 
+**Practising first.** To rehearse onboarding on an empty Brand Brain without touching your real data:
+1. Stop the development server.
+2. Run `npm run brain:reset-dev` (P2-05). The development database starts fresh, with the test logins and the
+   two DEV accounts, no example claims and an empty Brand Brain.
+3. The previous development database is kept, renamed `.data\pglite-before-reset-<time>`.
+4. Add `-- --with-synthetic-claims` to the command to get the example claims back.
+
+It refuses to run on staging.
+
 ## Start and stop
 
 1. Open PowerShell → `cd "C:\Users\X1 Extreme Gen3\linkdin-brand-engine"` → `npm run start:staging`.
