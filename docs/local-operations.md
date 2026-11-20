@@ -33,6 +33,13 @@ copy. This guide is the day-to-day manual. Commands are typed in PowerShell, in 
 
 It refuses to run on staging.
 
+**Adding another administrator login to staging** (the server must be stopped):
+
+    powershell -ExecutionPolicy Bypass -File scripts\create-staging-admin.ps1 -Founder <founder account id> -Company <company account id>
+
+It asks for name, email and password in its own window. The password is typed hidden. For editors and approvers,
+use the dashboard's **Users** page instead.
+
 ## Start and stop
 
 1. Open PowerShell → `cd "C:\Users\X1 Extreme Gen3\linkdin-brand-engine"` → `npm run start:staging`.

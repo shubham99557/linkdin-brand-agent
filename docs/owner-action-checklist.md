@@ -14,11 +14,11 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 |---|---|---|---|
 | OA-1 | Backup copy on a USB drive (everything stays on this PC, D-13): plug in a drive, run `npm run backup:external` | P0-07 (laptop-loss risk) | **High** |
 | OA-11 | Turn on BitLocker for drive C: (found off on 2026-11-20) | P9-03 (stolen-laptop risk) | **High** (before entering real data) |
-| OA-2 | Create your real staging user | P2-06, pilot, real Brand Brain | **High** |
+| ~~OA-2~~ | ~~Create your real staging user~~ **Done 2026-11-20** (login created in the guided window; staging runs at https://localhost:8443) | P2-06 | Done |
 | OA-3 | Enter real Brand Brain knowledge | P2-08 → AI evaluation, Creative templates | **High** |
 | OA-4 | Create the founder LinkedIn app | P6-01 → pilot | Medium |
 | OA-5 | Create company-page app + apply for Community Management | P6-07 (review takes weeks) | Medium (start early) |
-| OA-6 | Authorize a budget-capped paid AI evaluation | P3-04 | Medium (after OA-3) |
+| OA-6 | Authorize a budget-capped paid AI evaluation — **you chose "not yet" (2026-11-20)**; say "enable real AI with a cap of $N/month" when ready | P3-04 | Medium (after OA-3) |
 | OA-7 | Legal question on scheduled posting | P6-06 | Low |
 | OA-8 | Privacy documents for leads | Phase 8 | Low (later) |
 | OA-9 | Hosting choice for internal production | Phase 9 | Low (later) |
