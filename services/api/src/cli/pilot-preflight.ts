@@ -4,6 +4,7 @@ import path from "node:path";
 import { createSecureContext } from "node:tls";
 import { loadConfig, REPO_ROOT } from "../config.ts";
 import { MIGRATIONS_DIR, openDb } from "../db.ts";
+import { DatabaseInUseError } from "../pglite-lock.ts";
 
 type Level = "PASS" | "WARN" | "FAIL";
 const results: Array<[Level, string]> = [];
@@ -50,8 +51,14 @@ check("PASS", `member endpoint: ${cfg.LBE_LINKEDIN_MEMBER_ENDPOINT} (${cfg.LBE_L
 check(cfg.liveEnabled ? "WARN" : "PASS", `LIVE master switch is ${cfg.liveEnabled ? "ON — posts can go to LinkedIn once released" : "off (switch on only at runbook step F)"}`);
 
 // --- database ----------------------------------------------------------------
-const db = await openDb({ url: cfg.LBE_DATABASE_URL, dataDir: cfg.LBE_DATABASE_URL === "pglite" ? cfg.pgliteDir : undefined });
-try {
+// Run this BEFORE starting the server: the embedded database may only be open in one program (pglite-lock.ts).
+const db = await openDb({ url: cfg.LBE_DATABASE_URL, dataDir: cfg.LBE_DATABASE_URL === "pglite" ? cfg.pgliteDir : undefined })
+  .catch((e: unknown) => {
+    if (!(e instanceof DatabaseInUseError)) throw e;
+    check("FAIL", `database checks not run: ${e.message}`);
+    return null;
+  });
+if (db) try {
   const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql"));
   const applied = await db.query<{ version: string }>("select version from public.lbe_schema_migrations").catch(() => []);
   check(applied.length === files.length ? "PASS" : "FAIL", `migrations applied: ${applied.length}/${files.length}${applied.length < files.length ? " (start the staging server once, or run npm run staging:init)" : ""}`);

@@ -4,6 +4,7 @@ import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import pg from "pg";
+import { lockDataDir } from "./pglite-lock.ts";
 
 /** Database roles the application assumes per transaction. `null` = connection owner (migrations/CLI only). */
 export type DbRole = "lbe_api" | "lbe_worker" | "lbe_agent" | null;
@@ -35,7 +36,7 @@ const ROLE_SQL: Record<Exclude<DbRole, null>, string> = {
 
 class PgliteDb implements Db {
   readonly kind = "pglite" as const;
-  constructor(private readonly pglite: PGlite) {}
+  constructor(private readonly pglite: PGlite, private readonly unlock: () => void = () => undefined) {}
 
   async query<T>(sql: string, params: unknown[] = []): Promise<T[]> {
     const r = await this.pglite.query<T>(sql, params as never[]);
@@ -63,7 +64,11 @@ class PgliteDb implements Db {
   }
 
   async close(): Promise<void> {
-    await this.pglite.close();
+    try {
+      await this.pglite.close();
+    } finally {
+      this.unlock();
+    }
   }
 }
 
@@ -122,9 +127,16 @@ export interface DbConfig {
 
 export async function openDb(cfg: DbConfig): Promise<Db> {
   if (cfg.url === "pglite") {
-    if (cfg.dataDir) await mkdir(cfg.dataDir, { recursive: true });
-    const pglite = await PGlite.create({ dataDir: cfg.dataDir, extensions: { pgcrypto } });
-    return new PgliteDb(pglite);
+    if (!cfg.dataDir) return new PgliteDb(await PGlite.create({ extensions: { pgcrypto } }));   // in memory
+    await mkdir(cfg.dataDir, { recursive: true });
+    // One program at a time: a second copy of the embedded database on the same folder can damage it.
+    const unlock = lockDataDir(cfg.dataDir);
+    try {
+      return new PgliteDb(await PGlite.create({ dataDir: cfg.dataDir, extensions: { pgcrypto } }), unlock);
+    } catch (e) {
+      unlock();
+      throw e;
+    }
   }
   if (!/^postgres(ql)?:\/\//.test(cfg.url)) {
     throw new Error("LBE_DATABASE_URL must be 'pglite' or a postgres:// URL");

@@ -11,6 +11,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
+import { lockDataDir } from "./pglite-lock.ts";
 
 export interface Fingerprint {
   migrations: Array<{ version: string; checksum: string }>;
@@ -56,6 +57,21 @@ export function diffFingerprints(a: Fingerprint, b: Fingerprint): string[] {
   return problems;
 }
 
+/** Opens an embedded database folder under the one-program lock (see pglite-lock.ts) and runs fn on it. */
+async function withPglite<T>(dataDir: string, opts: { loadDataDir?: Blob }, fn: (db: PGlite) => Promise<T>): Promise<T> {
+  const unlock = lockDataDir(dataDir);
+  try {
+    const db = await PGlite.create({ dataDir, extensions: { pgcrypto }, ...opts });
+    try {
+      return await fn(db);
+    } finally {
+      await db.close();
+    }
+  } finally {
+    unlock();
+  }
+}
+
 async function isEmptyOrMissing(dir: string): Promise<boolean> {
   if (!existsSync(dir)) return true;
   return (await readdir(dir)).length === 0;
@@ -64,15 +80,10 @@ async function isEmptyOrMissing(dir: string): Promise<boolean> {
 /** Back up the PGlite data folder `dataDir` into `outDir`. The database must not be open in another process. */
 export async function backupPglite(opts: { dataDir: string; outDir: string; environment: string; now?: Date }): Promise<{ manifestPath: string; manifest: BackupManifest }> {
   if (await isEmptyOrMissing(opts.dataDir)) throw new Error(`no database found at ${opts.dataDir}`);
-  const db = await PGlite.create({ dataDir: opts.dataDir, extensions: { pgcrypto } });
-  let archive: Uint8Array;
-  let fp: Fingerprint;
-  try {
-    fp = await fingerprint(db);
-    archive = new Uint8Array(await (await db.dumpDataDir("gzip")).arrayBuffer());
-  } finally {
-    await db.close();
-  }
+  const { fp, archive } = await withPglite(opts.dataDir, {}, async (db) => ({
+    fp: await fingerprint(db),
+    archive: new Uint8Array(await (await db.dumpDataDir("gzip")).arrayBuffer()),
+  }));
   const stamp = (opts.now ?? new Date()).toISOString().replace(/[:.]/g, "-");
   const base = `lbe-${opts.environment}-${stamp}`;
   await mkdir(opts.outDir, { recursive: true });
@@ -95,15 +106,7 @@ export async function backupPglite(opts: { dataDir: string; outDir: string; envi
 export async function fingerprintArchive(archive: Uint8Array, targetDir: string): Promise<Fingerprint> {
   if (!(await isEmptyOrMissing(targetDir))) throw new Error(`refusing to use non-empty folder ${targetDir}`);
   await mkdir(targetDir, { recursive: true });
-  const db = await PGlite.create({
-    dataDir: targetDir, extensions: { pgcrypto },
-    loadDataDir: new Blob([archive as Uint8Array<ArrayBuffer>], { type: "application/x-gzip" }),
-  });
-  try {
-    return await fingerprint(db);
-  } finally {
-    await db.close();
-  }
+  return withPglite(targetDir, { loadDataDir: new Blob([archive as Uint8Array<ArrayBuffer>], { type: "application/x-gzip" }) }, fingerprint);
 }
 
 /** Manifest for an archive whose contents were checked by restoring it. Same format as backupPglite. */
@@ -123,11 +126,7 @@ export async function restorePglite(opts: { manifestPath: string; targetDir: str
   if (sha256(archive) !== manifest.archive_sha256) throw new Error("archive checksum mismatch — backup is corrupt or was modified");
   if (!(await isEmptyOrMissing(opts.targetDir))) throw new Error(`refusing to overwrite existing database at ${opts.targetDir} — restore into an empty folder`);
   await mkdir(opts.targetDir, { recursive: true });
-  const db = await PGlite.create({
-    dataDir: opts.targetDir, extensions: { pgcrypto },
-    loadDataDir: new Blob([archive as Uint8Array<ArrayBuffer>], { type: "application/x-gzip" }),
-  });
-  try {
+  return withPglite(opts.targetDir, { loadDataDir: new Blob([archive as Uint8Array<ArrayBuffer>], { type: "application/x-gzip" }) }, async (db) => {
     const fp = await fingerprint(db);
     const problems = diffFingerprints(manifest.fingerprint, fp);
     if (problems.length) throw new Error(`restored database does not match the backup: ${problems.join("; ")}`);
@@ -135,7 +134,5 @@ export async function restorePglite(opts: { manifestPath: string; targetDir: str
     const purged = await db.query<{ n: number }>("with d as (delete from lbe.sessions returning 1) select count(*)::int as n from d");
     await db.query("delete from lbe.oauth_states");
     return { fingerprint: fp, sessionsPurged: purged.rows[0]!.n };
-  } finally {
-    await db.close();
-  }
+  });
 }

@@ -5,6 +5,7 @@ import { fetchUserInfo, introspectToken } from "@lbe/publishing";
 import { decryptToken, parseTokenKey } from "@lbe/security";
 import { loadConfig } from "../config.ts";
 import { openDb } from "../db.ts";
+import { DatabaseInUseError } from "../pglite-lock.ts";
 
 if (!process.argv.includes("--yes-call-linkedin")) {
   console.error("This makes read-only calls to LinkedIn (userinfo + token introspection). Re-run with --yes-call-linkedin to proceed.");
@@ -15,7 +16,12 @@ if (cfg.LBE_ENV !== "staging" || !cfg.linkedinApps.founder_app) {
   console.error("Run with the staging configuration and a configured founder app (npm run pilot:verify -- --yes-call-linkedin).");
   process.exit(1);
 }
-const db = await openDb({ url: cfg.LBE_DATABASE_URL, dataDir: cfg.LBE_DATABASE_URL === "pglite" ? cfg.pgliteDir : undefined });
+// The server must be stopped while this reads the stored token (one program per embedded database, pglite-lock.ts).
+const db = await openDb({ url: cfg.LBE_DATABASE_URL, dataDir: cfg.LBE_DATABASE_URL === "pglite" ? cfg.pgliteDir : undefined })
+  .catch((e: unknown) => {
+    if (e instanceof DatabaseInUseError) { console.error(e.message); process.exit(1); }
+    throw e;
+  });
 const row = (await db.query<{ account_id: string; token_ciphertext: string; subject_urn: string | null; scopes: string[]; status: string; expires_at: string }>(
   `select c.account_id, c.token_ciphertext, c.subject_urn, c.scopes, c.status, c.expires_at
      from lbe.linkedin_credentials c join lbe.social_accounts a on a.id = c.account_id where a.kind = 'founder_profile'`))[0];
