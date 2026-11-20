@@ -15,6 +15,7 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 | OA-1 | Backup copy on a USB drive (everything stays on this PC, D-13): plug in a drive, run `npm run backup:external` | P0-07 (laptop-loss risk) | **High** |
 | OA-11 | Turn on BitLocker for drive C: (found off on 2026-11-20) | P9-03 (stolen-laptop risk) | **High** (before entering real data) |
 | ~~OA-2~~ | ~~Create your real staging user~~ **Done 2026-11-20** (login created in the guided window; staging runs at https://localhost:8443) | P2-06 | Done |
+| OA-12 | Chat-First decision: confirm your Claude plan + terms, check Claude Desktop has Settings → Extensions/Developer, choose design (D-14/D-15/D-16) | P11-01 → Chat-First pilot | Medium |
 | OA-3 | Enter real Brand Brain knowledge | P2-08 → AI evaluation, Creative templates | **High** |
 | OA-4 | Create the founder LinkedIn app | P6-01 → pilot | Medium |
 | OA-5 | Create company-page app + apply for Community Management | P6-07 (review takes weeks) | Medium (start early) |
@@ -89,6 +90,24 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 - **Confirm:** `npm run pilot:preflight` no longer shows the two user FAIL lines.
 - **Secret:** the password.
 - **Meanwhile:** independent engineering tasks (P1-xx, P4-xx).
+
+## OA-12 — Chat-First (Claude Desktop) decision
+- **What:** three quick checks, then a choice:
+  1. In Claude (Settings → **Billing** or **Plan**), see which plan you have: Pro, Max, Ultra or Team.
+  2. In **Claude Desktop** on this PC, check that **Settings → Extensions** (or **Settings → Developer → Edit
+     Config**) exists.
+  3. Read `docs/chat-first-mcp-review.md` §0 and choose a design (recommended: A).
+- **Why:**
+  - Max, Ultra and Team include monthly API credits ($100, $200, or $20 per seat pooled); Pro does not.
+  - The terms for Claude.ai and Claude Pro for individuals exclude business use.
+  - Local connectors only work in Claude Desktop.
+- **Tell Claude:**
+  - your plan name;
+  - whether the Extensions or Developer setting is there;
+  - "approve design A", or another choice.
+
+  No passwords or keys are needed.
+- **Cost:** none to decide. Design A adds no API cost.
 
 ## OA-3 — Enter real Brand Brain knowledge
 - **What:** fill in the 13 Brand Brain sections and 3–5 verified claims with evidence, in **staging**.

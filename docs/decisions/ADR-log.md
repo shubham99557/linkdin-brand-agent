@@ -764,3 +764,40 @@ They live in git-ignored `.env.staging` and `secrets\`. A probe (no admin rights
   probe, an expiring certificate not flagged, a shared database allowed.
 - **Renewal tested end to end** in a scratch project: the new certificate is valid for one year for localhost, the
   old one is kept, and no certificate is left in the store.
+
+## ADR-036 — Chat-First connector: Claude Desktop with a local MCP bridge (P11) — PROPOSED, awaiting owner decision D-14
+**Context (2026-11-20).** The owner wants to use their Claude subscription for interactive research, strategy and
+writing, with the dashboard staying the system of record. Facts are from official Anthropic sources (details and
+URLs in `docs/chat-first-mcp-review.md`):
+- **Claude chat custom connectors:** the server must be on the public internet over HTTPS, reachable from
+  Anthropic's IP ranges.
+- **Claude Desktop local MCP:** runs on this PC (stdio or desktop extension).
+- **Subscription credentials:** they must not be routed through other products. The app may not use them.
+- **Monthly API credits:** only on Max, Ultra and Team, not Pro.
+- **Consumer Terms:** they exclude commercial or business use.
+- **Cloud scheduled tasks:** they cannot reach a PC-only server.
+
+**Proposed decision.**
+- **A. Interactive work:** Claude Desktop with a **local MCP server** that is only a bridge to the existing API on
+  `127.0.0.1`.
+  - **No database access:** the embedded database admits one process, and the bridge holds no credentials beyond
+    a short-lived, revocable **connector session**.
+  - **Existing permissions:** calls run as the existing **`lbe_agent`** role (ADR-021), with the existing schemas
+    and validators.
+  - **Read-only by default.** Write tools (research, strategy, drafts, visuals, proposals) are opt-in per session.
+  - **Nothing can be approved, enqueued, released, verified or written to the Brand Brain through it.**
+- **C. Automation:** keep the existing API mode for automated and scheduled work. Use monthly API credits if the
+  plan includes them; otherwise a hard monthly cap.
+- **B. Not now:** a remote MCP connector needs internet exposure, which conflicts with D-13. It is the SaaS path:
+  hosted, OAuth 2.0 per customer, and a security review.
+
+**Consequences.**
+- **Overlap:** no second Brand Brain, database or approval engine.
+- **New code:**
+  - a session kind;
+  - `/api/connector/*` routes;
+  - a small MCP server;
+  - a dashboard panel;
+  - one dependency (MCP SDK), reviewed under the ADR-029 gate.
+- **Limits:** the pilot is interactive only, and its throughput depends on subscription limits.
+- **Check first:** before relying on it for business work, the owner confirms the plan's terms (D-16).

@@ -17,7 +17,7 @@
 |---|---|
 | Current phase | **Phase 5 engineering complete; Phase 9 for this PC done** (P9-01, P9-03, P9-04, P9-05 DONE 2026-11-20; P9-02 deferred until remote access) (Phases 0–1, 4 (incl. P4-05), 5 DONE; Phase 2 engineering done — real content = owner OA-3; Phase 3 waits on OA-3/OA-6; Phase 6 waits on OA-2/OA-4) |
 | Active task | — (waiting for the owner: OA-3 Brand Brain in the dashboard; OA-11 BitLocker; OA-1 USB copy) |
-| Next READY tasks | none: every open task waits on an owner action (see "Blocked (owner)" and `docs/owner-action-checklist.md`) |
+| Next READY tasks | none for engineering: **P11-01 owner decision (D-14/D-16)** unlocks the Chat-First pilot (P11-02…P11-08); other open items wait on owner actions |
 | First safe milestone | **M1 Technical prototype hardened — REACHED 2026-11-19** (P1-01..06, P2-01/02; gate §H met: all suites green, restore proven, no open critical/high) |
 | Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate · P5-01 render service · P5-02 brand templates & previews · P5-03 visuals in approval · P5-06 accessibility · P5-04 history · P5-05 monthly campaigns · P3-01 pricing verified · P3-03 prompt review · P3-02 realistic mock drafts · P2-04 account names · P2-03 document upload (txt/md) · P4-05 pipelined drafting · P2-03b PDF upload (2026-11-20, after OA-10) · P0-07 backup to a separate device (2026-11-20, D-13) · P9-04 automatic backups + Backups page · P9-01 local operations guide · P9-05 System health + incident runbook · P2-05 brain:reset-dev · P9-03 secrets/TLS/environment separation · P5-07 branded dashboard |
 | Blocked (owner) | **OA-11 turn on BitLocker (C: found unencrypted)** · P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · OA-1 first backup copy to a USB drive (tool ready: `npm run backup:external`) |
@@ -167,6 +167,7 @@ ADR-022 (STOP levels), ADR-023 (isolation status).
 | 8 | Inbound lead intelligence | Content link → first-party capture → attributed outcome | post-M5 (separately scoped) |
 | 9 | Internal production readiness | Repeatable operational product | **M5 Production internal launch** |
 | 10 | Commercial SaaS | Explicit SaaS readiness review passed | **M6 SaaS readiness** |
+| 11 | Chat-First connector (MCP) — internal pilot, PROPOSED | Owner-present Claude Desktop flow saves drafts into review; mock publishing; zero API spend | (pilot, after D-14) |
 
 Dependency order: 0 → 1 → 2 → (3 ∥ 4) → 5 → 6 → 7 → 9; 8 after 6 (+privacy); 10 after 9. Phases 3 and 4 can
 proceed in parallel because the evaluation harness runs from the CLI, not the dashboard.
@@ -289,6 +290,86 @@ P10-05 billing & metering · P10-06 tenant AI budgets · P10-07 per-tenant key s
 P10-09 tenant retention/deletion · P10-10 DPA/terms/sub-processors · P10-11 multi-tenant pen test ·
 P10-12 licence re-verification. All **DEFERRED** (ADR-001, ADR-023 gaps 1–6).
 
+### Phase 11 — Chat-First connector (MCP), internal pilot — PROPOSED, awaiting owner decision D-14
+Goal: the owner researches, plans and writes **interactively in Claude Desktop** (existing subscription, owner
+present). Results land in this system as **drafts and proposals** that go through the existing review, approval
+and STOP controls. The automated API mode (Phases 3/4, design C) stays as it is. Evidence: `docs/chat-first-mcp-review.md`
+(official sources, 2026-11-20). Decision record: ADR-036 (proposed).
+
+```mermaid
+flowchart LR
+  classDef new fill:#e7f0ff,stroke:#046fc5;
+  classDef done fill:#d6f5d6,stroke:#2b7a2b;
+  subgraph PC[This Windows PC - nothing reachable from outside, D-13]
+    CD[Claude Desktop - owner present, signed in to claude.ai]:::new
+    MCP[Local MCP server - stdio bridge, no DB access, no Claude credentials]:::new
+    API[Existing API on 127.0.0.1]:::done
+    DB[(Existing database - rules + lbe_agent role)]:::done
+    UI[Existing dashboard - review, approve, STOP]:::done
+    ORCH[Existing durable orchestrator - API mode C, optional]:::done
+  end
+  CD -- tool calls, owner approves writes --> MCP
+  MCP -- connector session --> API
+  API -- lbe_agent functions only --> DB
+  UI --> API
+  ORCH --> DB
+```
+
+| ID | Task | Deps | Pri | Status | Who | Acceptance |
+|---|---|---|---|---|---|---|
+| P11-00 | Research official Anthropic docs; inspect codebase; compare designs A/B/C; MCP tool design; recommendation | — | P2 | DONE 2026-11-20 | C | `docs/chat-first-mcp-review.md` with cited sources |
+| P11-01 | **Owner decision D-14** (design A pilot or otherwise) and **D-16** (confirm Claude plan; business use is allowed under its terms; *Settings → Extensions/Developer* present in Claude Desktop) | P11-00 | P1 | BLOCKED (owner) | O | Decisions recorded |
+| P11-02 | Dependency gate for `@modelcontextprotocol/sdk` (licence, install scripts, signatures, audit, 14-day cooldown), as ADR-029 | P11-01 | P1 | NOT_STARTED | C | ADR entry; exact pin |
+| P11-03 | Connector session: new session kind created by a signed-in editor or admin, ≤ 8 h, revocable, audited, write tools opt-in; refused by interactive routes; token only in `secrets\` | P11-01 | P1 | NOT_STARTED | C | DB tests (expiry, revocation, refusal, privilege snapshot) |
+| P11-04 | `/api/connector/*` running as `lbe_agent`: read tools, then write tools (same schemas, validators and DB functions as the API mode); `LBE_CONNECTOR=off` by default | P11-03 | P1 | NOT_STARTED | C | Integration tests per tool; approve, release, verify and STOP refused |
+| P11-05 | Local MCP server (stdio) bridging the tools; strict JSON schemas from the existing zod schemas; tool annotations; no DB access | P11-02, P11-04 | P1 | NOT_STARTED | C | MCP SDK client tests; one-process rule test |
+| P11-06 | Dashboard *Connect Claude* panel (create or revoke a session, allow writes, last tool calls); drafts labelled "via Claude chat" | P11-03 | P2 | NOT_STARTED | C | Playwright incl. axe |
+| P11-07 | Owner set-up: Claude Desktop config (or desktop extension) for the local server; Claude Code can use the same server as an alternative client | P11-05, P11-06 | P2 | NOT_STARTED | O+C | Tools listed in Claude Desktop |
+| P11-08 | **Mock-safe pilot:** Claude reads the Brand Brain → weekly strategy → drafts → review in the dashboard → owner approves → mock publishing. No live publishing, no paid API | P11-07 (P2-08 for real content) | P1 | NOT_STARTED | O+C | End-to-end run recorded |
+
+**Security requirements**
+1. **Local only:** no inbound exposure or tunnels; stdio; API on `127.0.0.1`.
+2. **Least privilege:**
+   - `lbe_agent` role plus a connector session;
+   - no superuser credentials;
+   - no approve, enqueue, release, STOP, claim-verify or Brand Brain write;
+   - fail closed in the database.
+3. **Token:**
+   - never shown;
+   - in `secrets\` (git-ignored, user-only, not backed up);
+   - hashed in the database;
+   - ≤ 8 h and revocable.
+4. **Untrusted content:**
+   - tool inputs are data;
+   - chat research is stored unverified and needs owner review;
+   - no automatic claims.
+5. **Audit:** every call recorded with user, tool, time and outcome; no bodies in the logs.
+6. **Never handle Claude credentials:** the app never uses or forwards subscription tokens. Claude Desktop is the
+   only Claude client (Anthropic legal and compliance terms).
+
+**Owner decisions:**
+- **D-14:** design. Recommended: A for interactive work, C kept for automation.
+- **D-15:** allow connector write tools. Recommended: drafts, research and proposals only.
+- **D-16:** Claude plan and terms:
+  - Max, Ultra or Team include monthly API credits;
+  - Pro doesn't;
+  - consumer terms exclude business use.
+
+**Acceptance (pilot exit):**
+1. The privilege snapshot proves the allowed function list.
+2. A chat-created draft sits in the normal review queue with history, claim and voice checks, and cannot be
+   approved, enqueued or published through the connector.
+3. A revoked or expired session stops all calls.
+4. The MCP process never opens the database.
+5. The full flow runs on mock publishing with zero API spend.
+
+**Rollback:**
+1. Revoke all connector sessions.
+2. Remove the server from Claude Desktop.
+3. Set `LBE_CONNECTOR=off` and restart.
+
+Chat-created drafts remain ordinary drafts. The API mode is unaffected.
+
 ---
 
 ## G. Decision register
@@ -304,6 +385,9 @@ P10-12 licence re-verification. All **DEFERRED** (ADR-001, ADR-023 gaps 1–6).
 | Legal: scheduled release; privacy/LIA | **Open** | D-03, D-11, OA-7/8 |
 | SSO/Supabase Auth before multi-user production | Open | D-05 |
 | Hosting for internal production | Owner direction: this PC (D-13); revisit if others need remote access | D-09, OA-9 |
+| Chat-First connector design (A Claude Desktop + local MCP / B remote MCP / C API only) | **Open** — recommended A + keep C | D-14, ADR-036 (proposed), P11-01 |
+| Connector write tools (drafts, research, proposals) | **Open** — recommended yes, approval stays manual | D-15 |
+| Claude plan and terms (API credits only on Max/Ultra/Team; consumer terms exclude business use) | **Open** — owner to confirm | D-16 |
 | Docker Desktop licence | Moot for now (Docker not needed) | D-10 |
 | Where code and data live; backups | **Decided** (owner, 2026-11-20): everything stays on this PC; regular verified copy on a USB drive | D-13, P0-07, OA-1 |
 
@@ -404,3 +488,4 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-20 | P9-02 DEFERRED (dashboard is this-PC-only under D-13; restart when remote access is decided). No unblocked engineering tasks remain: open items wait on owner actions (OA-1 USB copy, OA-11 BitLocker, OA-2/OA-3, OA-6, OA-4/OA-5, OA-7) or on the pilot | (this commit) |
 | 2026-11-20 | P5-07 DONE (ActTrident logo and brand colours, grouped navigation, environment badge, branded sign-in) | `4894330` |
 | 2026-11-20 | P2-06 DONE: staging backed up, migrated, owner admin login created via a guided window, staging running with automatic backups. Owner decisions: AI stays mock for now (D-06); LinkedIn apps later (OA-4/OA-5) | (this commit) |
+| 2026-11-20 | P11-00 DONE: Chat-First (MCP) architecture review with official sources (`docs/chat-first-mcp-review.md`); Phase 11 added as PROPOSED; ADR-036 proposed; decisions D-14/D-15/D-16 opened | (this commit) |
