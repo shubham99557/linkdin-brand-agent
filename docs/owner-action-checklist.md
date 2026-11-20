@@ -12,7 +12,7 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 
 | # | Action | Unblocks | Priority |
 |---|---|---|---|
-| OA-1 | Private off-machine code backup | P0-07 (laptop-loss risk) | **High** |
+| OA-1 | Backup copy on a USB drive (everything stays on this PC, D-13): plug in a drive, run `npm run backup:external` | P0-07 (laptop-loss risk) | **High** |
 | OA-2 | Create your real staging user | P2-06, pilot, real Brand Brain | **High** |
 | OA-3 | Enter real Brand Brain knowledge | P2-08 → AI evaluation, Creative templates | **High** |
 | OA-4 | Create the founder LinkedIn app | P6-01 → pilot | Medium |
@@ -25,16 +25,29 @@ real-PostgreSQL concurrency tests (9/9, 2026-11-19); Visual C++ runtime; interna
 
 ---
 
-## OA-1 — Private off-machine code backup
-- **What:** create an empty **private** repository and let Claude push the code there.
-- **Why:** all code exists only on this laptop. A disk failure loses everything.
-- **Where:** https://github.com/new (or your company's GitHub/GitLab/Azure DevOps).
+## OA-1 — Backup copy on a USB drive (changed 2026-11-20: everything stays on this PC, decision D-13)
+- **What:** keep a copy of the code and databases on a **USB drive** (or another computer), not in the cloud.
+- **Why:** everything exists only on this laptop's single disk. **C: and D: are the same physical disk**, so a
+  disk failure, theft or ransomware would take both. A USB drive kept unplugged survives all of these.
 - **Steps:**
-  1. Sign in → *New repository* → name e.g. `linkedin-brand-engine` → select **Private** → do **not** add a README.
-  2. Make sure your computer can push (GitHub: install *GitHub Desktop* or run `gh auth login`; sign in via the browser).
-- **Tell Claude:** "OA-1 done, repo URL is …" (the URL is not secret). Claude adds it as `origin` and pushes **only after you confirm**.
-- **Secret:** your GitHub password/token — never share; sign-in happens in the browser.
-- **Meanwhile:** Claude builds database backup/restore (P1-01). `.env*`, `secrets/`, `.data/` are git-ignored and are never pushed.
+  1. Plug in a USB drive (any size over 1 GB). Note its drive letter in File Explorer, e.g. `E:`.
+  2. Recommended: right-click the drive → **Turn on BitLocker** → choose a password → save the recovery key
+     somewhere safe (not on the same drive). The backup contains business data and password hashes.
+  3. Stop the server (Ctrl+C in its window). In PowerShell, in the project folder, run:
+     ```powershell
+     npm run backup:external -- --to E:\LBE-backups
+     ```
+     It copies the code (full history) and the databases into a new dated folder, then restores that copy into a
+     temporary folder to prove it works. It refuses C:, D: and any other folder on the laptop's own disk.
+  4. Start the server again (`npm start`), unplug the drive and keep it somewhere safe.
+  5. Repeat **weekly**, and before any big change (for example before entering the real Brand Brain). Old
+     backups are never deleted automatically; delete old dated folders yourself when the drive gets full.
+  6. To check an old backup at any time: `npm run backup:verify -- --set E:\LBE-backups\<dated folder>`.
+- **Tell Claude:** "OA-1 done" after the first backup (no drive letter or password needed).
+- **Not copied, on purpose:** `.env`, `.env.staging`, `secrets\` (API keys, LinkedIn app secrets, the token key).
+  After a restore on a new PC you enter those again and reconnect LinkedIn. Each backup folder contains a
+  `READ-ME-restore.txt` with the restore steps.
+- **Cost:** a USB drive, if you don't have one. No cloud service, no account.
 
 ## OA-2 — Create your real staging user
 - **What:** an admin account for you in the staging database, marked as approver for the founder profile.

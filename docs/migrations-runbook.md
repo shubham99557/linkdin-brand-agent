@@ -36,6 +36,17 @@
   git-ignored. Copies kept off this machine must be encrypted. Restored LinkedIn credentials only work with the
   same `LBE_TOKEN_ENC_KEY`; keep that key backed up separately (never alongside the backup).
 - Test a restore after every backup you intend to rely on (`--target .data/restore-check`, then delete the folder).
+- **Copy to a separate device (P0-07, owner decision D-13: everything stays on this PC).**
+  `npm run backup:external -- --to E:\LBE-backups` writes a dated folder with `code.bundle` (whole Git history),
+  `databases/` (every embedded database named in `.env` / `.env.staging`), `backup-set.json` (SHA-256 of every
+  file) and `READ-ME-restore.txt`. It then restores the copy into a temporary folder (clone + database restore)
+  and fails loudly if anything differs.
+  - **Refuses:** a folder on the same *physical* disk as the project (checked with `Get-Partition`; on this laptop
+    C: and D: are one disk), a folder inside the project, and a running server.
+  - **Override:** `--same-disk-ok` allows the same disk; that copy protects against accidental deletion only.
+  - **Check an old copy:** `npm run backup:verify -- --set <folder>` re-checks every checksum and restores again.
+  - **Not copied:** secrets (`.env*`, `secrets/`); keep the token key separately, as above. Committed code only:
+    the command warns about uncommitted changes.
 - Down-migrations are intentionally not maintained. Business rules live in database functions, and hand-written
   reversals of replaced functions are error-prone. Backups plus forward fixes are the supported path.
 

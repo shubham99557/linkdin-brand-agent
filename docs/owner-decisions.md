@@ -31,7 +31,8 @@ _Updated 2026-11-19 (Phase 1)._
 | D-06 | Provide an Anthropic API key with a spend limit to enable real AI drafting (currently mock). | Yes, with a monthly cap | Real drafts |
 | D-07 | Replace placeholder voice profiles and seed real verified claims with evidence. | Founder + marketing to write | Real content |
 | D-08 | Should rescheduling an approved post require re-approval? (Current: yes — schedule is part of the package.) | Keep yes | — |
-| D-09 | Hosting choice for any shared environment (local only today). | Decide at Phase 2 | Staging |
+| D-09 | Hosting choice for any shared environment (local only today). | **Owner direction 2026-11-20 (D-13):** run on and keep the data on the local PC. Revisit if people need access from other computers or from outside the office (that needs HTTPS and network rules) | Staging |
 | D-10 | Docker Desktop licence: free only for organisations under 250 staff and $10M revenue. Confirm eligibility. | Moot for now — real-PostgreSQL tests use `embedded-postgres`, not Docker | — |
 | D-11 | Privacy: approve LIA, privacy notice and retention policy before any personal data is processed (Phase 4 leads). | Required by law | Lead features |
 | D-12 | Spending money or changing LinkedIn account permissions — always owner-only. | Standing rule | — |
+| D-13 | Where the code and data live. | **DECIDED by owner, 2026-11-20:** code and data stay on the PC that runs the system; no cloud code repository (replaces the GitHub plan in OA-1). Condition, agreed as the safe way to do this: a regular copy on a **separate physical device** (USB drive), made and checked with `npm run backup:external` (P0-07). C: and D: on this laptop are the same physical disk, so D: does not count. | — |

@@ -19,6 +19,8 @@
     "db:backup": "tsx services/api/src/cli/db-backup.ts",
     "db:backup:staging": "node scripts/run-staging.mjs services/api/src/cli/db-backup.ts",
     "db:restore": "tsx services/api/src/cli/db-restore.ts",
+    "backup:external": "tsx services/api/src/cli/backup-external.ts",
+    "backup:verify": "tsx services/api/src/cli/backup-external.ts",
     "db:seed": "tsx services/api/src/cli/seed.ts",
     "user:create": "tsx services/api/src/cli/create-user.ts",
     "dev:api": "tsx watch services/api/src/main.ts",

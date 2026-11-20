@@ -19,10 +19,10 @@
 | Active task | — |
 | Next READY tasks | none: every open task waits on an owner action (see "Blocked (owner)" and `docs/owner-action-checklist.md`) |
 | First safe milestone | **M1 Technical prototype hardened — REACHED 2026-11-19** (P1-01..06, P2-01/02; gate §H met: all suites green, restore proven, no open critical/high) |
-| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate · P5-01 render service · P5-02 brand templates & previews · P5-03 visuals in approval · P5-06 accessibility · P5-04 history · P5-05 monthly campaigns · P3-01 pricing verified · P3-03 prompt review · P3-02 realistic mock drafts · P2-04 account names · P2-03 document upload (txt/md) · P4-05 pipelined drafting · P2-03b PDF upload (2026-11-20, after OA-10) |
-| Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · P0-07 off-machine code backup |
+| Completed this session | P0-01 … P0-06 (audit, baseline, plan, CLAUDE.md rule, owner checklist) · P1-01 backups · P1-02 sessions · P1-03 users · P1-04 logging · P1-05 security sign-off · P1-06 password change · P2-01 pillars · P2-02 onboarding wizard · P4-01 durable jobs · P4-02 checkpointed resume · P4-03 retry & step time limits · P4-04 run history · P5-00 render dependency gate · P5-01 render service · P5-02 brand templates & previews · P5-03 visuals in approval · P5-06 accessibility · P5-04 history · P5-05 monthly campaigns · P3-01 pricing verified · P3-03 prompt review · P3-02 realistic mock drafts · P2-04 account names · P2-03 document upload (txt/md) · P4-05 pipelined drafting · P2-03b PDF upload (2026-11-20, after OA-10) · P0-07 backup to a separate device (2026-11-20, D-13) |
+| Blocked (owner) | P2-08 real Brand Brain content · P3-04 paid evaluation · P6-01 founder LinkedIn app · P6-07 company app · OA-1 first backup copy to a USB drive (tool ready: `npm run backup:external`) |
 | Owner actions required | See `docs/owner-action-checklist.md` (OA-1 … OA-9 open; OA-10 done 2026-11-20) |
-| Latest passing tests | 2026-11-20: typecheck ✅ · Vitest 447 ✅ (11 PG skipped there) · `test:pg:embedded` 11/11 ✅ · Playwright 19 ✅ (incl. axe a11y) · secret scan ✅ (216 files) · npm audit 0 ✅ · signatures verified ✅ |
+| Latest passing tests | 2026-11-20: typecheck ✅ · Vitest 454 ✅ (11 PG skipped there) · `test:pg:embedded` 11/11 ✅ · Playwright 19 ✅ (incl. axe a11y) · secret scan ✅ (219 files) · npm audit 0 ✅ · signatures verified ✅ |
 | Latest commit | see `git log -1` |
 | Next milestone | **M3 Internal MVP — engineering gate met** (durable jobs with kill/resume test, real visuals approved with posts, monthly campaigns); remaining M3 criterion is a person: **the owner completes one campaign end-to-end in the dashboard** (needs OA-2 user; best with OA-3 Brand Brain + brand colours). ∥ **M2 AI intelligence evaluation** (blocked on OA-3 + OA-6) |
 
@@ -137,7 +137,7 @@ ADR-022 (STOP levels), ADR-023 (isolation status).
 
 | # | Capability | Current | Desired | Why | Depends on | Size | Security | Acceptance |
 |---|---|---|---|---|---|---|---|---|
-| G1 | Data backup & restore | None; code has no remote | One-command DB backup + tested restore; code pushed to private remote | Real Brand Brain data is about to be entered | — / OA-1 | S | Backups contain business data; keep git-ignored/encrypted | Restore test passes; runbook |
+| G1 | Data backup & restore | None; code has no remote | One-command DB backup + tested restore; code and data copied to a separate device (D-13) | Real Brand Brain data is about to be entered | — / OA-1 | S | Backups contain business data; keep git-ignored/encrypted | Restore test passes; runbook |
 | G2 | Single source for pillars | `social_accounts.pillars` (SQL only) + Brain `pillars_goals` text | Owner edits pillars per account in Brand Brain UI; Brain section holds goals narrative only | No duplicate truth; owner can't edit pillars today | — | S | Admin-only, audited | UI + DB function + tests |
 | G3 | Session hardening | 12 h absolute, no idle timeout, no "sign out everywhere" | Idle timeout, revoke-all, admin user management | Internal real users | — | S | Core auth | Tests |
 | G4 | Real AI validation | Mock only | Paid evaluation scored by humans | Quality unknown | OA-3, OA-6, P3-01 | M | Budget, key handling | Scoring sheet complete |
@@ -186,7 +186,7 @@ Responsible: **C** = Claude (developer) · **O** = Owner · **X** = external app
 | P0-04 | Add plan rule to `CLAUDE.md` | P0-03 | P0 | DONE | C | CLAUDE.md | Rule present | commit |
 | P0-05 | Create `docs/owner-action-checklist.md` | P0-03 | P0 | DONE | C | docs/ | OA-1…9 with steps | commit |
 | P0-06 | Reconcile ADRs with internal-first/SaaS-later; mark superseded docs | P0-03 | P1 | DONE | C | ADR-log, owner-decisions | ADR-027 recorded; D-04 answered | commit |
-| P0-07 | Off-machine code backup (private Git remote) | — | P0 | BLOCKED | O | — | `git push` to private repo succeeds | OA-1 |
+| P0-07 | Off-machine backup — **rescoped 2026-11-20 (owner: code and data stay on this PC, no cloud repository)**: one command copies the code (full Git history) and the databases to a **separate physical device** (USB drive) and proves the copy restores | — | P0 | DONE 2026-11-20 (tool); first copy = OA-1 | C (+O: plug in a drive) | services/api/src/external-backup.ts, cli/backup-external.ts | Refuses same physical disk and running servers; copy verified by restoring it; secrets not copied | **Evidence 2026-11-20:** `npm run backup:external -- --to E:\LBE-backups` writes a dated folder: `code.bundle` (all refs, full history), `databases/` (each embedded DB in `.env`/`.env.staging`, P1-01 format), `backup-set.json` (SHA-256 per file), `READ-ME-restore.txt`. It then **proves the copy restores** (clone → same latest commit; every DB restored with matching migrations and row counts) and fails loudly otherwise. `npm run backup:verify -- --set <folder>` re-checks checksums and restores again. Refuses: same physical disk (Windows `Get-Partition` disk number; **this laptop's C: and D: are both disk 0**, so D: is refused, confirmed by a real run), a folder inside the project, a running server; `--same-disk-ok` overrides (warning: deletion protection only). Secrets (`.env*`, `secrets/`) never copied; uncommitted changes warned. Tests: `tests/integration/external-backup.test.ts` 7/7 (full set + restore + no secrets; untouched passes / damaged caught; same-disk / inside-project refusals and override; damaged-while-writing reported as failure; running server refused; uncommitted warning; disk detection). Mutation checks: removing the same-disk refusal, the running-server refusal or the restore proof, or bundling only recent history, each fails ≥ 1 test. Real run on this project (to a temporary folder with `--same-disk-ok`, then deleted): 47 commits, development DB 231 rows, staging DB 13 rows, restored and matched; `backup:verify` passed. **Remaining (owner, OA-1):** first copy to a real USB drive. |
 
 ### Phase 1 — Security & engineering foundation
 | ID | Task | Deps | Pri | Status | Who | Files | Acceptance | Verification |
@@ -302,9 +302,9 @@ P10-12 licence re-verification. All **DEFERRED** (ADR-001, ADR-023 gaps 1–6).
 | LinkedIn apps (founder, company) | **Open** | D-02, P2-D4/D5, OA-4/5 |
 | Legal: scheduled release; privacy/LIA | **Open** | D-03, D-11, OA-7/8 |
 | SSO/Supabase Auth before multi-user production | Open | D-05 |
-| Hosting for internal production | Open | D-09, OA-9 |
+| Hosting for internal production | Owner direction: this PC (D-13); revisit if others need remote access | D-09, OA-9 |
 | Docker Desktop licence | Moot for now (Docker not needed) | D-10 |
-| Off-machine code backup | **Open** | OA-1 |
+| Where code and data live; backups | **Decided** (owner, 2026-11-20): everything stays on this PC; regular verified copy on a USB drive | D-13, P0-07, OA-1 |
 
 ---
 
@@ -331,7 +331,7 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 
 | Risk | Type | Mitigation |
 |---|---|---|
-| Laptop loss (no code remote, no DB backup) | Operational | P1-01 + OA-1 |
+| Laptop loss, disk failure, ransomware (everything on one disk) | Operational | P1-01 + P0-07 `backup:external` to a USB drive kept unplugged (OA-1, weekly) |
 | AI fabricates or misattributes facts | AI quality | Claims register, restatement check, human scoring (ADR-025/026) |
 | Content quality unknown (mock only) | Product | Phase 3 paid evaluation before UI rollout |
 | LinkedIn treats scheduled release as automated posting | Platform/legal | Manual release (ADR-014); OA-7 |
@@ -395,3 +395,4 @@ Failure handling: record → classify (product vs test defect) → fix root caus
 | 2026-11-19 | P2-03 DONE for .txt/.md (upload → review → grounded proposals); PDF split out as P2-03b, blocked on OA-10 (ADR-032: `unpdf` reviewed statically, running it needs owner approval) | `6aaef5f` |
 | 2026-11-19 | P4-05 DONE (pipelined drafting, same results and budget decisions; ADR-033) — no READY engineering tasks left; everything open waits on owner actions | `c664605` |
 | 2026-11-20 | P2-03b DONE: PDF upload after owner approval OA-10 (`unpdf` 2.1.0 in a permission-locked child process; ADR-032 amendment: separate process instead of worker thread) | `67467cb` |
+| 2026-11-20 | Owner decision D-13 (code and data stay on this PC, no cloud repository); P0-07 rescoped and DONE: `backup:external` / `backup:verify` copy code + databases to a separate physical device and prove the copy restores; first USB copy = OA-1 | P0-07 commit |
