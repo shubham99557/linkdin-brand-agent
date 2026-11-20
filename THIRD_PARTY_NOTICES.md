@@ -41,6 +41,12 @@ Installed from npm and listed with exact versions in `package-lock.json`. Licenc
 If the product is ever distributed outside ActTrident, include these licence texts (Apache-2.0 §4, BSD
 attribution clauses).
 
+### ActTrident brand assets (dashboard, P5-07)
+
+| Asset | Owner | Notes |
+|---|---|---|
+| ActTrident shield logo (`apps/web/public/brand/acttrident-mark-*.png`) | ActTrident Ltd | Used at the owner's request (2026-11-20). Cropped and resized from the official file `https://acttrident-site.pages.dev/brand/acttrident_trust_logo.png` (linked from acttrident.ai; SHA-256 of the original `abd6a7f7…f384`). Trademark of ActTrident; not licensed for other uses. |
+
 ### Test-only (not shipped)
 
 | Package | Licence | Notes |

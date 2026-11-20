@@ -57,6 +57,8 @@ export interface AppDeps {
   log?: (msg: string, extra?: Record<string, unknown>) => void;
   /** P9-04: where automatic backups and the last USB-copy record live (status page only). */
   backups?: BackupStatusConfig;
+  /** P5-07: which environment this server is (development / staging), shown as a badge in the dashboard. */
+  environment?: string;
   /** P9-05: heartbeats and settings of the running server (System health page). */
   runtime?: RuntimeState;
 }
@@ -191,7 +193,7 @@ export function createApp(deps: AppDeps) {
   // ---------------------------------------------------------------- public
   app.get("/api/health", async (c) => {
     await q("select 1");
-    return c.json({ ok: true, publishing_provider: deps.provider.name, drafter: deps.drafter.provider, live_publishing: liveOn });
+    return c.json({ ok: true, publishing_provider: deps.provider.name, drafter: deps.drafter.provider, live_publishing: liveOn, environment: deps.environment ?? null });
   });
 
   // LinkedIn redirects the browser here (cross-site, so the SameSite=Strict session cookie is NOT sent).

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, setSessionEndedHandler, type Me } from "./api.ts";
-import { ErrorText, StopBar } from "./components.tsx";
+import { api, ApiError, setSessionEndedHandler, type Health, type Me } from "./api.ts";
+import { ErrorText, StopBar, useLoad } from "./components.tsx";
 import { ContentPage } from "./ContentPage.tsx";
 import { AgentPage, BrandBrainPage, CampaignPage, JobPage, WorkflowPage } from "./agentPages.tsx";
 import { UsersPage } from "./UsersPage.tsx";
@@ -22,11 +22,38 @@ function useHashRoute(): string {
 
 export const go = (path: string) => { window.location.hash = path; };
 
-const NAV: Array<[string, string]> = [
-  ["/agent", "Agent workspace"], ["/brain", "Brand Brain"],
-  ["/", "Content calendar"], ["/new", "New post"], ["/claims", "Claims register"], ["/accounts", "Accounts & voices"],
-  ["/outbox", "Publishing outbox"], ["/mock", "Mock LinkedIn"], ["/audit", "Audit log"], ["/capabilities", "LinkedIn capabilities"],
+// P5-07: navigation grouped by what the owner is doing. Link names are unchanged (tests and habits rely on them).
+const NAV_GROUPS: Array<{ label: string; items: Array<[string, string]> }> = [
+  { label: "Create", items: [["/agent", "Agent workspace"], ["/brain", "Brand Brain"], ["/new", "New post"]] },
+  { label: "Review & publish", items: [["/", "Content calendar"], ["/outbox", "Publishing outbox"], ["/mock", "Mock LinkedIn"]] },
+  { label: "Govern", items: [["/claims", "Claims register"], ["/accounts", "Accounts & voices"], ["/audit", "Audit log"], ["/capabilities", "LinkedIn capabilities"]] },
 ];
+const ADMIN_NAV: Array<[string, string]> = [["/users", "Users"], ["/system", "System health"], ["/backups", "Backups"]];
+
+/** Which system this is: development (made-up test data) or staging (real data), and whether live publishing is on. */
+function EnvBadge() {
+  const [health] = useLoad<Health>("/health");
+  if (!health?.environment) return null;
+  const real = health.environment === "staging";
+  return (
+    <div className="env-badges">
+      <span className={`env-badge ${real ? "real" : "test"}`}>{real ? "Staging · real data" : health.environment === "development" ? "Development · test data" : health.environment}</span>
+      {health.live_publishing && <span className="env-badge live">LIVE LinkedIn publishing on</span>}
+    </div>
+  );
+}
+
+function Brand({ large = false }: { large?: boolean }) {
+  return (
+    <div className={`brand${large ? " large" : ""}`}>
+      <img src={`/brand/acttrident-mark-${large ? 192 : 96}.png`} alt="ActTrident logo" width={large ? 88 : 44} height={large ? 88 : 44} />
+      <div>
+        <div className="brand-name">ActTrident</div>
+        <div className="brand-sub">LinkedIn Branding</div>
+      </div>
+    </div>
+  );
+}
 
 function Login({ onLogin, notice }: { onLogin: () => void; notice?: string | null }) {
   const [email, setEmail] = useState("");
@@ -43,8 +70,9 @@ function Login({ onLogin, notice }: { onLogin: () => void; notice?: string | nul
         setError((err as Error).message);
       }
     }}>
-      <h2>LinkedIn Brand Engine</h2>
-      <p className="muted small">Phase 1 · development build · mock publishing only</p>
+      <Brand large />
+      <h2>Sign in</h2>
+      <EnvBadge />
       {notice && <p className="small" role="status">{notice}</p>}
       <label htmlFor="email">Email</label>
       <input id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -124,10 +152,16 @@ export function App() {
         Skip to main content
       </a>
       <nav className="side" aria-label="Main">
-        <h1>LinkedIn Brand Engine</h1>
-        <div className="sub">Phase 1 · mock publishing</div>
-        {[...NAV, ...(me.role === "admin" ? [["/users", "Users"], ["/system", "System health"], ["/backups", "Backups"]] as Array<[string, string]> : [])].map(([href, label]) => (
-          <a key={href} href={`#${href}`} className={route === href ? "active" : ""}>{label}</a>
+        <h1 className="sr-only">ActTrident LinkedIn Branding</h1>
+        <Brand />
+        <EnvBadge />
+        {[...NAV_GROUPS, ...(me.role === "admin" ? [{ label: "Admin", items: ADMIN_NAV }] : [])].map((g) => (
+          <div className="nav-group" key={g.label}>
+            <div className="nav-label">{g.label}</div>
+            {g.items.map(([href, label]) => (
+              <a key={href} href={`#${href}`} className={route === href ? "active" : ""} aria-current={route === href ? "page" : undefined}>{label}</a>
+            ))}
+          </div>
         ))}
         <div className="who">
           Signed in as <strong>{me.display_name}</strong><br />{me.email} · {me.role}<br />

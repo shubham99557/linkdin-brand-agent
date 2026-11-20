@@ -45,6 +45,7 @@ const app = createApp({
   internalJobToken: cfg.LBE_INTERNAL_JOB_TOKEN,
   backups: backups ?? { dir: autoBackupDir(cfg.LBE_ENV), externalMarker: EXTERNAL_MARKER, intervalHours: 0, keep: cfg.LBE_AUTO_BACKUP_KEEP },
   runtime,
+  environment: cfg.LBE_ENV,
 });
 if (backups) {
   startAutoBackup({ db, dir: backups.dir, environment: cfg.LBE_ENV, keep: backups.keep, intervalHours: backups.intervalHours, log: logLine });

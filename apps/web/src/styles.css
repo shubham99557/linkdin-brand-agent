@@ -1,39 +1,81 @@
+/* P5-07: ActTrident look. Brand colours sampled from the official logo (navy #01040f, shield blue #046fc5,
+   trident cyan). Text colours keep WCAG AA contrast; the axe checks in tests/e2e/a11y.spec.ts guard this. */
 :root {
-  --bg: #f6f7f9; --panel: #ffffff; --text: #18202a; --muted: #5b6675; --border: #dde2e8;
-  --accent: #1f5fbf; --accent-text: #ffffff; --ok: #1d7a46; --warn: #a15c00; --bad: #b42318; --stop-bg: #fde8e7;
+  --brand-navy: #01040f; --brand-navy-2: #0a1428; --brand-blue: #046fc5; --brand-cyan: #5ccfff;
+  --bg: #f3f6fb; --panel: #ffffff; --text: #111a2b; --muted: #5b6675; --border: #dbe3ee;
+  --accent: #046fc5; --accent-hover: #035a9f; --accent-text: #ffffff; --ok: #1d7a46; --warn: #a15c00; --bad: #b42318; --stop-bg: #fde8e7;
   --chip: #eef1f5; --mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 16px rgba(15, 23, 42, 0.05);
+  --side-text: #d7e1ee; --side-muted: #9fb0c6; --side-active: rgba(92, 207, 255, 0.14);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1419; --panel: #171d24; --text: #e6eaef; --muted: #9aa5b1; --border: #2a333d;
-    --accent: #6ea8ff; --accent-text: #0b1220; --ok: #5fd08f; --warn: #f0b45a; --bad: #ff7a70; --stop-bg: #3a1714;
-    --chip: #222b35; color-scheme: dark;
+    --bg: #070d1a; --panel: #0e1627; --text: #e6edf7; --muted: #9fb0c6; --border: #1f2a3d;
+    --accent: #5ccfff; --accent-hover: #8adcff; --accent-text: #01040f; --ok: #5fd08f; --warn: #f0b45a; --bad: #ff7a70; --stop-bg: #3a1714;
+    --chip: #16213a; --shadow: 0 1px 2px rgba(0, 0, 0, 0.4); color-scheme: dark;
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif; }
 a { color: var(--accent); }
-.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
-@media (max-width: 760px) { .shell { grid-template-columns: 1fr; } nav.side { position: static; } }
-nav.side { background: var(--panel); border-right: 1px solid var(--border); padding: 16px; position: sticky; top: 0; height: 100vh; overflow: auto; }
-nav.side h1 { font-size: 15px; margin: 0 0 4px; }
-nav.side .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
-nav.side a { display: block; padding: 6px 8px; border-radius: 6px; text-decoration: none; color: var(--text); }
-nav.side a.active { background: var(--chip); font-weight: 600; }
-nav.side .who { margin-top: 24px; font-size: 12px; color: var(--muted); }
-main { padding: 20px 24px 60px; max-width: 1200px; width: 100%; }
-h2 { margin: 0 0 12px; font-size: 20px; }
+a:hover { color: var(--accent-hover); }
+
+/* Layout: navy sidebar with the logo, content on the right. */
+.shell { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
+@media (max-width: 760px) { .shell { grid-template-columns: 1fr; } nav.side { position: static; height: auto; } }
+nav.side { background: linear-gradient(180deg, var(--brand-navy) 0%, var(--brand-navy-2) 100%); color: var(--side-text);
+  padding: 18px 14px; position: sticky; top: 0; height: 100vh; overflow: auto; border-right: 1px solid #12203a; }
+nav.side a { display: block; padding: 7px 10px; border-radius: 8px; text-decoration: none; color: var(--side-text); border-left: 3px solid transparent; }
+nav.side a:hover { background: rgba(255, 255, 255, 0.06); color: #ffffff; }
+nav.side a.active { background: var(--side-active); color: #ffffff; font-weight: 600; border-left-color: var(--brand-cyan); }
+nav.side :focus-visible { outline-color: var(--brand-cyan); }
+.nav-group { margin-top: 14px; }
+.nav-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--side-muted); margin: 0 0 4px 10px; }
+nav.side .who { margin-top: 24px; padding-top: 14px; border-top: 1px solid #1c2b47; font-size: 12px; color: var(--side-muted); }
+nav.side .who strong { color: #ffffff; }
+nav.side .who a { color: var(--brand-cyan); display: inline; padding: 0; border: 0; }
+nav.side .who button { background: transparent; color: var(--side-text); border-color: #33415a; margin-top: 4px; }
+nav.side .who button:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* Brand block (sidebar and sign-in page). */
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand img { border-radius: 10px; flex: none; }
+.brand-name { font-size: 17px; font-weight: 700; letter-spacing: 0.01em; color: #ffffff; line-height: 1.2; }
+.brand-sub { font-size: 12px; color: var(--brand-cyan); }
+.brand.large { flex-direction: column; text-align: center; gap: 6px; margin-bottom: 8px; }
+.brand.large img { border-radius: 18px; box-shadow: 0 8px 24px rgba(4, 111, 197, 0.35); }
+.brand.large .brand-name { color: var(--text); font-size: 22px; }
+.brand.large .brand-sub { color: var(--accent); font-size: 13px; }
+.env-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 2px; }
+.env-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; }
+.env-badge.test { background: #fff4d6; color: #6b4a00; border-color: #f0d48a; }
+.env-badge.real { background: #dcf3e6; color: #135c34; border-color: #9fd8b8; }
+.env-badge.live { background: #fde3e1; color: #8f1c12; border-color: #f2a8a2; }
+
+/* Sign-in page: the logo on a navy backdrop. */
+html:has(.login) { background: var(--brand-navy); }
+body:has(.login) { min-height: 100vh; padding: 10vh 16px; background: radial-gradient(circle at 50% 30%, #0b2547 0%, var(--brand-navy) 65%) fixed; }
+.login { max-width: 400px; margin: 0 auto; padding: 28px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45); border-radius: 16px; }
+.login h2 { text-align: center; font-size: 16px; margin: 6px 0 0; color: var(--muted); font-weight: 600; }
+.login .env-badges { justify-content: center; }
+.login button.primary { width: 100%; padding: 10px; font-weight: 600; }
+
+main { padding: 24px 28px 60px; max-width: 1240px; width: 100%; }
+h2 { margin: 0 0 14px; font-size: 21px; letter-spacing: -0.01em; }
 h3 { margin: 18px 0 8px; font-size: 15px; }
-.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
 .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 @media (max-width: 960px) { .grid2 { grid-template-columns: 1fr; } }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .mono { font-family: var(--mono); font-size: 12px; word-break: break-all; }
-button, .btn { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
-button.primary, .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button, .btn { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 7px 14px; border-radius: 8px; cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease; }
+button:hover:not(:disabled), .btn:hover { border-color: var(--accent); }
+button.primary, .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+button.primary:hover:not(:disabled), .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-text); }
 a.btn { display: inline-block; text-decoration: none; }
 /* Version comparison (P5-04): colour + underline/strike so the change is visible without relying on colour alone. */
 .diff-add { background: rgba(46, 160, 67, 0.25); text-decoration: underline; }
@@ -52,21 +94,22 @@ main:focus { outline: none; }
 .progress > div { height: 100%; background: var(--accent); }
 button.danger { background: var(--bad); color: #fff; border-color: var(--bad); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
-input, select, textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; width: 100%; }
+input, select, textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 textarea { min-height: 160px; resize: vertical; }
-label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; font-weight: 600; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { font-size: 12px; color: var(--muted); font-weight: 600; }
+tbody tr:hover { background: var(--chip); }
 .table-wrap { overflow-x: auto; }
 .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--chip); white-space: nowrap; }
 .badge.ok { color: var(--ok); } .badge.warn { color: var(--warn); } .badge.bad { color: var(--bad); }
-.stopbar { background: var(--stop-bg); border: 1px solid var(--bad); color: var(--text); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; }
+.stopbar { background: var(--stop-bg); border: 1px solid var(--bad); color: var(--text); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
 .error { color: var(--bad); margin: 8px 0; }
-.notice { background: var(--chip); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
-.preview { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--bg); }
+.notice { background: var(--chip); border-radius: 10px; padding: 10px 12px; margin: 8px 0; border-left: 3px solid var(--accent); }
+.preview { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--bg); }
 .preview .author { font-weight: 600; } .preview .body { white-space: pre-wrap; margin-top: 8px; }
 .unsupported li { color: var(--bad); }
 details summary { cursor: pointer; color: var(--muted); }
 pre { white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 8px; overflow-x: auto; }
-.login { max-width: 380px; margin: 12vh auto; }

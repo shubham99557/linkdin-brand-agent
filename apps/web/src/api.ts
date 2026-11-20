@@ -41,7 +41,7 @@ export interface Account {
   live_enabled_at: string | null; credential: Credential | null; stopped: boolean;
   stop_reason: string | null; approvers: Array<{ id: string; display_name: string }>;
 }
-export interface Health { ok: boolean; publishing_provider: string; drafter: string; live_publishing: boolean }
+export interface Health { ok: boolean; publishing_provider: string; drafter: string; live_publishing: boolean; environment: string | null }
 
 export const daysUntil = (iso: string) => Math.floor((new Date(iso).getTime() - Date.now()) / 86_400_000);
 export interface ContentSummary {
