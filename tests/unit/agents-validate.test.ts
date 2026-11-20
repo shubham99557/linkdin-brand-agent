@@ -1,8 +1,55 @@
 import { describe, expect, it } from "vitest";
 import {
-  AnthropicResearchSpecialist, anthropicSpecialists, buildBrandContext, checkBrandRules, topicSimilarity, validateCreative, validateExtraction,
+  AnthropicResearchSpecialist, anthropicSpecialists, buildBrandContext, checkBrandRules, EXEMPLAR_COPY_THRESHOLD, exemplarCopies, exemplarsFor,
+  EXTRACTABLE_SECTIONS, founderStory, textOverlap, topicSimilarity, validateCreative, validateExtraction,
   validatePerformance, validateResearch, validateStrategy, type BrandBrain,
 } from "@lbe/agents";
+
+describe("P2-10: founder story, exemplar posts and the copy guard", () => {
+  const EXEMPLAR = "Last month a client asked why we never send scary statistics in our newsletters. The honest answer: fear makes people " +
+    "freeze, and frozen people do not report the strange email. So we tell one short story about a colleague who reported early and was thanked.";
+  const entry = (section: string, title: string, body: string, structured: Record<string, unknown> = {}, approved_at = "2026-11-01T00:00:00Z") =>
+    ({ id: title, section, key: title, title, body, structured, version: 1, source: "owner", source_ref: null, approved_at });
+
+  it("text overlap is 1 for identical wording, 0 for unrelated text, and ignores case and punctuation", () => {
+    expect(textOverlap(EXEMPLAR, EXEMPLAR)).toBe(1);
+    expect(textOverlap(EXEMPLAR.toUpperCase().replace(/\./g, "!"), EXEMPLAR)).toBe(1);
+    expect(textOverlap(EXEMPLAR, "Patch your routers this week; most small offices never do.")).toBe(0);
+    expect(textOverlap("", EXEMPLAR)).toBe(0);
+  });
+
+  it("a draft that reuses an exemplar's wording is blocked; one in its own words is not", () => {
+    const copied = `${EXEMPLAR} Book a call to hear more.`;
+    const blocked = exemplarCopies(copied, [{ title: "Scary statistics", body: EXEMPLAR }]);
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0]).toMatch(/Copies the exemplar post "Scary statistics" \(wording overlap 0\.\d\d > 0\.25\)/);
+    const own = "Reporting a strange email should feel normal. Our team thanks the first person who flags one, every time, and that " +
+      "habit has done more than any poster. What would make reporting feel normal where you work?";
+    expect(textOverlap(own, EXEMPLAR)).toBeLessThan(EXEMPLAR_COPY_THRESHOLD);
+    expect(exemplarCopies(own, [{ title: "Scary statistics", body: EXEMPLAR }])).toEqual([]);
+  });
+
+  it("exemplars go to their own account only (newest first, at most 5); the founder story is read from its section", () => {
+    const brain = { entries: [
+      entry("exemplar_posts", "c-old", "company old", { account_kind: "company_page" }, "2026-01-01T00:00:00Z"),
+      entry("exemplar_posts", "c-new", "company new", { account_kind: "company_page" }, "2026-06-01T00:00:00Z"),
+      entry("exemplar_posts", "f-1", "founder one", { account_kind: "founder_profile" }),
+      ...[1, 2, 3, 4, 5, 6].map((i) => entry("exemplar_posts", `f-${i + 1}`, `founder ${i + 1}`, { account_kind: "founder_profile" }, `2026-0${i}-02T00:00:00Z`)),
+      entry("founder_story", "story", "I ran IT for a charity."),
+    ] } as unknown as BrandBrain;
+    expect(exemplarsFor(brain, "company_page").map((e) => e.body)).toEqual(["company new", "company old"]);
+    expect(exemplarsFor(brain, "founder_profile")).toHaveLength(5);
+    expect(exemplarsFor(brain, "founder_profile").some((e) => e.body.startsWith("company"))).toBe(false);
+    expect(founderStory(brain)).toContain("I ran IT for a charity.");
+    expect(founderStory({ entries: [] } as unknown as BrandBrain)).toBeNull();
+  });
+
+  it("documents can be extracted into the founder story but never into exemplar posts (they need the owner's provenance)", () => {
+    expect(EXTRACTABLE_SECTIONS).toContain("founder_story");
+    expect(EXTRACTABLE_SECTIONS).not.toContain("exemplar_posts");
+    expect(EXTRACTABLE_SECTIONS).not.toContain("lessons");
+  });
+});
 
 const NOW = new Date("2026-11-19T12:00:00Z");
 const finding = (over: Record<string, unknown> = {}) => ({

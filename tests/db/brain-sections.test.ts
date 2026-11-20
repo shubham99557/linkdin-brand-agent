@@ -57,6 +57,51 @@ describe("Brand Brain sections (P2-09)", () => {
   });
 });
 
+describe("founder story and exemplar posts (P2-10)", () => {
+  const POST = "Last month a client asked why we never send scary statistics. Here is the honest answer and what we do instead.";
+  const exemplar = (structured: Record<string, unknown>, body = POST, key = "ex1") =>
+    t.api<string>("select lbe.brain_upsert_entry($1, 'exemplar_posts', $2, 'Exemplar', $3, $4::jsonb, 'owner', null)",
+      [admin, key, body, JSON.stringify(structured)]);
+
+  it("both sections are optional: they never appear as missing", async () => {
+    const m = (await load()).missing_sections;
+    expect(m).not.toContain("founder_story");
+    expect(m).not.toContain("exemplar_posts");
+  });
+
+  it("an exemplar must name its account, contain the post text, and use a valid link and date", async () => {
+    await expectCode(exemplar({}), "LBE02");
+    await expectCode(exemplar({ account_kind: "personal" }), "LBE02");
+    await expectCode(exemplar({ account_kind: "company_page" }, "Too short."), "LBE02");
+    await expectCode(exemplar({ account_kind: "company_page" }, "x".repeat(3001)), "LBE02");
+    await expectCode(exemplar({ account_kind: "company_page", url: "http://example.org/post" }), "LBE02");
+    await expectCode(exemplar({ account_kind: "company_page", url: "javascript:alert(1)" }), "LBE02");
+    await expectCode(exemplar({ account_kind: "company_page", posted_on: "last week" }), "LBE02");
+    await exemplar({ account_kind: "company_page", url: "https://www.linkedin.com/feed/update/urn:li:share:1", posted_on: "2026-05-01", why: "Most comments this year" });
+    const e = (await load()).entries.find((x) => x.section === "exemplar_posts" && x.key === "ex1") as unknown as { structured: Record<string, string> };
+    expect(e.structured).toMatchObject({ account_kind: "company_page", posted_on: "2026-05-01" });
+  });
+
+  it("a new version of an exemplar is checked too (no way around the rule through an update)", async () => {
+    await expectCode(exemplar({ account_kind: "nobody" }, POST, "ex1"), "LBE02");
+    const v = await t.db.query<{ n: number }>("select count(*)::int as n from lbe.brand_entries where section = 'exemplar_posts' and key = 'ex1' and status = 'approved'");
+    expect(v[0]!.n).toBe(1);   // the valid version is still the current one
+  });
+
+  it("an AI proposal for the founder story needs a verbatim quote; a quoted one is accepted for the owner to decide", async () => {
+    const propose = (evidence: unknown, role: string | null = "brand_orchestrator") =>
+      t.api<string>("select lbe.brain_propose($1, 'founder_story', 'main', 'Story', 'Ran IT for a charity before founding ActTrident.', '{}'::jsonb, 'r', $2::jsonb, $3)",
+        [editor, JSON.stringify(evidence), role]);
+    await expectCode(propose([]), "LBE02");
+    await expectCode(propose([{ type: "source_quote", quote: "short" }]), "LBE02");
+    await expectCode(propose({ quote: "not an array of evidence items" }), "LBE02");
+    const ok = await propose([{ type: "source_quote", source: "interview.md", quote: "I ran IT for a small charity for six years." }]);
+    expect(ok).toMatch(/^[0-9a-f-]{36}$/);
+    // Nothing was written to approved knowledge by proposing.
+    expect((await load()).entries.some((e) => e.section === "founder_story")).toBe(false);
+  });
+});
+
 describe("upgrade from the schema before P2-09", () => {
   it("existing buyer ICP entries and pending proposals survive unchanged; the follower then shows as missing", async () => {
     const db = await openDb({ url: "pglite" });

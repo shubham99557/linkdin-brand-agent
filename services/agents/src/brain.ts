@@ -41,6 +41,23 @@ export function voiceFor(brain: BrandBrain, kind: "company_page" | "founder_prof
   return text || null;
 }
 
+/** P2-10: the founder's own story and opinions (owner-approved), or null. Given to founder posts only. */
+export function founderStory(brain: BrandBrain): string | null {
+  return textFor(brain, "founder_story") || null;
+}
+
+/** Most exemplar posts sent to the writer per account (newest first); keeps prompts bounded. */
+export const MAX_EXEMPLARS = 5;
+
+/** P2-10: authentic posts the owner chose as style references for one account (newest approval first). */
+export function exemplarsFor(brain: BrandBrain, kind: "company_page" | "founder_profile"): Array<{ title: string; body: string }> {
+  return entriesFor(brain, "exemplar_posts")
+    .filter((e) => e.structured.account_kind === kind)
+    .sort((a, b) => b.approved_at.localeCompare(a.approved_at))
+    .slice(0, MAX_EXEMPLARS)
+    .map((e) => ({ title: e.title, body: e.body }));
+}
+
 const listFrom = (brain: BrandBrain, field: string) =>
   entriesFor(brain, "prohibited").flatMap((e) => (Array.isArray(e.structured[field]) ? (e.structured[field] as unknown[]) : []))
     .filter((t): t is string => typeof t === "string" && t.trim().length > 0).map((t) => t.trim());

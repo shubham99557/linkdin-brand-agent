@@ -16,6 +16,7 @@ const STEP_HELP: Record<string, string> = {
   messaging: "The few messages you want repeated. Proof for them goes in the Claims step at the end.",
   voice_company: "How the company page should sound. Example posts help a lot.",
   voice_founder: "How the founder sounds when writing personally, in the first person.",
+  founder_story: "Optional but valuable: the founder's story and real opinions, in their own words. The agent never invents personal history; without this it keeps founder posts general.",
   pillars: "Check each account's name, then the themes posts rotate through, per account. Use plain words for pillars; they're saved as short ids.",
   pillars_goals: "What LinkedIn should achieve this quarter and why the pillars matter.",
   prohibited: "Words, claims and topics that must never appear. The agent's checks block these.",

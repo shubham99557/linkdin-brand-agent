@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import type { VerifiedClaim } from "@lbe/domain";
 import { PROMPT_VERSION as DRAFT_PROMPT_VERSION, validateDraftOutput, type Drafter } from "@lbe/drafting";
-import { buildBrandContext, entriesFor, nonProductionKnowledge, prohibitedTerms, prohibitedTopics, voiceFor, type BrandBrain } from "./brain.ts";
+import {
+  buildBrandContext, entriesFor, exemplarsFor, founderStory, nonProductionKnowledge, prohibitedTerms, prohibitedTopics, voiceFor, type BrandBrain,
+} from "./brain.ts";
 import type { Specialist, Specialists, SpecialistResult, StrategyItem } from "./schemas.ts";
 import { Budget, worstCaseCallUsd } from "./cost.ts";
 import {
-  checkBrandRules, findingRestatements, usableEvidence, validateCreative, validateExtraction, validatePerformance, validateResearch,
+  checkBrandRules, exemplarCopies, findingRestatements, usableEvidence, validateCreative, validateExtraction, validatePerformance, validateResearch,
   validateStrategy, type ValidFinding,
 } from "./validate.ts";
 
@@ -343,6 +345,13 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
         : { text: "UNKNOWN voice — write plainly and conservatively.", source: "missing" };
       if (voices[k].source !== "brain") warnings.push(`${k} voice is not in the Brand Brain yet (using ${voices[k].source}).`);
     }
+    // P2-10: the founder story goes to founder posts only; each account gets its own exemplar posts as a style
+    // reference. Every exemplar (either account) is checked against each draft for copied wording.
+    const personal: Record<Kind, { founderStory: string | null; exemplars: string[] }> = {
+      company_page: { founderStory: null, exemplars: exemplarsFor(brain, "company_page").map((e) => e.body) },
+      founder_profile: { founderStory: founderStory(brain), exemplars: exemplarsFor(brain, "founder_profile").map((e) => e.body) },
+    };
+    const allExemplars = entriesFor(brain, "exemplar_posts").map((e) => ({ title: e.title, body: e.body }));
     const claimsById = new Map(brain.claims.map((c) => [c.id, c]));
     const totalDrafts = plan.items.length * accounts.length;
     const identity = entriesFor(brain, "identity").map((e) => e.body).join("\n");
@@ -377,6 +386,7 @@ export async function runBrandWorkflow(deps: AgentDeps, input: WorkflowInput): P
           }
           await checkpoint("drafting", { done: completed, total: totalDrafts });
           const written = await writeDraft(deps, { workflowId, item, acct, group, startDate, brandContext, voice: voices[acct.kind].text,
+            founderStory: personal[acct.kind].founderStory, exemplars: personal[acct.kind].exemplars, allExemplars,
             itemFindings, allFindings: findings, itemClaims, terms, identity, budget, existing, limits,
             // P3-03: the writer sees how earlier posts in this plan open, so it can open differently (originality check).
             otherOpenings: openings.filter(Boolean) });
@@ -447,6 +457,10 @@ interface DraftParams {
   existing?: SavedDraft;
   limits: StepTimeouts;
   otherOpenings?: string[];
+  /** P2-10: founder story (founder account only), this account's exemplar posts, and every exemplar for the copy check. */
+  founderStory?: string | null;
+  exemplars?: string[];
+  allExemplars?: Array<{ title: string; body: string }>;
 }
 /** A draft whose text is written, checked and saved; the visual brief, rendering and review submission follow. */
 interface WrittenDraft {
@@ -495,7 +509,7 @@ async function writeDraft(deps: AgentDeps, p: DraftParams):
     (signal) => deps.writer.draft({
       accountKind: p.acct.kind, accountName: p.acct.display_name, voiceProfile: p.voice, pillar,
       allowedPillars: p.acct.pillars, brief, sourceMaterial, claims: p.itemClaims, brandContext: p.brandContext,
-      otherOpenings: p.otherOpenings,
+      otherOpenings: p.otherOpenings, founderStory: p.founderStory ?? null, exemplars: p.exemplars ?? [],
     }, { signal }), (message) => ({ kind: "error" as const, message }));
   const writerMeta = { provider: deps.writer.provider, model: deps.writer.model, promptVersion: DRAFT_PROMPT_VERSION };
   p.budget.add(`draft:${p.acct.kind}`, deps.writer.model, written.kind === "ok" ? written.usage : undefined, deps.writer.provider);
@@ -515,7 +529,9 @@ async function writeDraft(deps: AgentDeps, p: DraftParams):
   const rules = checkBrandRules(v.draft.body, { accountKind: p.acct.kind, prohibitedTerms: p.terms });
   // Claim-to-source verification: restating research without a verified claim blocks review.
   const restated = findingRestatements(v.draft.body, v.draft.citations.map((c) => c.quoted_span), p.allFindings);
-  unsupported = [...v.draft.unsupported, ...rules.blocking, ...restated];
+  // P2-10: wording copied from an exemplar post blocks review (exemplars are style references only).
+  const copied = exemplarCopies(v.draft.body, p.allExemplars ?? []);
+  unsupported = [...v.draft.unsupported, ...rules.blocking, ...restated, ...copied];
   body = v.draft.body;
   citations = v.draft.citations;
   voiceWarnings = rules.warnings;

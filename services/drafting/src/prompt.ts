@@ -1,6 +1,6 @@
 import type { AccountKind, VerifiedClaim } from "@lbe/domain";
 
-export const PROMPT_VERSION = "draft-post.v3";
+export const PROMPT_VERSION = "draft-post.v4";
 
 export interface DraftInput {
   accountKind: AccountKind;
@@ -15,13 +15,40 @@ export interface DraftInput {
   brandContext?: string;
   /** First lines of posts already written in the same plan (P3-03): the new post must open differently. */
   otherOpenings?: readonly string[];
+  /** P2-10: the founder's own story and opinions (owner-approved). Founder posts only; never given to the company page. */
+  founderStory?: string | null;
+  /** P2-10: authentic posts of this account, chosen by the owner as style references (not to be copied). */
+  exemplars?: readonly string[];
 }
 
 const UNTRUSTED_TAG = "untrusted_source_material";
+/** Most exemplar posts and characters per exemplar included in a prompt. */
+const MAX_EXEMPLARS = 5;
+const MAX_EXEMPLAR_CHARS = 3000;
 
 /** Neutralise anything that could close or spoof our delimiters. */
 export function escapeUntrusted(text: string): string {
-  return text.replace(/<\/?\s*(untrusted_source_material|approved_claims|brief|voice_profile|brand_context|other_openings|system)[^>]*>/gi, "[removed-tag]");
+  return text.replace(/<\/?\s*(untrusted_source_material|approved_claims|brief|voice_profile|brand_context|other_openings|founder_story|style_examples|example|system)[^>]*>/gi, "[removed-tag]");
+}
+
+/** P2-10 blocks: founder story (founder posts only) and style examples. Owner-approved, still escaped as data. */
+function personalBlocks(input: DraftInput): string[] {
+  const out: string[] = [];
+  if (input.accountKind === "founder_profile") {
+    const story = input.founderStory?.trim();
+    out.push("", story
+      ? "Personal history and opinions attributed to the founder may come ONLY from <founder_story> (approved by the founder). Never invent anecdotes, past roles, clients, conversations or experiences."
+      : "No founder story has been approved yet: do not invent personal anecdotes, past roles, clients, conversations or experiences. Frame lessons in general terms or as the founder's view.");
+    if (story) out.push("<founder_story>", escapeUntrusted(story), "</founder_story>");
+  }
+  const examples = (input.exemplars ?? []).map((e) => e.trim()).filter(Boolean).slice(0, MAX_EXEMPLARS);
+  if (examples.length > 0) {
+    out.push("",
+      "<style_examples> holds real posts from this account that the owner likes. Match their tone, rhythm, sentence length and structure. " +
+        "Do NOT copy their sentences or openings (drafts that reuse their wording are rejected), and do not reuse facts from them unless the same fact is in APPROVED CLAIMS.",
+      "<style_examples>", ...examples.map((e) => `<example>\n${escapeUntrusted(e.slice(0, MAX_EXEMPLAR_CHARS))}\n</example>`), "</style_examples>");
+  }
+  return out;
 }
 
 export function buildSystemPrompt(input: DraftInput): string {
@@ -31,8 +58,9 @@ export function buildSystemPrompt(input: DraftInput): string {
   return [
     `You draft LinkedIn posts for ${audience}: ${input.accountName}. A human reviews and approves every post; you never publish anything.`,
     "",
-    "Who you are writing for: the ideal customers described in the brand context (ideal customer profiles, audience problems, audience language). " +
-      "Write to one of their real problems — the brief names it — in the words they use, so a reader in that role recognises their own situation. " +
+    "Who you are writing for: the brand context describes two different audiences. The Buyer ICP is who buys; the Ideal follower is who reads, follows " +
+      "and shares, and may influence or refer buyers. If the brief names an audience, write for it; otherwise write so a follower finds the post useful and a buyer " +
+      "recognises their own problem. Write to one real problem (the brief names it) in the words the audience uses (audience problems, audience language). " +
       "Where those sections are UNKNOWN, write for a general UK business audience and keep the post general rather than guessing specifics about readers.",
     "",
     "What makes a post worth publishing: it says something a reader could not get from a generic security tip — the specific angle in the brief, " +
@@ -61,6 +89,7 @@ export function buildSystemPrompt(input: DraftInput): string {
       ? ["", "Owner-approved brand context follows. Sections marked UNKNOWN have not been provided — never fill them in yourself.",
          "<brand_context>", input.brandContext.trim(), "</brand_context>"]
       : []),
+    ...personalBlocks(input),
   ].join("\n");
 }
 

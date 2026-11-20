@@ -1,6 +1,6 @@
 import { splitSentences } from "@lbe/domain";
 import { entriesFor, type BrandBrain } from "./brain.ts";
-import { topicSimilarity, topicTokens } from "./validate.ts";
+import { textOverlap, topicSimilarity, topicTokens } from "./validate.ts";
 
 /**
  * Automated campaign checks. These can only find problems — they cannot certify quality. The verdict is
@@ -13,18 +13,6 @@ interface Draft { account_kind: string; topic: string; status: string; body: str
   voice_warnings?: string[]; visual_brief?: { format: string; warnings?: string[] } | null; variant_group: string }
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
-const trigrams = (s: string) => {
-  const w = s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
-  const out = new Set<string>();
-  for (let i = 0; i + 2 < w.length; i++) out.add(`${w[i]} ${w[i + 1]} ${w[i + 2]}`);
-  return out;
-};
-const jaccard = (a: Set<string>, b: Set<string>) => {
-  if (!a.size || !b.size) return 0;
-  let n = 0;
-  for (const x of a) if (b.has(x)) n++;
-  return n / (a.size + b.size - n);
-};
 
 export function evaluateCampaign(result: Record<string, any>, brain: BrandBrain, expected = { posts: 4 }): Evaluation {
   const checks: Check[] = [];
@@ -79,7 +67,7 @@ export function evaluateCampaign(result: Record<string, any>, brain: BrandBrain,
   let maxSim = 0;
   for (let i = 0; i < drafts.length; i++) for (let j = i + 1; j < drafts.length; j++) {
     if (drafts[i]!.account_kind !== drafts[j]!.account_kind || drafts[i]!.variant_group === drafts[j]!.variant_group) continue;
-    maxSim = Math.max(maxSim, jaccard(trigrams(drafts[i]!.body), trigrams(drafts[j]!.body)));
+    maxSim = Math.max(maxSim, textOverlap(drafts[i]!.body, drafts[j]!.body));
   }
   add({ area: "originality", name: "Max text overlap between different posts (same account)", value: maxSim.toFixed(2), status: maxSim <= 0.25 ? "pass" : "fail",
     note: "High overlap indicates template-like posts." });

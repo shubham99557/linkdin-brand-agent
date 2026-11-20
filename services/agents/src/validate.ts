@@ -114,6 +114,38 @@ export function topicSimilarity(a: string, b: string): number {
   return inter / (x.size + y.size - inter);
 }
 
+// ---------------------------------------------------------------- text overlap (originality)
+const trigrams = (s: string) => {
+  const w = s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+  const out = new Set<string>();
+  for (let i = 0; i + 2 < w.length; i++) out.add(`${w[i]} ${w[i + 1]} ${w[i + 2]}`);
+  return out;
+};
+/** Word-trigram Jaccard overlap between two texts (0 = nothing shared, 1 = identical wording). */
+export function textOverlap(a: string, b: string): number {
+  const x = trigrams(a), y = trigrams(b);
+  if (!x.size || !y.size) return 0;
+  let n = 0;
+  for (const t of x) if (y.has(t)) n++;
+  return n / (x.size + y.size - n);
+}
+
+/** Above this overlap a draft is treated as copying an exemplar post (same bar as the evaluation's template check). */
+export const EXEMPLAR_COPY_THRESHOLD = 0.25;
+
+/**
+ * P2-10: exemplar posts are style references only. A draft that reuses an exemplar's wording is held for a human
+ * (a blocking issue), never sent to review.
+ */
+export function exemplarCopies(body: string, exemplars: ReadonlyArray<{ title: string; body: string }>): string[] {
+  return exemplars.flatMap((e) => {
+    const overlap = textOverlap(body, e.body);
+    return overlap > EXEMPLAR_COPY_THRESHOLD
+      ? [`Copies the exemplar post "${e.title}" (wording overlap ${overlap.toFixed(2)} > ${EXEMPLAR_COPY_THRESHOLD}): exemplars are style references only; rewrite in new words`]
+      : [];
+  });
+}
+
 // ---------------------------------------------------------------- strategy
 export function validateStrategy(raw: unknown, ctx: {
   postCount: number; days: number;

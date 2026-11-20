@@ -549,6 +549,60 @@ describe("account names (P2-04: owner-edited, used for new drafts)", () => {
   });
 });
 
+describe("P2-10: founder story and exemplar posts reach the right writer; copied wording is held", () => {
+  const COMPANY_EXEMPLAR = "COMPANY-EXEMPLAR: Last month a client asked why we never send scary statistics in our newsletters. The honest answer: " +
+    "fear makes people freeze, and frozen people do not report the strange email.";
+  const FOUNDER_EXEMPLAR = "FOUNDER-EXEMPLAR: I used to think security training was about rules. Then I watched a receptionist stop an invoice " +
+    "fraud because she felt safe asking a silly question.";
+
+  it("the owner adds them through the API; an exemplar without its account is refused", async () => {
+    const admin = await login("admin");
+    expect((await call(admin, "POST", "/api/brain/entries", { section: "exemplar_posts", key: "no-account", title: "No account", body: COMPANY_EXEMPLAR })).status).toBe(422);
+    for (const [key, body, account_kind] of [["company-1", COMPANY_EXEMPLAR, "company_page"], ["founder-1", FOUNDER_EXEMPLAR, "founder_profile"]] as const) {
+      const r = await call(admin, "POST", "/api/brain/entries", { section: "exemplar_posts", key, title: key, body, structured: { account_kind, why: "test" } });
+      expect(r.status).toBe(201);
+    }
+    expect((await call(admin, "POST", "/api/brain/entries", { section: "founder_story", key: "main", title: "Founder story",
+      body: "FOUNDER-STORY-MARKER: [SYNTHETIC] Ran IT for a small charity before starting ActTrident." })).status).toBe(201);
+  });
+
+  it("founder story only to the founder writer, exemplars only to their own account; a copying draft is held, an original one goes to review", async () => {
+    writerInputs.length = 0;
+    const FOUNDER_OWN = "I keep coming back to one question when I talk to small teams: who would you tell if an email felt wrong? " +
+      "If the answer takes more than a second, that is the work. Make the first report easy, thank the person, and fix the process behind it.";
+    writerOverride = (i) => ({ kind: "ok", raw: {
+      body: i.accountKind === "company_page" ? `${COMPANY_EXEMPLAR} That is why every story we tell ends with a thank-you.` : FOUNDER_OWN,
+      hook_variants: [], claims_used: [], unsupported_statements: [], notes_for_reviewer: "" } });
+    const editor = await login("editor");
+    const r = await runWorkflow(editor, { goal: "A week on reporting culture for UK teams", start_date: "2027-01-11" });
+    writerOverride = undefined;
+    expect(r.status).toBe(201);
+
+    const company = writerInputs.filter((i) => i.accountKind === "company_page");
+    const founder = writerInputs.filter((i) => i.accountKind === "founder_profile");
+    expect(company.length).toBeGreaterThan(0);
+    expect(founder.length).toBeGreaterThan(0);
+    for (const i of company) {
+      expect(i.founderStory ?? null).toBeNull();
+      expect(i.exemplars).toEqual([COMPANY_EXEMPLAR]);
+    }
+    for (const i of founder) {
+      expect(i.founderStory).toContain("FOUNDER-STORY-MARKER");
+      expect(i.exemplars).toEqual([FOUNDER_EXEMPLAR]);
+    }
+
+    const drafts = r.body.result.drafts as Array<{ status: string; unsupported: string[]; account_kind: string }>;
+    for (const d of drafts.filter((x) => x.account_kind === "company_page")) {
+      expect(d.status).toBe("draft");
+      expect(d.unsupported.join(" ")).toMatch(/Copies the exemplar post "company-1"/);
+    }
+    for (const d of drafts.filter((x) => x.account_kind === "founder_profile")) {
+      expect(d.unsupported).toEqual([]);
+      expect(d.status).toBe("in_review");
+    }
+  });
+});
+
 describe("missing knowledge", () => {
   it("a workflow for an organization with an empty Brand Brain reports gaps and marks them UNKNOWN", async () => {
     const b = await login("adminB");

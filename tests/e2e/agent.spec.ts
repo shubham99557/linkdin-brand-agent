@@ -126,19 +126,19 @@ test("guided setup: owner answers, skips (stays UNKNOWN), resumes, adds a draft 
   await page.getByRole("link", { name: "Brand Brain" }).click();
   await page.getByTestId("start-onboarding").click();
   // Starts at the first missing step (the e2e database begins with an empty Brand Brain).
-  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 1 of 15: Brand identity");
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 1 of 16: Brand identity");
   await expect(page.getByText("stays UNKNOWN", { exact: false }).first()).toBeVisible();
   await page.locator("#wiz-identity").fill("[SYNTHETIC] ActTrident helps UK organisations run practical security programmes.");
   await page.getByTestId("wizard-save").click();
   await expect(page.getByRole("status")).toContainText('Saved "Brand identity"');
-  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 15: Positioning");
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 16: Positioning");
   // Skip positioning: it stays missing.
   await page.getByRole("button", { name: "Skip for now (stays UNKNOWN)" }).click();
-  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 3 of 15: Buyer ICP (who buys)");
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 3 of 16: Buyer ICP (who buys)");
   // Leave and come back: resumes at the first missing step (positioning), not at step 1.
   await page.getByRole("link", { name: "Brand Brain" }).click();
   await page.getByTestId("start-onboarding").click();
-  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 15: Positioning");
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 16: Positioning");
   // Jump to the claims step and add a draft claim.
   await page.getByRole("link", { name: "Proof (claims)" }).click();
   await page.locator("#wiz-claim").fill("[SYNTHETIC] ActTrident is registered in England and Wales.");
@@ -225,4 +225,21 @@ test("owner onboards a Brand Brain section; editor runs the Branding Agent; draf
   await page.getByTestId("draft-pair").first().getByRole("link", { name: "Open for review →" }).first().click();
   await expect(page.getByTestId("status-badge").first()).toHaveText("in review");
   await expect(page.getByTestId("review-panel")).toBeVisible();
+});
+
+test("P2-10: owner adds an authentic exemplar post with its account and provenance; saving needs the account", async ({ page }) => {
+  await signIn(page, "admin@lbe.test", TEST_PASSWORDS.admin);
+  await page.getByRole("link", { name: "Brand Brain" }).click();
+  const section = page.getByTestId("section-exemplar_posts");
+  await expect(section.getByText("optional")).toBeVisible();
+  await section.getByRole("button", { name: "Fill in" }).click();
+  await section.getByLabel("Title").fill("Scary statistics post");
+  await page.getByTestId("answer-exemplar_posts").fill("[SYNTHETIC] Last month a client asked why we never send scary statistics. The honest answer is that fear makes people freeze.");
+  await expect(page.getByTestId("save-exemplar_posts")).toBeDisabled();            // account not chosen yet
+  await section.getByLabel("Account it was written for").selectOption("company_page");
+  await section.getByLabel("Date posted (optional)").fill("2026-05-01");
+  await section.getByLabel("Why you chose it (optional)").fill("Most comments this year");
+  await page.getByTestId("save-exemplar_posts").click();
+  await expect(section.getByText("approved")).toBeVisible();
+  await expect(section.getByTestId("exemplar-provenance")).toContainText("Company page · posted 2026-05-01 · why: Most comments this year");
 });

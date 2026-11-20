@@ -4,7 +4,7 @@
  */
 export const BRAIN_SECTIONS = [
   "identity", "positioning", "messaging", "icp", "ideal_follower", "audience_problems", "audience_language",
-  "voice_company", "voice_founder", "product", "pillars_goals", "prohibited", "communication_rules", "lessons",
+  "voice_company", "voice_founder", "founder_story", "exemplar_posts", "product", "pillars_goals", "prohibited", "communication_rules", "lessons",
 ] as const;
 export type BrainSection = (typeof BRAIN_SECTIONS)[number];
 
@@ -18,6 +18,16 @@ export interface SectionMeta {
   listField?: { key: string; label: string };
   /** One line placed under the section heading in agent prompts, where the label alone could be misread. */
   contextNote?: string;
+  /** Each entry is one authentic post with its provenance (P2-10): the editor asks for these fields. */
+  postFields?: boolean;
+}
+
+/** Provenance stored in `structured` for an exemplar post (checked by lbe.exemplar_problem in the database). */
+export interface ExemplarFields {
+  account_kind: "company_page" | "founder_profile";
+  url?: string;          // https:// link to the post, if public
+  posted_on?: string;    // YYYY-MM-DD
+  why?: string;          // why the owner chose it (results, tone, structure)
 }
 
 export const SECTION_META: readonly SectionMeta[] = [
@@ -55,6 +65,18 @@ export const SECTION_META: readonly SectionMeta[] = [
     questions: ["How should the company page sound?", "Paste 3–5 example posts you like."] },
   { section: "voice_founder", label: "Founder voice", required: true,
     questions: ["How should the founder sound (first person)?", "Topics the founder is happy to talk about — and ones to avoid."] },
+  // P2-10 (ADR-038): written by the founder or owner; an AI may only propose it with a verbatim quote (DB rule).
+  { section: "founder_story", label: "Founder story & opinions", required: false,
+    questions: [
+      "The founder's story in their own words: what they did before, why they started ActTrident, a few moments that shaped it.",
+      "Opinions the founder genuinely holds about the industry, including ones others may disagree with.",
+      "Personal topics the founder does NOT want to share.",
+    ] },
+  { section: "exemplar_posts", label: "Best authentic posts", required: false, postFields: true,
+    questions: [
+      "Paste one real post per entry that you would be happy to see more like, written by or for this account.",
+      "Say which account it is from, and why you chose it (results, tone, structure). Add the link and date if you have them.",
+    ] },
   { section: "product", label: "Product knowledge", required: true,
     questions: ["What does the product do today (not roadmap)?", "Which capabilities may be mentioned publicly?"] },
   // Pillars themselves live on each account (edited in the "Content pillars" panel); this section is the goals narrative.
@@ -80,6 +102,6 @@ export const REQUIRED_SECTIONS = SECTION_META.filter((s) => s.required).map((s) 
 export type OnboardingStep = BrainSection | "pillars" | "claims";
 export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   "identity", "positioning", "icp", "ideal_follower", "audience_problems", "product", "messaging",
-  "voice_company", "voice_founder", "pillars", "pillars_goals", "prohibited",
+  "voice_company", "voice_founder", "founder_story", "pillars", "pillars_goals", "prohibited",
   "audience_language", "communication_rules", "claims",
 ];

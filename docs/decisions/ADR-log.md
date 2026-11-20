@@ -922,6 +922,16 @@ the buyer ICP drives qualification. The owner's prompt: "The buyer and follower 
 - Rejection-reason categories: P2-12.
 
 **Implemented 2026-11-20 (P2-09):** migration `20261120000200_brain_buyer_follower.sql`; evidence in `plan.md`.
+**Implemented 2026-11-20 (P2-10):** `founder_story` and `exemplar_posts`, migration
+`20261120000300_founder_story_exemplars.sql`.
+- **Database rules:**
+  - exemplars carry `account_kind`, an optional `https://` link, a date and a reason;
+  - AI founder-story proposals need a verbatim quote.
+- **Writer prompt v4:**
+  - the founder story goes to founder posts only;
+  - with no story, invented anecdotes are explicitly forbidden;
+  - exemplars are sent as escaped style examples for their own account.
+- **Copy guard:** word-trigram overlap above 0.25 with any exemplar holds the draft for a human.
 
 **Consequences.**
 - Staging's Brand Brain is still empty, so no real content is affected.

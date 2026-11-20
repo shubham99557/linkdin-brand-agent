@@ -3,7 +3,7 @@ import { api, fmt, type Me } from "./api.ts";
 import { Badge, ErrorText, useLoad, VisualPreview } from "./components.tsx";
 
 // ------------------------------------------------------------------ types
-export interface SectionMeta { section: string; label: string; required: boolean; questions: string[]; listField?: { key: string; label: string } }
+export interface SectionMeta { section: string; label: string; required: boolean; questions: string[]; listField?: { key: string; label: string }; postFields?: boolean }
 export interface Entry { id: string; section: string; key: string; title: string; body: string; structured: Record<string, unknown>; version: number; source: string; source_ref: string | null; approved_at: string }
 export interface Brain {
   organization: { name: string }; entries: Entry[]; missing_sections: string[]; sections: SectionMeta[]; pending_proposals: number;
@@ -257,17 +257,28 @@ function SectionCard({ meta, entries, missing, isOwner, onSaved, onError }: {
   const [body, setBody] = useState("");
   const [list, setList] = useState("");
   const [topics, setTopics] = useState("");
+  // P2-10: an exemplar post carries its provenance (which account, link, date, why it was chosen).
+  const [post, setPost] = useState({ account_kind: "", url: "", posted_on: "", why: "" });
   const start = (e: Entry | "new") => {
+    const s = e === "new" ? {} : e.structured;
+    setPost({ account_kind: String(s.account_kind ?? ""), url: String(s.url ?? ""), posted_on: String(s.posted_on ?? ""), why: String(s.why ?? "") });
     setEditing(e);
-    setTitle(e === "new" ? meta.label : e.title);
+    // Each exemplar is its own entry, keyed by its title, so a new one starts untitled.
+    setTitle(e === "new" ? (meta.postFields ? "" : meta.label) : e.title);
     setBody(e === "new" ? "" : e.body);
     setList(e === "new" ? "" : ((e.structured.terms as string[] | undefined) ?? []).join("\n"));
     setTopics(e === "new" ? "" : ((e.structured.topics as string[] | undefined) ?? []).join("\n"));
   };
   const save = async () => {
     onError(null);
-    const key = editing === "new" || !editing ? (entries.length === 0 ? "main" : title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "main") : editing.key;
-    const structured = meta.listField ? { terms: list.split("\n").map((s) => s.trim()).filter(Boolean), topics: topics.split("\n").map((s) => s.trim()).filter(Boolean) } : undefined;
+    const slugOf = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "main";
+    const key = editing === "new" || !editing ? (entries.length === 0 && !meta.postFields ? "main" : slugOf(title)) : editing.key;
+    if ((editing === "new" || !editing) && meta.postFields && entries.some((x) => x.key === key)) {
+      onError(`An exemplar called "${title}" already exists. Give this post a different title, or edit that one.`);
+      return;
+    }
+    const structured = meta.listField ? { terms: list.split("\n").map((s) => s.trim()).filter(Boolean), topics: topics.split("\n").map((s) => s.trim()).filter(Boolean) }
+      : meta.postFields ? Object.fromEntries(Object.entries(post).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v)) : undefined;
     try {
       await api("/brain/entries", { method: "POST", body: { section: meta.section, key, title, body, structured } });
       setEditing(null);
@@ -289,6 +300,12 @@ function SectionCard({ meta, entries, missing, isOwner, onSaved, onError }: {
           <div style={{ whiteSpace: "pre-wrap" }}>{e.body}</div>
           {Array.isArray(e.structured.terms) && <div className="small">Prohibited terms: {(e.structured.terms as string[]).join(", ") || "—"}</div>}
           {Array.isArray(e.structured.topics) && <div className="small">Prohibited topics: {(e.structured.topics as string[]).join(", ") || "—"}</div>}
+          {meta.postFields && <div className="small" data-testid="exemplar-provenance">
+            {e.structured.account_kind === "founder_profile" ? "Founder profile" : "Company page"}
+            {e.structured.posted_on ? ` · posted ${String(e.structured.posted_on)}` : ""}
+            {typeof e.structured.url === "string" && e.structured.url.startsWith("https://")
+              ? <> · <a href={e.structured.url} target="_blank" rel="noreferrer noopener">link</a></> : ""}
+            {e.structured.why ? ` · why: ${String(e.structured.why)}` : ""}</div>}
         </div>
       ))}
       {entries.length === 0 && (
@@ -298,15 +315,29 @@ function SectionCard({ meta, entries, missing, isOwner, onSaved, onError }: {
       {editing && (
         <div>
           <ul className="small muted">{meta.questions.map((q) => <li key={q}>{q}</li>)}</ul>
-          <label>Title</label><input value={title} onChange={(e) => setTitle(e.target.value)} />
-          <label>Answer (approved knowledge — be factual)</label>
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} data-testid={`answer-${meta.section}`} />
+          <label>Title</label><input value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Title" />
+          <label>{meta.postFields ? "Post text (exactly as published)" : "Answer (approved knowledge — be factual)"}</label>
+          <textarea value={body} onChange={(e) => setBody(e.target.value)} data-testid={`answer-${meta.section}`}
+            aria-label={meta.postFields ? "Post text (exactly as published)" : "Answer"} />
+          {meta.postFields && <>
+            <label htmlFor="exemplar-account">Account it was written for</label>
+            <select id="exemplar-account" value={post.account_kind} onChange={(e) => setPost({ ...post, account_kind: e.target.value })}>
+              <option value="">Choose…</option><option value="company_page">Company page</option><option value="founder_profile">Founder profile</option>
+            </select>
+            <label htmlFor="exemplar-url">Link (optional, https://)</label>
+            <input id="exemplar-url" value={post.url} onChange={(e) => setPost({ ...post, url: e.target.value })} />
+            <label htmlFor="exemplar-date">Date posted (optional)</label>
+            <input id="exemplar-date" type="date" value={post.posted_on} onChange={(e) => setPost({ ...post, posted_on: e.target.value })} />
+            <label htmlFor="exemplar-why">Why you chose it (optional)</label>
+            <input id="exemplar-why" value={post.why} onChange={(e) => setPost({ ...post, why: e.target.value })} />
+            <p className="small muted">The agent learns the style of these posts. Drafts that reuse their wording are held back.</p>
+          </>}
           {meta.listField && <>
             <label>{meta.listField.label}</label><textarea style={{ minHeight: 70 }} value={list} onChange={(e) => setList(e.target.value)} />
             <label>Prohibited topics (one per line)</label><textarea style={{ minHeight: 70 }} value={topics} onChange={(e) => setTopics(e.target.value)} />
           </>}
           <div className="row" style={{ marginTop: 8 }}>
-            <button className="primary" disabled={!body.trim() || !title.trim()} onClick={save} data-testid={`save-${meta.section}`}>Approve & save</button>
+            <button className="primary" disabled={!body.trim() || !title.trim() || (!!meta.postFields && !post.account_kind)} onClick={save} data-testid={`save-${meta.section}`}>Approve & save</button>
             <button onClick={() => setEditing(null)}>Cancel</button>
           </div>
         </div>
