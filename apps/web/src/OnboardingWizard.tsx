@@ -9,7 +9,8 @@ import { ErrorText, useLoad } from "./components.tsx";
 const STEP_HELP: Record<string, string> = {
   identity: "Start with the basics: who ActTrident is, in your own words.",
   positioning: "Who it's for and why you're different. Only differences you could prove if asked.",
-  icp: "Describe your best customers so the agent writes for the right people.",
+  icp: "Who BUYS from ActTrident: the companies and the people who decide. Used to qualify leads and to write for buyers.",
+  ideal_follower: "Who READS and follows the posts. Often not the buyer: people who advise, influence or refer buyers. The agent writes for both, separately.",
   audience_problems: "The problems your buyers have — the agent builds posts around these.",
   product: "What the product does today. Leave out roadmap and anything not yet public.",
   messaging: "The few messages you want repeated. Proof for them goes in the Claims step at the end.",

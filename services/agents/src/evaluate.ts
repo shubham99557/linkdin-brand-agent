@@ -92,13 +92,14 @@ export function evaluateCampaign(result: Record<string, any>, brain: BrandBrain,
   add({ area: "originality", name: "Duplicates of recent content dropped", value: String((result.strategy?.dropped ?? []).length), status: "n/a" });
 
   // ---- ICP relevance (proxy)
-  const icpText = [...entriesFor(brain, "icp"), ...entriesFor(brain, "audience_problems")].map((e) => e.body).join(" ");
+  // Buyer ICP, ideal follower (P2-09) and buyer problems: a post may be written for either audience.
+  const icpText = [...entriesFor(brain, "icp"), ...entriesFor(brain, "ideal_follower"), ...entriesFor(brain, "audience_problems")].map((e) => e.body).join(" ");
   if (!icpText) {
     add({ area: "relevance", name: "ICP relevance", value: "cannot assess — ICP UNKNOWN", status: "fail" });
   } else {
     const icp = topicTokens(icpText);
     const relevant = drafts.filter((d) => [...topicTokens(d.body)].filter((w) => icp.has(w)).length >= 2).length;
-    add({ area: "relevance", name: "Posts sharing ≥2 ICP/problem terms (proxy)", value: `${relevant}/${drafts.length}`, status: relevant === drafts.length ? "pass" : "warn",
+    add({ area: "relevance", name: "Posts sharing ≥2 buyer/follower/problem terms (proxy)", value: `${relevant}/${drafts.length}`, status: relevant === drafts.length ? "pass" : "warn",
       note: "Lexical proxy only — a human must judge relevance." });
   }
 

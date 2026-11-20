@@ -19,15 +19,20 @@ export const entriesFor = (brain: BrandBrain, section: BrainSection) => brain.en
 const textFor = (brain: BrandBrain, section: BrainSection) =>
   entriesFor(brain, section).map((e) => `### ${e.title}\n${e.body}`).join("\n\n");
 
-/** Owner-approved context for prompts. Missing sections are marked UNKNOWN so models do not invent them. */
+/**
+ * Owner-approved context for prompts. Missing sections are marked UNKNOWN so models do not invent them.
+ * Sections with a `contextNote` (the buyer ICP and the ideal follower, P2-09) carry it under the heading, so the
+ * two audiences are never read as one.
+ */
 export function buildBrandContext(brain: BrandBrain, sections: BrainSection[] = [
-  "identity", "positioning", "messaging", "icp", "audience_problems", "audience_language", "product",
+  "identity", "positioning", "messaging", "icp", "ideal_follower", "audience_problems", "audience_language", "product",
   "pillars_goals", "prohibited", "communication_rules", "lessons",
 ]): string {
   return sections.map((s) => {
     const meta = SECTION_META.find((m) => m.section === s)!;
     const text = textFor(brain, s);
-    return `## ${meta.label}\n${text || "UNKNOWN — not yet provided by the owner. Do not invent anything for this section."}`;
+    const note = meta.contextNote ? `_${meta.contextNote}_\n` : "";
+    return `## ${meta.label}\n${note}${text || "UNKNOWN — not yet provided by the owner. Do not invent anything for this section."}`;
   }).join("\n\n");
 }
 

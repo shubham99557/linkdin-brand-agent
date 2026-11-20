@@ -921,6 +921,8 @@ the buyer ICP drives qualification. The owner's prompt: "The buyer and follower 
 - Structured `style_rules` per account, enforced deterministically: P2-11.
 - Rejection-reason categories: P2-12.
 
+**Implemented 2026-11-20 (P2-09):** migration `20261120000200_brain_buyer_follower.sql`; evidence in `plan.md`.
+
 **Consequences.**
 - Staging's Brand Brain is still empty, so no real content is affected.
 - Development's synthetic Brand Brain gains a synthetic `ideal_follower` entry.

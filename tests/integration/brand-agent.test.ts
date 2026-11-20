@@ -76,6 +76,7 @@ async function seedBrain(admin: string) {
     ["positioning", "main", "Positioning", "[SYNTHETIC] For UK SMEs that need security help without an in-house team."],
     ["messaging", "main", "Key messages", "[SYNTHETIC] Security is a habit, not a product. Report early, without blame."],
     ["icp", "main", "Ideal customers", "[SYNTHETIC] UK businesses with 20–250 staff; buyer is the operations or IT lead."],
+    ["ideal_follower", "main", "Ideal follower", "FOLLOWER-MARKER: [SYNTHETIC] UK IT managers who share practical advice with their teams."],
     ["audience_problems", "main", "Problems", "[SYNTHETIC] Staff click on phishing links; nobody knows what to do next."],
     ["voice_company", "main", "Company voice", "COMPANY-VOICE-MARKER: calm, expert, 'we'."],
     ["voice_founder", "main", "Founder voice", "FOUNDER-VOICE-MARKER: personal, reflective, 'I'."],
@@ -242,6 +243,20 @@ describe("complete example: one-week phishing awareness strategy (mock specialis
     expect(founder.every((i) => i.voiceProfile.includes("FOUNDER-VOICE-MARKER") && !i.voiceProfile.includes("COMPANY-VOICE-MARKER"))).toBe(true);
     expect(writerInputs.every((i) => i.brandContext?.includes("For UK SMEs"))).toBe(true);
     expect(result.brain.voice_sources).toEqual({ company_page: "brain", founder_profile: "brain" });
+  });
+
+  it("P2-09: the agents see the buyer ICP and the ideal follower as separate, labelled sections", () => {
+    expect(writerInputs.length).toBeGreaterThan(0);
+    for (const i of writerInputs) {
+      const ctx = i.brandContext ?? "";
+      const buyer = ctx.indexOf("## Buyer ICP (who buys)");
+      const follower = ctx.indexOf("## Ideal follower (who reads)");
+      expect(buyer).toBeGreaterThanOrEqual(0);
+      expect(follower).toBeGreaterThan(buyer);
+      expect(ctx.slice(buyer, follower)).toContain("operations or IT lead");
+      expect(ctx.slice(buyer, follower)).not.toContain("FOLLOWER-MARKER");
+      expect(ctx.slice(follower).split("\n\n## ")[0]).toContain("FOLLOWER-MARKER");
+    }
   });
 
   it("P3-03: each writer call sees the openings of the posts already written in the plan", () => {

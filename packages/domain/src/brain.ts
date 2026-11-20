@@ -3,7 +3,7 @@
  * Onboarding questions are asked of the OWNER; answers become approved knowledge only when the owner saves them.
  */
 export const BRAIN_SECTIONS = [
-  "identity", "positioning", "messaging", "icp", "audience_problems", "audience_language",
+  "identity", "positioning", "messaging", "icp", "ideal_follower", "audience_problems", "audience_language",
   "voice_company", "voice_founder", "product", "pillars_goals", "prohibited", "communication_rules", "lessons",
 ] as const;
 export type BrainSection = (typeof BRAIN_SECTIONS)[number];
@@ -16,6 +16,8 @@ export interface SectionMeta {
   questions: string[];
   /** Optional structured fields collected by the onboarding form. */
   listField?: { key: string; label: string };
+  /** One line placed under the section heading in agent prompts, where the label alone could be misread. */
+  contextNote?: string;
 }
 
 export const SECTION_META: readonly SectionMeta[] = [
@@ -26,8 +28,25 @@ export const SECTION_META: readonly SectionMeta[] = [
     questions: ["Who is ActTrident for, and what alternative do they use today?", "What makes ActTrident different — in terms you can prove?"] },
   { section: "messaging", label: "Key messages", required: true,
     questions: ["What are the 3–5 messages you want repeated over and over?", "What proof supports each message (link to the claims register)?"] },
-  { section: "icp", label: "Ideal customer profiles", required: true,
-    questions: ["Describe your best customers: sector, size, role of the buyer, region.", "Who should NOT be targeted?"] },
+  // P2-09 (ADR-038): the buyer and the follower are different audiences. The key stays `icp` (the buyer).
+  { section: "icp", label: "Buyer ICP (who buys)", required: true,
+    questions: [
+      "Which companies buy from ActTrident? Sector, size, and anything else that makes a company a good fit.",
+      "Which roles decide or sign off the purchase, and who else is involved?",
+      "Which problems make them buy? What has usually just happened when they start looking?",
+      "Which countries or regions do you sell to?",
+      "How do buyers choose a supplier? Only criteria you have actually seen or been told.",
+      "Who should NOT be targeted (company types, sizes, sectors, roles)?",
+    ],
+    contextNote: "The companies and decision-makers who BUY. Use for qualification and for content aimed at buyers. Not the same people as the ideal follower." },
+  { section: "ideal_follower", label: "Ideal follower (who reads)", required: true,
+    questions: [
+      "Who should find the posts valuable enough to follow? Roles, experience, communities.",
+      "Which topics do they already follow or talk about?",
+      "Which words and questions do they use? Paste real examples if you have them.",
+      "How do they relate to buyers: do they advise, influence, refer or become buyers later?",
+    ],
+    contextNote: "The people who read, follow and share the content. They may influence or refer buyers but are not necessarily buyers. Do not treat them as the buyer ICP." },
   { section: "audience_problems", label: "Audience problems", required: true,
     questions: ["What problems keep these buyers up at night?", "What triggers them to look for help?"] },
   { section: "audience_language", label: "Audience language", required: false,
@@ -60,7 +79,7 @@ export const REQUIRED_SECTIONS = SECTION_META.filter((s) => s.required).map((s) 
  */
 export type OnboardingStep = BrainSection | "pillars" | "claims";
 export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
-  "identity", "positioning", "icp", "audience_problems", "product", "messaging",
+  "identity", "positioning", "icp", "ideal_follower", "audience_problems", "product", "messaging",
   "voice_company", "voice_founder", "pillars", "pillars_goals", "prohibited",
   "audience_language", "communication_rules", "claims",
 ];

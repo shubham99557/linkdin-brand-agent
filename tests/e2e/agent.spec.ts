@@ -126,19 +126,19 @@ test("guided setup: owner answers, skips (stays UNKNOWN), resumes, adds a draft 
   await page.getByRole("link", { name: "Brand Brain" }).click();
   await page.getByTestId("start-onboarding").click();
   // Starts at the first missing step (the e2e database begins with an empty Brand Brain).
-  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 1 of 14: Brand identity");
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 1 of 15: Brand identity");
   await expect(page.getByText("stays UNKNOWN", { exact: false }).first()).toBeVisible();
   await page.locator("#wiz-identity").fill("[SYNTHETIC] ActTrident helps UK organisations run practical security programmes.");
   await page.getByTestId("wizard-save").click();
   await expect(page.getByRole("status")).toContainText('Saved "Brand identity"');
-  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 14: Positioning");
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 15: Positioning");
   // Skip positioning: it stays missing.
   await page.getByRole("button", { name: "Skip for now (stays UNKNOWN)" }).click();
-  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 3 of 14: Ideal customer profiles");
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 3 of 15: Buyer ICP (who buys)");
   // Leave and come back: resumes at the first missing step (positioning), not at step 1.
   await page.getByRole("link", { name: "Brand Brain" }).click();
   await page.getByTestId("start-onboarding").click();
-  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 14: Positioning");
+  await expect(page.getByTestId("onboarding-progress")).toContainText("Step 2 of 15: Positioning");
   // Jump to the claims step and add a draft claim.
   await page.getByRole("link", { name: "Proof (claims)" }).click();
   await page.locator("#wiz-claim").fill("[SYNTHETIC] ActTrident is registered in England and Wales.");

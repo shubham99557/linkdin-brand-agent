@@ -174,7 +174,8 @@ export class MockPerformanceSpecialist extends MockBase<PerformanceInput> {
 }
 
 const HEADING_MAP: Array<[RegExp, string]> = [
-  [/positioning|differen/i, "positioning"], [/message/i, "messaging"], [/customer|icp|audience profile/i, "icp"],
+  [/positioning|differen/i, "positioning"], [/message/i, "messaging"], [/follower|reader|who reads/i, "ideal_follower"],
+  [/customer|icp|audience profile/i, "icp"],
   [/problem|pain/i, "audience_problems"], [/language|phrases|words/i, "audience_language"], [/founder/i, "voice_founder"],
   [/voice|tone/i, "voice_company"], [/product|service|capabilit/i, "product"], [/pillar|goal|campaign/i, "pillars_goals"],
   [/never|prohibit|avoid|forbidden/i, "prohibited"], [/rule|format|hashtag/i, "communication_rules"], [/about|who we are|identity|mission/i, "identity"],

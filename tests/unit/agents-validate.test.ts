@@ -96,6 +96,27 @@ describe("brand rules, creative briefs, learning and extraction", () => {
     expect(ctx).toContain("A UK security company");
     expect(ctx).toMatch(/## Product knowledge\nUNKNOWN/);
   });
+  it("P2-09: the buyer ICP and the ideal follower reach the agents as two labelled audiences, each with its note", () => {
+    const brain = { entries: [{ section: "icp", title: "Buyer", body: "Operations leads at UK SMEs" }] } as unknown as BrandBrain;
+    const ctx = buildBrandContext(brain);
+    const buyerAt = ctx.indexOf("## Buyer ICP (who buys)\n_The companies and decision-makers who BUY.");
+    const followerAt = ctx.indexOf("## Ideal follower (who reads)\n_The people who read, follow and share the content.");
+    expect(buyerAt).toBeGreaterThanOrEqual(0);
+    expect(followerAt).toBeGreaterThan(buyerAt);
+    expect(ctx.slice(buyerAt, followerAt)).toContain("Operations leads at UK SMEs");
+    // A missing follower stays UNKNOWN; the buyer text is never reused for it.
+    const followerBlock = ctx.slice(followerAt).split("\n\n## ")[0]!;
+    expect(followerBlock).toMatch(/^## Ideal follower \(who reads\)\n_[^\n]+_\nUNKNOWN/);
+    expect(followerBlock).not.toContain("Operations leads");
+  });
+  it("P2-09: mock document extraction files text about followers under ideal_follower, customers under icp", async () => {
+    const { mockSpecialists } = await import("@lbe/agents");
+    const r = await mockSpecialists().extraction.run({ sourceName: "notes.md",
+      sourceText: "## Our followers\nIT managers who share practical advice with their teams.\n## Ideal customers\nUK firms with 20-250 staff." });
+    expect(r.kind).toBe("ok");
+    const sections = (r as { raw: { proposals: Array<{ section: string }> } }).raw.proposals.map((p) => p.section);
+    expect(sections).toEqual(["ideal_follower", "icp"]);
+  });
 });
 
 describe("Anthropic research specialist (fake client — no network)", () => {

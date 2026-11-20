@@ -3,7 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 import { MAX_OUTPUT_TOKENS_PER_CALL } from "./cost.ts";
 import {
-  CreativeOutputSchema, ExtractionOutputSchema, PerformanceOutputSchema, StrategyOutputSchema,
+  CreativeOutputSchema, EXTRACTABLE_SECTIONS, ExtractionOutputSchema, PerformanceOutputSchema, StrategyOutputSchema,
   type CreativeInput, type ExtractionInput, type PerformanceInput, type ResearchInput, type Specialist,
   type SpecialistResult, type Specialists, type StrategyInput,
 } from "./schemas.ts";
@@ -151,13 +151,14 @@ export class AnthropicPerformanceSpecialist extends StructuredSpecialist<Perform
 
 export class AnthropicExtractionSpecialist extends StructuredSpecialist<ExtractionInput> {
   readonly role = "brand_orchestrator" as const;
-  readonly promptVersion = "extraction.v1";
+  readonly promptVersion = "extraction.v2";
   protected schema = ExtractionOutputSchema;
   protected system() {
     return [
       "You extract Brand Brain entries from an owner-supplied document. Each entry must be directly supported by a verbatim quote from the document (source_quote).",
       "Do not summarise beyond what the document says, and do not infer facts. Skip anything you cannot quote.",
-      "Sections: identity, positioning, messaging, icp, audience_problems, audience_language, voice_company, voice_founder, product, pillars_goals, prohibited, communication_rules.",
+      `Sections: ${EXTRACTABLE_SECTIONS.join(", ")}.`,
+      "icp is the buyer: the companies and decision-makers who buy. ideal_follower is the people who read and follow the content; they may influence buyers but are not necessarily buyers. Put text about followers or readers in ideal_follower, not icp.",
       UNTRUSTED_NOTE,
     ].join("\n");
   }

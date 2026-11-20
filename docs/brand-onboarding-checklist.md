@@ -16,7 +16,8 @@ register** with an evidence link, and an approver verifies them there.
 | 1 | Company identity | 1–2 sentence description; what people should remember; visual identity rules (colours, imagery to avoid) | Website "about", brand guide | `identity` | UNKNOWN |
 | 2 | Positioning | Who it is for, the alternative they use today, what is different (provable only) | Sales deck, competitor notes | `positioning` | UNKNOWN |
 | 3 | Key messages | 3–5 repeatable messages + which claim proves each | Messaging doc | `messaging` | UNKNOWN |
-| 4 | Buyer ICP | Sector, size, region, buyer role, who NOT to target | CRM wins, sales notes | `icp` | UNKNOWN |
+| 4 | Buyer ICP (who buys) | Company characteristics, decision-maker roles, buying problems, regions, buying criteria you have actually seen, who NOT to target | CRM wins, sales notes | `icp` | UNKNOWN |
+| 4b | Ideal follower (who reads) | Who should value and follow the posts, topics they follow, their words and questions, how they relate to buyers (advise, influence, refer). **Not the same as the buyer** (P2-09) | Comments, community groups, conversations | `ideal_follower` | UNKNOWN |
 | 5 | Customer problems | Problems and buying triggers, in buyers' words | Call notes, support tickets (anonymised) | `audience_problems`, `audience_language` | UNKNOWN |
 | 6 | Product capabilities | What the product does **today** and what may be said publicly; no roadmap | Product docs, release notes | `product` | UNKNOWN |
 | 7 | Verified claims & proof | Each factual statement to be used (company facts, capability, statistics, customer outcomes **with written permission**, certifications **with certificate**) | Link or document per claim; expiry date for statistics | Claims register | UNKNOWN (0 real claims) |
@@ -28,7 +29,7 @@ register** with an evidence link, and an approver verifies them there.
 
 ## Before the first internal evaluation
 
-1. Complete items 1–11 in **staging** (not dev): `npm run start:staging` → Brand Brain.
+1. Complete items 1–11 (including 4b) in **staging** (not dev): `npm run start:staging` → Brand Brain.
 2. Run `npm run brain:audit:staging` → it should show **no** SYNTHETIC/PLACEHOLDER/UNKNOWN required sections.
 3. Verify at least 3–5 real claims relevant to phishing awareness (statistics need a dated, reputable source).
 4. Replace the development account pillars with the real ones (admin SQL today; a UI edit is a known gap).

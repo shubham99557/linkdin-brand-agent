@@ -104,10 +104,11 @@ export interface ExtractionInput {
   sourceName: string;
   sourceText: string;
 }
-const EXTRACTABLE = BRAIN_SECTIONS.filter((s) => s !== "lessons") as [string, ...string[]];
+/** Sections a document can be extracted into (`lessons` comes only from learning proposals). */
+export const EXTRACTABLE_SECTIONS = BRAIN_SECTIONS.filter((s) => s !== "lessons") as [string, ...string[]];
 export const ExtractionOutputSchema = z.object({
   proposals: z.array(z.object({
-    section: z.enum(EXTRACTABLE),
+    section: z.enum(EXTRACTABLE_SECTIONS),
     key: z.string(),
     title: z.string(),
     body: z.string(),
